@@ -5,7 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAdmin, useAction } from '@/hooks/useData';
 import UserForm from './UserForm';
-import { adminService } from '@/services';
+import { adminService, isMock } from '@/services';
+import ApiReceiptsPage from './ApiReceiptsPage';
 
 import { PageHeading, QueryState, EmptyState, Field, Pagination } from '@/components/common/Shared';
 import { Button } from '@/components/ui/button';
@@ -266,6 +267,9 @@ function ReceiptForm({ products, onClose }) {
   );
 }
 export function ReceiptsPage() {
+  return isMock ? <MockReceiptsPage /> : <ApiReceiptsPage />;
+}
+function MockReceiptsPage() {
   const query = useAdmin('receipts');
   const products = useAdmin('products');
   const [open, setOpen] = useState(false);

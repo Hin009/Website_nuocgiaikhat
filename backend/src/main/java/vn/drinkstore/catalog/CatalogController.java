@@ -1,0 +1,45 @@
+package vn.drinkstore.catalog;
+
+import java.util.*;
+import org.springframework.web.bind.annotation.*;
+import vn.drinkstore.common.*;
+
+@RestController
+@RequestMapping("/api/v1/catalog")
+public class CatalogController {
+    private final Db db;
+    private final java.math.BigDecimal shipping;
+    public CatalogController(Db db,@org.springframework.beans.factory.annotation.Value("${app.shipping-fee}") java.math.BigDecimal shipping) { this.db=db; this.shipping=shipping; }
+    @GetMapping("/checkout-options") public Object checkoutOptions() {
+        return Map.of("shippingFee",shipping,"paymentMethods",List.of(
+            Map.of("code","COD","label","Thanh toán khi nhận hàng (COD)","description","Thanh toán khi đơn hàng được giao."),
+            Map.of("code","BANK_TRANSFER","label","Chuyển khoản ngân hàng","description","Cửa hàng sẽ liên hệ để cung cấp thông tin chuyển khoản và xác nhận sau khi nhận tiền.")
+        ));
+    }
+    private static final String VISIBLE=" s.trang_thai in ('DANG_BAN','HET_HANG') and s.hien_thi and exists(select 1 from loai_san_pham c where c.id=s.loai_san_pham_id and c.hien_thi) and exists(select 1 from thuong_hieu b where b.id=s.thuong_hieu_id and b.hien_thi) ";
+    @GetMapping("/products")
+    public Object products(@RequestParam(defaultValue="") String q,@RequestParam(required=false) Long categoryId,
+        @RequestParam(required=false) Long brandId,@RequestParam(required=false) Boolean inStock,
+        @RequestParam(defaultValue="newest") String sort,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        String where=" from san_pham s join so_luong_san_pham k on k.san_pham_id=s.id where "+VISIBLE+" and s.ten ilike ?";
+        var args=new ArrayList<Object>(); args.add("%"+q+"%");
+        if(categoryId!=null) { where+=" and s.loai_san_pham_id=?"; args.add(categoryId); }
+        if(brandId!=null) { where+=" and s.thuong_hieu_id=?"; args.add(brandId); }
+        if(inStock!=null) where+=inStock?" and k.so_luong_co_ban>0":" and k.so_luong_co_ban=0";
+        String order=switch(sort) { case "name" -> "s.ten,s.id"; case "priceAsc" -> "gia_tu nulls last,s.id"; case "priceDesc" -> "gia_tu desc nulls last,s.id"; case "newest" -> "s.ngay_tao desc,s.id desc"; default -> throw ApiException.bad("sort: newest, name, priceAsc, priceDesc"); };
+        return db.page("select s.*,k.so_luong_co_ban,(select min(gia_ban) from quy_cach_san_pham where san_pham_id=s.id and dang_ban) as gia_tu"+where+" order by "+order,"select count(*)"+where,args,page,size);
+    }
+    @GetMapping("/products/{id}") public Object product(@PathVariable long id) {
+        var p=db.one("select s.*,k.so_luong_co_ban from san_pham s join so_luong_san_pham k on k.san_pham_id=s.id where s.id=? and "+VISIBLE,id);
+        p.put("packages",db.rows("select id,san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,?::bigint/he_so_quy_doi as so_luong_co_the_mua from quy_cach_san_pham where san_pham_id=? and dang_ban order by he_so_quy_doi,id",p.get("so_luong_co_ban"),id));
+        p.put("images",db.jdbc().queryForList("select id,duong_dan,anh_chinh,thu_tu from hinh_anh_san_pham where san_pham_id=? order by anh_chinh desc,thu_tu,id",id)); return p;
+    }
+    @GetMapping("/categories") public Object categories() { return db.jdbc().queryForList("select id,ten,mo_ta,hinh_anh from loai_san_pham where hien_thi order by ten"); }
+    @GetMapping("/brands") public Object brands() { return db.jdbc().queryForList("select id,ten,mo_ta,logo from thuong_hieu where hien_thi order by ten"); }
+    @GetMapping("/promotions") public Object promotions() { return db.jdbc().queryForList("select id,ma_code,ten,loai_giam,gia_tri_giam,giam_toi_da,don_toi_thieu,bat_dau,ket_thuc from khuyen_mai where trang_thai='ACTIVE' and now() between bat_dau and ket_thuc order by ket_thuc"); }
+    @GetMapping("/products/{id}/reviews") public Object reviews(@PathVariable long id,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        product(id);
+        String from=" from danh_gia_san_pham d join chi_tiet_don_hang c on c.id=d.chi_tiet_don_hang_id join quy_cach_san_pham q on q.id=c.quy_cach_id join khach_hang k on k.id=d.khach_hang_id where q.san_pham_id=? and d.trang_thai='APPROVED'";
+        return db.page("select d.id,d.so_sao,d.noi_dung,d.ngay_danh_gia,k.ho_ten"+from+" order by d.id desc","select count(*)"+from,List.of(id),page,size);
+    }
+}

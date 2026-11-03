@@ -56,6 +56,8 @@ export const checkoutSchema = z.object({
   paymentMethod: z.literal('COD'),
 });
 export const productSchema = z.object({
+  imageUrl: z.string().trim().max(2000).optional(),
+  stockReason: z.string().trim().max(1000).optional(),
   active: z.boolean().default(true),
   name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(150),
   brand: z.string().trim().min(1, 'Vui lòng nhập thương hiệu.'),

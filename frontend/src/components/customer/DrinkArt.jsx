@@ -8,6 +8,16 @@ export function DrinkArt({ product, className = '', hero = false }) {
     label: 'waterbus',
     volume: 'CAM • 330 ml',
   };
+  if (p.imageUrl)
+    return (
+      <img
+        className={'drink-art ' + className}
+        src={p.imageUrl}
+        alt={p.name}
+        loading={hero ? 'eager' : 'lazy'}
+        style={{ objectFit: 'contain' }}
+      />
+    );
   const bottle = p.art === 'bottle' || p.art === 'water';
   const carton = p.art === 'carton';
   return (

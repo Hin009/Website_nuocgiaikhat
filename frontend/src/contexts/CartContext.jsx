@@ -2,6 +2,8 @@ import { canPurchase } from '@/utils/inventory';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { lineKey, maxLineQuantity } from '@/utils/purchase';
+import { isMock } from '@/services';
+import { ApiCartProvider, useApiCart } from './ApiCartContext';
 const CartContext = createContext(null);
 function initial() {
   try {
@@ -21,7 +23,7 @@ function initial() {
     return [];
   }
 }
-export function CartProvider({ children }) {
+function MockCartProvider({ children }) {
   const [items, setItems] = useState(initial);
   useEffect(() => {
     try {
@@ -85,4 +87,15 @@ export function CartProvider({ children }) {
     </CartContext.Provider>
   );
 }
-export const useCart = () => useContext(CartContext);
+export function CartProvider({ children }) {
+  return isMock ? (
+    <MockCartProvider>{children}</MockCartProvider>
+  ) : (
+    <ApiCartProvider>{children}</ApiCartProvider>
+  );
+}
+export function useCart() {
+  const mock = useContext(CartContext);
+  const api = useApiCart();
+  return isMock ? mock : api;
+}

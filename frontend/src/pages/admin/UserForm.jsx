@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAction } from '@/hooks/useData';
-import { adminService } from '@/services';
+import { adminService, authService, isMock } from '@/services';
 import { digest, updateDb } from '@/mocks/database';
 import { Field } from '@/components/common/Shared';
 import { Button } from '@/components/ui/button';
@@ -45,15 +45,19 @@ export default function UserForm({ item, onClose }) {
       throw new Error('Không thể khóa hoặc hạ quyền tài khoản đang sử dụng.');
     if (!item && !values.password) throw new Error('Nhập mật khẩu cho tài khoản mới.');
     const { password, ...payload } = values;
-    const passwordDigest = password ? await digest(password) : null;
-    const saved = await adminService.save('users', { ...item, ...payload });
+    const passwordDigest = isMock && password ? await digest(password) : null;
+    const saved = await adminService.save('users', {
+      ...item,
+      ...payload,
+      ...(!isMock ? { password } : {}),
+    });
     if (passwordDigest)
       updateDb((db) => {
         const existing = db.registered.find((a) => a.email === payload.email);
         if (existing) existing.digest = passwordDigest;
         else db.registered.push({ email: payload.email, digest: passwordDigest });
       });
-    if (saved.id === user.id) setUser(saved);
+    if (saved.id === user.id) setUser(isMock ? saved : await authService.me());
     return saved;
   }, 'Đã lưu tài khoản');
   const save = async () => {
@@ -77,6 +81,11 @@ export default function UserForm({ item, onClose }) {
         <Field label="Số điện thoại" error={errors.phone}>
           <input type="tel" {...register('phone')} />
         </Field>
+        {!isMock && item?.roles?.length > 1 && (
+          <p className="muted-note">
+            Đổi vai trò sẽ thay danh sách vai trò hiện tại bằng vai trò được chọn.
+          </p>
+        )}
         <div className="form-grid">
           <Field label="Vai trò" error={errors.role}>
             <select {...register('role')}>

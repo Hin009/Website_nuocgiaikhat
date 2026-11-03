@@ -23,13 +23,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrders } from '@/hooks/useData';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PermissionGuard } from '@/routes/Guards';
+import { isMock } from '@/services';
 import { roleLabels } from '@/utils/format';
 const items = [
   { to: '/admin', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/admin/products', label: 'Sản phẩm', icon: Package, adminOnly: true },
-  { to: '/admin/categories', label: 'Danh mục', icon: Shapes },
+  { to: '/admin/categories', label: 'Danh mục', icon: Shapes, adminOnly: !isMock },
   { to: '/admin/orders', label: 'Đơn hàng', icon: ShoppingBag },
-  { to: '/admin/stock-receipts', label: 'Nhập hàng', icon: Truck, adminOnly: true },
+  { to: '/admin/stock-receipts', label: 'Nhập hàng', icon: Truck, adminOnly: isMock },
   { to: '/admin/customers', label: 'Khách hàng', icon: UsersRound },
   { to: '/admin/reports', label: 'Báo cáo & thống kê', icon: ChartNoAxesCombined },
 ];

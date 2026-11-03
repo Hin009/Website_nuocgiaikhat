@@ -17,6 +17,7 @@ import { SectionHeading, QueryState } from '@/components/common/Shared';
 import { HeroArtwork, DrinkArt } from '@/components/customer/DrinkArt';
 import { ProductCard } from '@/components/customer/ProductCard';
 import { useProducts, useCategories } from '@/hooks/useData';
+import { isMock } from '@/services';
 const icons = {
   cup: CupSoda,
   citrus: Citrus,
@@ -102,54 +103,56 @@ export default function HomePage() {
             </div>
           </QueryState>
         </section>
-        <section className="promo-grid">
-          <Link to="/products?category=juice" className="promo-card promo-orange">
-            <div>
-              <span className="eyebrow">VỊ NGON TỪ THIÊN NHIÊN</span>
-              <h2>
-                Thêm chút trái cây.
-                <br />
-                Thêm nhiều tươi mới.
-              </h2>
-              <span className="promo-link">
-                Khám phá nước trái cây <ArrowRight size={17} />
-              </span>
-            </div>
-            <DrinkArt
-              product={{
-                art: 'bottle',
-                color: '#e5a333',
-                accent: '#fff6c9',
-                label: 'twister',
-                name: 'Nước trái cây',
-              }}
-            />
-            <Citrus className="promo-fruit" size={110} strokeWidth={1} />
-          </Link>
-          <Link to="/products?sale=1" className="promo-card promo-green">
-            <div>
-              <span className="eyebrow">MUA VUI, TIẾT KIỆM HƠN</span>
-              <h2>
-                Vị yêu thích.
-                <br />
-                Giá thêm xinh.
-              </h2>
-              <span className="promo-link">
-                Xem sản phẩm ưu đãi <ArrowRight size={17} />
-              </span>
-            </div>
-            <DrinkArt
-              product={{
-                art: 'can',
-                color: '#5b8c6b',
-                accent: '#e7efc8',
-                label: 'waterbus',
-                name: 'Nước giải khát',
-              }}
-            />
-            <Sparkles className="promo-spark" size={60} strokeWidth={1} />
-          </Link>
-        </section>
+        {isMock && (
+          <section className="promo-grid">
+            <Link to="/products?category=juice" className="promo-card promo-orange">
+              <div>
+                <span className="eyebrow">VỊ NGON TỪ THIÊN NHIÊN</span>
+                <h2>
+                  Thêm chút trái cây.
+                  <br />
+                  Thêm nhiều tươi mới.
+                </h2>
+                <span className="promo-link">
+                  Khám phá nước trái cây <ArrowRight size={17} />
+                </span>
+              </div>
+              <DrinkArt
+                product={{
+                  art: 'bottle',
+                  color: '#e5a333',
+                  accent: '#fff6c9',
+                  label: 'twister',
+                  name: 'Nước trái cây',
+                }}
+              />
+              <Citrus className="promo-fruit" size={110} strokeWidth={1} />
+            </Link>
+            <Link to="/products?sale=1" className="promo-card promo-green">
+              <div>
+                <span className="eyebrow">MUA VUI, TIẾT KIỆM HƠN</span>
+                <h2>
+                  Vị yêu thích.
+                  <br />
+                  Giá thêm xinh.
+                </h2>
+                <span className="promo-link">
+                  Xem sản phẩm ưu đãi <ArrowRight size={17} />
+                </span>
+              </div>
+              <DrinkArt
+                product={{
+                  art: 'can',
+                  color: '#5b8c6b',
+                  accent: '#e7efc8',
+                  label: 'waterbus',
+                  name: 'Nước giải khát',
+                }}
+              />
+              <Sparkles className="promo-spark" size={60} strokeWidth={1} />
+            </Link>
+          </section>
+        )}
         <section className="new-section">
           <SectionHeading
             eyebrow="THỬ MỘT CHÚT KHÁC BIỆT"
@@ -158,8 +161,10 @@ export default function HomePage() {
           />
           <QueryState query={products} cards>
             <div className="product-grid">
-              {products.data
-                ?.filter((p) => p.tag === 'Mới về')
+              {(isMock
+                ? (products.data || []).filter((p) => p.tag === 'Mới về')
+                : products.data || []
+              )
                 .slice(0, 4)
                 .map((p) => (
                   <ProductCard key={p.id} product={p} />

@@ -1,12 +1,12 @@
 import { isLowStock } from '@/utils/inventory';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Pencil, Archive, Package } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '@/schemas';
-import { useAdmin, useCategories, useAction } from '@/hooks/useData';
-import { adminService } from '@/services';
+import { useAdmin, useAction } from '@/hooks/useData';
+import { adminService, isMock } from '@/services';
 import { PageHeading, QueryState, EmptyState, Field, Pagination } from '@/components/common/Shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -14,37 +14,57 @@ import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { DrinkArt } from '@/components/customer/DrinkArt';
 import { money, normalize } from '@/utils/format';
 function ProductForm({ item, categories, onClose }) {
-  const action = useAction(
-    (values) =>
-      adminService.save('products', {
-        ...item,
-        ...values,
-        label: item?.label || values.brand,
-        accent: item?.accent || '#edf2df',
-        originalPrice: item?.originalPrice || null,
-        tag: item?.tag || '',
-        active: values.active,
-      }),
-    'Đã lưu sản phẩm',
-  );
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState('');
+  useEffect(() => {
+    if (!file) {
+      setPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const action = useAction(async (values) => {
+    if (!isMock && Number(values.stock) !== Number(item?.stock || 0) && !values.stockReason?.trim())
+      throw new Error('Nhập lý do điều chỉnh số lượng.');
+    if (file && file.size > 5 * 1024 * 1024) throw new Error('Ảnh không được vượt quá 5 MB.');
+    const imageUrl = file ? await adminService.uploadImage(file) : values.imageUrl;
+    return adminService.save('products', {
+      ...item,
+      ...values,
+      imageUrl,
+      expectedStock: item?.stock || 0,
+      label: item?.label || values.brand,
+      accent: item?.accent || '#edf2df',
+      originalPrice: item?.originalPrice || null,
+      tag: item?.tag || '',
+      active: values.active,
+    });
+  }, 'Đã lưu sản phẩm');
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: item || {
-      name: '',
-      brand: '',
-      categoryId: categories[0]?.id || '',
-      volume: 'Lon 320ml',
-      price: 10000,
-      stock: 0,
-      active: true,
-      description: '',
-      color: '#61846b',
-      art: 'can',
-    },
+    defaultValues: item
+      ? { ...item, stockReason: '', imageUrl: item.imageUrl || '' }
+      : {
+          imageUrl: '',
+          stockReason: '',
+          name: '',
+          brand: '',
+          categoryId: categories[0]?.id || '',
+          volume: 'Lon 320ml',
+          price: 10000,
+          stock: 0,
+          active: true,
+          description: '',
+          color: '#61846b',
+          art: 'can',
+        },
   });
   return (
     <form
@@ -83,6 +103,51 @@ function ProductForm({ item, categories, onClose }) {
         <Field label="Số lượng tồn kho" error={errors.stock}>
           <input type="number" min="0" {...register('stock')} />
         </Field>
+        {!isMock && (
+          <p className="muted-note span-two">
+            Số lượng tính theo đơn vị lẻ, không phải số thùng/lốc. Khi điều chỉnh cần ghi lý do; hệ
+            thống lưu lịch sử thay đổi. Giá bán áp dụng cho quy cách nhỏ nhất hiện có.
+          </p>
+        )}
+        {!isMock && Number(watch('stock')) !== Number(item?.stock || 0) && (
+          <Field className="span-two" label="Lý do điều chỉnh số lượng" error={errors.stockReason}>
+            <input
+              {...register('stockReason')}
+              placeholder="Ví dụ: kiểm kê thực tế hoặc nhập tồn ban đầu"
+            />
+          </Field>
+        )}
+        {!isMock && (
+          <>
+            <Field className="span-two" label="Ảnh sản phẩm (JPG, PNG, WebP — tối đa 5 MB)">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={action.isPending}
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+            </Field>
+            <Field className="span-two" label="Hoặc đường dẫn ảnh" error={errors.imageUrl}>
+              <input
+                {...register('imageUrl')}
+                disabled={!!file}
+                placeholder="https://... hoặc đường dẫn ảnh đã tải lên"
+              />
+            </Field>
+            {(preview || watch('imageUrl')) && (
+              <div className="span-two">
+                <img
+                  src={preview || watch('imageUrl')}
+                  alt="Xem trước ảnh sản phẩm"
+                  style={{ height: 160, maxWidth: '100%', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+            <p className="muted-note span-two">
+              Chọn ảnh mới để thay ảnh hiện tại. Để trống nếu muốn giữ ảnh đã lưu.
+            </p>
+          </>
+        )}
         <Field label="Dạng bao bì" error={errors.art}>
           <select {...register('art')}>
             <option value="can">Lon</option>
@@ -91,9 +156,11 @@ function ProductForm({ item, categories, onClose }) {
             <option value="carton">Hộp</option>
           </select>
         </Field>
-        <Field label="Màu minh họa" error={errors.color}>
-          <input type="color" {...register('color')} />
-        </Field>
+        {isMock && (
+          <Field label="Màu minh họa" error={errors.color}>
+            <input type="color" {...register('color')} />
+          </Field>
+        )}
         <label className="checkbox-row span-two">
           <input type="checkbox" {...register('active')} />
           Đang kinh doanh
@@ -115,7 +182,7 @@ function ProductForm({ item, categories, onClose }) {
 }
 export default function ProductsPage() {
   const query = useAdmin('products');
-  const categories = useCategories();
+  const categories = useAdmin('categories');
   const [params] = useSearchParams();
   const [q, setQ] = useState(params.get('q') || '');
   const [category, setCategory] = useState('');

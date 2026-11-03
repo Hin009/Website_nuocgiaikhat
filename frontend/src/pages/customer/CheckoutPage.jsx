@@ -19,7 +19,12 @@ import { money } from '@/utils/format';
 import CheckoutVouchers from '@/components/customer/CheckoutVouchers';
 import { vouchers } from '@/data/vouchers';
 import { evaluateVoucher, calculateOrderPricing } from '@/utils/vouchers';
+import { isMock } from '@/services';
+import ApiCheckoutPage from './ApiCheckoutPage';
 export default function CheckoutPage() {
+  return isMock ? <MockCheckoutPage /> : <ApiCheckoutPage />;
+}
+function MockCheckoutPage() {
   const { user } = useAuth();
   const cart = useCart();
   const products = useProducts();

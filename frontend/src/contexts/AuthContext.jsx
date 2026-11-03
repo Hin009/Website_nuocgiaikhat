@@ -35,11 +35,16 @@ export function AuthProvider({ children }) {
   const login = async (values, register = false, portal = 'customer') => {
     const u = await authService[register ? 'register' : 'login'](values, portal);
     client.clear();
+    setError(null);
     setUser(u);
     return u;
   };
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch {
+      /* Local session is still cleared. */
+    }
     setUser(null);
     client.clear();
   };

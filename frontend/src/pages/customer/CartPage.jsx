@@ -1,4 +1,5 @@
 import { canPurchase } from '@/utils/inventory';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Trash2, ShoppingBag, Truck } from 'lucide-react';
@@ -14,17 +15,26 @@ import {
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DrinkArt } from '@/components/customer/DrinkArt';
-import { lineKey, purchaseUnit, maxLineQuantity, requiredStock } from '@/utils/purchase';
+import {
+  lineKey,
+  purchaseUnit,
+  purchaseUnits,
+  maxLineQuantity,
+  requiredStock,
+} from '@/utils/purchase';
 import { money } from '@/utils/format';
 import { calculateOrderPricing } from '@/utils/vouchers';
+import { isMock, catalogService } from '@/services';
 export function OrderSummary({
   subtotal,
   discountAmount = 0,
   shippingDiscountAmount = 0,
   voucherCode = '',
+  shippingFee,
+  total,
   children,
 }) {
-  const { shippingFee: shipping } = calculateOrderPricing(subtotal);
+  const shipping = shippingFee ?? (isMock ? calculateOrderPricing(subtotal).shippingFee : null);
   return (
     <aside className="order-summary">
       <h3>Tóm tắt đơn hàng</h3>
@@ -34,7 +44,13 @@ export function OrderSummary({
       </div>
       <div>
         <span>Phí giao hàng</span>
-        <strong>{!subtotal ? money(0) : shipping ? money(shipping) : 'iiễn phí'}</strong>
+        <strong>
+          {shipping == null
+            ? 'Tính ở bước đặt hàng'
+            : shipping === 0
+              ? 'Miễn phí'
+              : money(shipping)}
+        </strong>
       </div>
       {discountAmount > 0 && (
         <div className="summary-discount">
@@ -49,13 +65,19 @@ export function OrderSummary({
         </div>
       )}
       <div className="summary-total">
-        <span>Tổng cộng</span>
-        <strong>{money(subtotal + shipping - discountAmount - shippingDiscountAmount)}</strong>
+        <span>{shipping == null ? 'Tạm tính' : 'Tổng cộng'}</span>
+        <strong>
+          {money(total ?? subtotal + (shipping || 0) - discountAmount - shippingDiscountAmount)}
+        </strong>
       </div>
       {children}
       <span className="summary-trust">
         <Truck size={17} />
-        Dùng FREESHIP200 để miễn phí giao từ 200.000đ
+        {isMock
+          ? 'Dùng FREESHIP200 để miễn phí giao từ 200.000đ'
+          : shipping === 0
+            ? 'Miễn phí giao hàng'
+            : 'Phí và mã giảm giá được tính khi đặt hàng'}
       </span>
     </aside>
   );
@@ -63,10 +85,18 @@ export function OrderSummary({
 export default function CartPage() {
   const cart = useCart();
   const products = useProducts();
+  const options = useQuery({
+    queryKey: ['checkout-options'],
+    queryFn: () => catalogService.checkoutOptions(),
+    enabled: !isMock,
+  });
   const [removeId, setRemoveId] = useState(null);
   const lines = cart.items.map((item) => ({
     ...item,
-    product: products.data?.find((p) => p.id === item.productId),
+    product: products.data?.find(
+      (p) =>
+        p.id === item.productId && (isMock || purchaseUnits(p).some((u) => u.id === item.unit)),
+    ),
   }));
   const selected = lines.filter((l) => l.selected);
   const subtotal = selected.reduce(
@@ -87,7 +117,12 @@ export default function CartPage() {
         description={cart.count + ' sản phẩm, sẵn sàng cho ngày tươi mới.'}
       />
 
-      <QueryState query={products}>
+      {!isMock && cart.items.some((l) => l.priceChanged) && (
+        <p className="form-error">
+          Giá đã thay đổi. Bấm cập nhật giá ở sản phẩm trước khi đặt hàng.
+        </p>
+      )}
+      <QueryState query={{ ...products, isPending: products.isPending || cart.loading }}>
         {!cart.items.length ? (
           <EmptyState
             icon={ShoppingBag}
@@ -163,6 +198,20 @@ export default function CartPage() {
                             </small>
                           )}
                         </div>
+                        {!isMock && line.priceChanged && (
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              cart.update(
+                                lineKey(line),
+                                line.quantity,
+                                maxLineQuantity(line.product, cart.items, line),
+                              )
+                            }
+                          >
+                            Cập nhật giá
+                          </Button>
+                        )}
                         <Quantity
                           value={line.quantity}
                           max={maxLineQuantity(line.product, cart.items, line)}
@@ -196,7 +245,10 @@ export default function CartPage() {
                 Tiếp tục mua sắm
               </Link>
             </div>
-            <OrderSummary subtotal={subtotal}>
+            <OrderSummary
+              subtotal={subtotal}
+              shippingFee={isMock ? undefined : options.data?.shippingFee}
+            >
               {!selected.length ? (
                 <Button disabled className="full-width">
                   Chọn sản phẩm để đặt hàng

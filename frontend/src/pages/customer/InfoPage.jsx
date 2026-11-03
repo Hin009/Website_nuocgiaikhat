@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, Leaf, ShoppingBag, UserRound, PackageCheck } from 'lucide-react';
 import { Breadcrumb, PageHeading } from '@/components/common/Shared';
 import { Button } from '@/components/ui/button';
+import { isMock } from '@/services';
 export default function InfoPage({ type = 'about' }) {
   const title =
     type === 'guide'
@@ -85,8 +86,9 @@ export default function InfoPage({ type = 'about' }) {
           <section>
             <h2>Phí giao hàng</h2>
             <p>
-              Phí giao hàng là 20.000đ. Chọn voucher FREESHIP200 tại trang thanh toán để được miễn
-              phí giao hàng khi tiền hàng từ 200.000đ. Mỗi đơn dùng một voucher.
+              {isMock
+                ? 'Phí giao hàng là 20.000đ. Chọn voucher FREESHIP200 tại trang thanh toán để được miễn phí giao hàng khi tiền hàng từ 200.000đ. Mỗi đơn dùng một voucher.'
+                : 'Phí giao hàng và điều kiện mã giảm giá được tính khi đặt hàng.'}
             </p>
           </section>
           <section>

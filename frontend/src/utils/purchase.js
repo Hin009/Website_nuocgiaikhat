@@ -1,6 +1,8 @@
 import { canPurchase } from '@/utils/inventory';
 export const lineKey = (line) => line.productId + ':' + (line.unit || 'single');
 export function purchaseUnits(product) {
+  if (product?.source === 'api') return (product.packages || []).filter(q => q.available);
+
   const single = product.volume?.startsWith('Lon')
     ? 'Lon'
     : product.volume?.startsWith('Hộp')
@@ -19,7 +21,9 @@ export function purchaseUnits(product) {
   }));
 }
 export function purchaseUnit(product, id = 'single') {
-  const unit = purchaseUnits(product).find((u) => u.id === id);
+  const units = purchaseUnits(product);
+  const unit = product?.source === 'api' && id === 'single' ? units[0] : units.find((u) => u.id === id);
+  if (!unit && product?.source === 'api') return {id:'unavailable',label:'Chưa có quy cách bán',price:0,size:1,available:false};
   if (!unit) throw new Error('Đơn vị mua không hợp lệ.');
   return unit;
 }

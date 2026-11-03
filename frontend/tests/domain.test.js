@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { hasRole, safeReturn, authReturn } from '../src/utils/access';
 import { phoneSchema, checkoutSchema, productSchema } from '../src/schemas';
 import { resetDb, readDb, updateDb } from '../src/mocks/database';
-import { orderService, authService, adminService } from '../src/services';
+import { orderService, authService, adminService } from '../src/services/mock';
 class MemoryStorage {
   store = {};
   getItem(k) {

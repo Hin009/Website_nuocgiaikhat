@@ -1,0 +1,98 @@
+@base = http://localhost:8080/api/v1
+@customerToken = paste-customer-accessToken
+@adminToken = paste-admin-accessToken
+@packageId = 1
+@addressId = 1
+@orderId = 1
+@purchaseId = 1
+@purchaseLineId = 1
+@receiptId = 1
+
+### Health
+GET {{base}}/health
+
+### Register customer
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{"email":"customer01@example.com","password":"MyPassword123!","fullName":"Nguyễn Văn A"}
+
+### Login - copy accessToken to customerToken above
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"customer01@example.com","password":"MyPassword123!"}
+
+### Products (IDs must come from API responses, not assumed)
+GET {{base}}/catalog/products?page=0&size=20&sort=priceAsc
+
+### Address
+POST {{base}}/me/addresses
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"recipient":"Nguyễn Văn A","phone":"0900000000","province":"TP.HCM","district":"","ward":"","street":"123 Nguyễn Trãi","isDefault":true}
+
+### Create supplier first (admin); copy returned ID into supplier-product and purchase bodies
+POST {{base}}/management/suppliers
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"ten":"Nhà cung cấp thử nghiệm","trang_thai":"HOP_TAC"}
+
+### Link supplier to product before creating a purchase (admin)
+POST {{base}}/management/supplier-products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"nha_cung_cap_id":1,"san_pham_id":1,"gia_nhap_tham_khao":8000}
+
+### Create purchase (admin/staff)
+POST {{base}}/purchases
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"supplierId":1,"items":[{"packageId":{{packageId}},"quantity":100,"unitCost":8000}]}
+
+### Approve purchase (admin only)
+PATCH {{base}}/purchases/{{purchaseId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"status":"DA_DUYET"}
+
+### Draft receipt
+POST {{base}}/purchases/{{purchaseId}}/receipts
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"items":[{"purchaseLineId":{{purchaseLineId}},"quantity":100,"actualCost":8000}]}
+
+### Confirm receipt - now stock increases
+POST {{base}}/receipts/{{receiptId}}/confirm
+Authorization: Bearer {{adminToken}}
+
+### Set cart item quantity (absolute, not increment)
+PUT {{base}}/cart/items/{{packageId}}
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity":2}
+
+### Checkout
+POST {{base}}/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"addressId":{{addressId}},"paymentMethod":"COD","note":"Gọi trước khi giao"}
+
+### Confirm sale - now stock decreases and invoice is generated
+PATCH {{base}}/staff/orders/{{orderId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"status":"DANG_CHUAN_BI"}
+
+### Customer invoice
+GET {{base}}/orders/{{orderId}}/invoice
+Authorization: Bearer {{customerToken}}

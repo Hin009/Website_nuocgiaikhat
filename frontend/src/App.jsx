@@ -40,6 +40,7 @@ import {
   UnauthorizedPage,
   NotFoundPage,
 } from '@/routes/Guards';
+import { isMock } from '@/services';
 import { ErrorState, Loading } from '@/components/common/Shared';
 class ErrorBoundary extends Component {
   state = { error: null };
@@ -104,14 +105,17 @@ export default function App() {
               <Route path="admin" element={<AdminLayout />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="profile" element={<AdminProfilePage />} />
-                <Route path="categories" element={<CategoriesPage />} />
+                <Route element={<RoleGuard roles={isMock ? ['STAFF'] : ['ADMIN']} />}>
+                  <Route path="categories" element={<CategoriesPage />} />
+                </Route>
                 <Route path="orders" element={<OrdersPage admin />} />
                 <Route path="orders/:id" element={<OrderDetailPage admin />} />
                 <Route path="customers" element={<UsersPage customers />} />
+                {!isMock && <Route path="stock-receipts" element={<ReceiptsPage />} />}
                 <Route path="reports" element={<DashboardPage report />} />
                 <Route element={<RoleGuard roles={['ADMIN']} />}>
                   <Route path="products" element={<ProductsPage />} />
-                  <Route path="stock-receipts" element={<ReceiptsPage />} />
+                  {isMock && <Route path="stock-receipts" element={<ReceiptsPage />} />}
                   <Route path="users" element={<UsersPage />} />
                 </Route>
                 <Route path="*" element={<NotFoundPage />} />

@@ -1,102 +1,69 @@
-# WaterBus — Frontend cửa hàng nước giải khát
+# WaterBus frontend
 
-Frontend độc lập được xây dựng mới trong thư mục này. Không sử dụng mã nguồn của soda-web hoặc soda-db.
+React/Vite kết nối Spring Boot và PostgreSQL trong `../backend`.
 
-## Chạy trên máy
+## Chạy ứng dụng
 
-Yêu cầu Node.js 22.12+ (đã kiểm tra bằng Node 26) và npm.
+Chạy backend trước tại thư mục gốc:
 
 ```powershell
-cd D:\NgocSon\WaterBus\frontend
-npm.cmd install
+cd backend
+docker compose up -d --build
+```
+
+Mở terminal khác tại thư mục gốc, dùng Node.js 22.12+:
+
+```powershell
+cd frontend
+npm.cmd ci
 npm.cmd run dev
 ```
 
-Mở **http://127.0.0.1:5173**. Dùng npm.cmd trên PowerShell nếu npm.ps1 bị chặn bởi Execution Policy.
+Cửa hàng: http://127.0.0.1:5173/products. Quản lý: http://127.0.0.1:5173/admin.
+Đăng nhập quản lý bằng tài khoản cấu hình trong `backend/.env`. Khách hàng đăng ký tại `/register`.
+
+Mặc định `VITE_DATA_MODE=api`, `VITE_API_BASE_URL=/api/v1` (xem `.env.example`). Vite chuyển tiếp `/api` đến `http://127.0.0.1:8080`. Đổi đích bằng biến môi trường `VITE_PROXY_TARGET` khi chạy Vite. Không đưa mật khẩu database hoặc thông tin bí mật vào biến `VITE_*`.
+
+## Dữ liệu và thao tác
+
+- Danh mục, sản phẩm, giá từng quy cách, ảnh có sẵn và tồn kho đọc từ API. Không tự thêm sản phẩm mẫu; database rỗng hiển thị trạng thái rỗng.
+- Đăng ký/đăng nhập dùng backend. Bearer token lưu trong sessionStorage, đăng xuất thu hồi phiên trên server.
+- Giỏ khách chưa đăng nhập lưu cục bộ; khi đăng nhập được ghép vào giỏ của tài khoản trên server. Dòng giỏ dùng ID quy cách thật.
+- Đặt hàng COD hoặc chuyển khoản ngân hàng: backend tính lại giá, điều kiện khuyến mãi, phí giao hàng và tổng tiền. Hiện miễn phí giao hàng (0đ). Chỉ đặt các dòng đã chọn; dòng còn lại giữ trong giỏ.
+- Đơn hàng và lịch sử trạng thái lấy từ PostgreSQL. Tồn kho chỉ trừ khi cửa hàng xác nhận chuẩn bị đơn, theo trigger database.
+- Quản trị quản lý sản phẩm, danh mục và tài khoản. Giá sửa là giá của quy cách hiển thị; không tự tính giá lốc/thùng theo phần trăm mẫu.
+- Nhập hàng gồm tạo nhà cung cấp, lập đơn nhập, duyệt đơn, tạo lần nhận nháp và xác nhận nhập. Xác nhận nhận hàng mới cộng tồn; quản trị viên cũng có thể sửa số lượng trên form sản phẩm kèm lý do điều chỉnh. Nhân viên có thể nhận hàng theo quyền backend.
+
+Sản phẩm tồn bằng 0 không thể mua. Muốn tăng tồn, thực hiện quy trình nhập hàng hoặc để quản trị viên điều chỉnh số lượng kèm lý do. Các chức năng chưa có giao diện riêng: quản trị khuyến mãi, thanh toán trực tuyến và hoàn tiền.
+
+## Kiểm tra
 
 ```powershell
-npm.cmd run build
-npm.cmd run preview
 npm.cmd run lint
 npm.cmd test
-npm.cmd run test:e2e
-npm.cmd run format:check
+npm.cmd run build
 ```
 
-Preview bản build: http://127.0.0.1:4173. Nếu đưa lên hosting, cấu hình mọi đường dẫn ứng dụng trả về index.html để BrowserRouter hoạt động.
+`tests/api-mappers.test.js` kiểm tra ánh xạ giá quy cách, tồn kho và ID từ API. Các test logic cũ nhập trực tiếp adapter mock để kiểm tra dữ liệu mẫu độc lập.
 
-## Tài khoản trải nghiệm
+`npx.cmd playwright test -c playwright.api.config.js` kiểm tra Chrome với backend thử ở cổng **18080**, database dùng một lần có tên chứa `backend_test`, tài khoản `e2e-admin@test.invalid` / `TestPass123!` chỉ dành cho môi trường thử. Test có tạo nhà cung cấp, nhập hàng, tài khoản và đơn thử. Không đổi test sang API/database đang dùng ở cổng 8080. Backend thử cần cho phép CORS `http://127.0.0.1:5174`.
 
-Tại trang đăng nhập có ba nút điền nhanh. Mật khẩu chung: **Demo@123**.
+`npm.cmd run test:e2e` chạy bộ trình duyệt mẫu bằng `VITE_DATA_MODE=mock`. Nếu cổng 5173 đang được dùng, tắt Vite ở terminal đó trước khi chạy bộ test mẫu.
 
-| Vai trò       | Email                  |
-| ------------- | ---------------------- |
-| Khách hàng    | khach@waterbus.demo    |
-| Nhân viên     | nhanvien@waterbus.demo |
-| Quản trị viên | admin@waterbus.demo    |
+## Chế độ mẫu
 
-Khách có thể đăng ký tài khoản mẫu. ADMIN có thể thêm tài khoản, đổi vai trò và khóa tài khoản mẫu. Không thể khóa/hạ quyền tài khoản quản trị đang sử dụng. Tài khoản mới do quản trị tạo đăng nhập bằng mật khẩu mẫu đã nhập.
+Chỉ bật `VITE_DATA_MODE=mock` khi muốn xem giao diện mẫu độc lập, rồi khởi động lại Vite. Chế độ này dùng localStorage và tài khoản demo, có quy tắc giá/tồn khác backend và không đồng bộ PostgreSQL. Chế độ API không tự chuyển về dữ liệu mẫu khi server lỗi.
 
-**Đây không phải xác thực production.** Phiên mẫu dùng sessionStorage, dữ liệu nghiệp vụ dùng localStorage. Không nhập thông tin hoặc mật khẩu thật. Mã băm trong mock chỉ tránh lưu mật khẩu nguyên văn, không phải thiết kế bảo mật phía máy chủ.
+Adapter API nằm tại `src/services/api.js`, ánh xạ dữ liệu tại `mappers.js`, cấu hình HTTP tại `http.js`. Hợp đồng backend: [API.md](../backend/docs/API.md). Tài liệu thiết kế giao diện ban đầu tại `docs/IMPLEMENTATION.md` là tài liệu lịch sử của bản mock.
 
-## Chức năng
 
-- Cửa hàng: trang chủ, tìm kiếm không dấu, danh mục, thương hiệu, mức giá, còn hàng, ưu đãi, sắp xếp và phân trang.
-- Chi tiết: minh họa bao bì SVG, giá, tình trạng, số lượng, thông tin và sản phẩm cùng danh mục.
-- Giỏ hàng: tăng/giảm số lượng, kiểm tra tồn mẫu, xác nhận xóa, tổng tiền và phí giao hàng mẫu.
-- Đặt hàng: form có validation, chỉ COD mô phỏng, xác nhận trước khi tạo đơn; không thu tiền hoặc gửi đơn thật.
-- Tài khoản: đăng nhập, đăng ký, đăng xuất, cập nhật thông tin, danh sách/chi tiết đơn của mình, hủy đơn chờ kèm lý do.
-- Vận hành: dashboard, biểu đồ doanh thu, sản phẩm, danh mục, nhập hàng, đơn hàng, khách hàng, báo cáo theo thời gian.
-- ADMIN: các chức năng STAFF, quản lý tài khoản, sản phẩm và tồn kho. Nhân viên không được sửa sản phẩm hoặc nhập kho.
-- Responsive: menu điện thoại, bộ lọc thu gọn, sidebar thu gọn, bảng cuộn trong vùng riêng.
-- UI: Radix/shadcn-style Button, Dialog, AlertDialog; trạng thái tải, skeleton, rỗng, lỗi, toast và focus bàn phím.
+## Ảnh, tồn kho và danh mục khởi đầu
 
-Quản lý ưu đãi riêng, đánh giá, upload ảnh thật, thanh toán online, khôi phục/đổi mật khẩu và tích hợp backend **chưa triển khai** do chưa có hợp đồng API hay Use Case để xác minh. Giá ưu đãi trên cửa hàng là dữ liệu mẫu.
+Form thêm/sửa sản phẩm có chọn ảnh JPG/PNG/WebP tối đa 5 MB, xem trước ảnh và ô URL ảnh. Chọn ảnh mới thay ảnh đang hiển thị; để trống giữ ảnh đã lưu. Ảnh tải lên lưu trong volume Docker `product_images`, không mất khi dựng lại container.
 
-## Công nghệ và cấu trúc
+Quản trị viên được sửa số lượng tồn theo đơn vị cơ bản (lon/chai/hộp lẻ), cần lý do nếu thay đổi. Backend ghi người thực hiện và số lượng trước/sau vào lịch sử điều chỉnh; dữ liệu thay đổi trong lúc form đang mở sẽ bị chặn để tải lại. Nhân viên không được dùng chức năng này.
 
-React 18, Vite, JavaScript JSX, Tailwind CSS 4, các primitive Radix theo cấu trúc shadcn/ui, Lucide, React Router, Axios, React Hook Form, Zod, TanStack Query, Recharts, Sonner. Có components.json và alias @ để bổ sung shadcn component.
+`backend/database/seed_beverages.sql` bổ sung 25 sản phẩm của 22 thương hiệu, không ảnh, tồn ban đầu 0, giá tham khảo cần chỉnh trước khi kinh doanh. Script chạy lại không ghi đè dữ liệu đang dùng.
 
-- src/components/ui: Button, Dialog, AlertDialog trong mã nguồn dự án.
-- src/components/common: form field có nhãn truy cập, trạng thái trang, bảng đơn hàng, phân trang.
-- src/components/customer: thẻ sản phẩm, minh họa SVG tự chứa; không phụ thuộc ảnh bên ngoài.
-- src/layouts: CustomerLayout, AdminLayout, AuthLayout.
-- src/pages: màn hình khách hàng, đăng nhập và quản lý.
-- src/contexts: AuthContext và CartContext.
-- src/hooks: truy vấn/mutation, invalidation và thông báo lỗi.
-- src/schemas: validation dùng chung.
-- src/services: điểm truy cập dữ liệu và lớp Axios chờ tích hợp.
-- src/mocks: dữ liệu và bộ lưu trữ cục bộ; không lấy dữ liệu từ backend khác.
-- src/routes: ProtectedRoute, RoleGuard, PermissionGuard.
-- tests: kiểm thử logic và Chrome E2E.
-- docs: phạm vi, ánh xạ chức năng, hướng dẫn tích hợp, báo cáo kiểm tra và ảnh.
 
-Toàn bộ ứng dụng nằm trong thư mục frontend/. Chạy các lệnh npm tại thư mục này; mã nguồn, tài nguyên, kiểm thử và cấu hình đều được đóng gói cùng nhau. Các trang ngoài trang chủ tải bằng lazy để không đưa biểu đồ vào gói khởi đầu.
-
-## Dữ liệu mẫu và quy tắc thử nghiệm
-
-Sản phẩm còn từ 20 trở xuống hiển thị tạm hết hàng và khóa mua; quản trị nhận cảnh báo sắp hết hàng. Quản trị được chỉnh số lượng; ngừng kinh doanh giữ nguyên sản phẩm trong danh sách để có thể bật bán lại.
-
-Dữ liệu seed: 16 sản phẩm, 6 danh mục, 3 tài khoản và 18 đơn hàng mẫu. Dữ liệu chỉnh sửa giữ lại khi tải lại trang trên cùng trình duyệt/origin.
-
-Phí mẫu: 20.000đ cho đơn có sản phẩm. Chỉ miễn phí giao hàng khi khách chọn voucher FREESHIP200 và tạm tính từ 200.000đ; không tự động miễn phí theo giá trị đơn. Tổng tiền luôn tính lại từ giá trong danh mục; không nhận giá do giỏ truyền vào.
-
-Luồng đơn mẫu: PENDING → CONFIRMED → SHIPPING → COMPLETED. Có thể hủy trước hoàn thành, bắt buộc lý do. Tạo đơn trừ tồn kho ngay; xác nhận không trừ lại; hủy đơn chờ/xác nhận/giao hoàn lại số lượng đã giữ. Nhập hàng cộng kho mẫu sau xác nhận. Tất cả chỉ phục vụ frontend, không phải đặc tả nghiệp vụ backend đã xác minh.
-
-Muốn khôi phục seed: mở DevTools → Application → Local Storage, xóa khóa waterbus.mock.v1 và waterbus.cart; xóa waterbus.mock.session trong Session Storage rồi tải lại. Chỉ thực hiện khi đồng ý mất các thay đổi mẫu.
-
-Các tab cùng trình duyệt cập nhật sản phẩm/tồn kho qua sự kiện storage. Không đồng bộ giữa các trình duyệt/người dùng; localStorage không có giao dịch hoặc khóa đồng thời như database thật. Mất quyền lưu trữ có thể làm mất dữ liệu sau khi tải lại.
-
-## Tích hợp backend sau này
-
-Xem [báo cáo phạm vi và tích hợp](docs/IMPLEMENTATION.md). Không có API thật nào được tuyên bố là đã tồn tại. VITE_DATA_MODE=api hiện báo lỗi rõ ràng và không tự rơi về dữ liệu giả. Base URL đặt bằng VITE_API_BASE_URL; không đưa secrets vào biến VITE_*.
-
-Cần thay service adapter bằng endpoint, request/response DTO, enum, cơ chế xác thực và quy tắc phân quyền đã xác minh. Axios hiện xử lý lỗi HTTP cơ bản nhưng chưa gắn token/cookie tự động khi chưa biết hợp đồng. Không lưu token backend trong localStorage.
-
-## Kiểm tra giao diện
-
-Playwright dùng Chrome đã cài trong máy (channel chrome), không tự tải browser. Có thể đổi channel sang msedge trong playwright.config.js nếu máy chỉ có Edge. Bộ kiểm tra tự khởi động và tắt Vite, dùng dữ liệu trình duyệt riêng, không ghi đè dữ liệu trải nghiệm của người dùng.
-
-Font Be Vietnam Pro tải từ Google Fonts khi có mạng; nếu offline, trình duyệt dùng sans-serif hệ thống. Minh họa sản phẩm hoạt động offline.
-
-Ảnh kiểm tra nằm ở docs/screenshots/. Kết quả thực tế được ghi trong docs/VALIDATION.md.
+Khách chọn COD hoặc chuyển khoản ở bước đặt hàng. Chuyển khoản hiện theo quy trình cửa hàng liên hệ cung cấp thông tin và xác nhận đã nhận tiền; tạo đơn không tự chuyển thanh toán sang thành công. Đơn đã đặt trước khi đổi phí ship giữ mức phí đã lưu.

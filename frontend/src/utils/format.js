@@ -12,6 +12,7 @@ export const statusLabels = {
   SHIPPING: 'Đang giao',
   COMPLETED: 'Hoàn thành',
   CANCELLED: 'Đã hủy',
+  REJECTED: 'Từ chối',
 };
 export const roleLabels = { CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', ADMIN: 'Quản trị viên' };
 export const normalize = (text) =>
@@ -21,3 +22,8 @@ export const normalize = (text) =>
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();
+
+export const paymentMethodLabels = {
+  COD: 'Thanh toán khi nhận hàng (COD)',
+  BANK_TRANSFER: 'Chuyển khoản ngân hàng',
+};

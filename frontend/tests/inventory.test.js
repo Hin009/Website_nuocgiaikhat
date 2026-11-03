@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { canPurchase, isLowStock } from '@/utils/inventory';
 import { maxLineQuantity } from '@/utils/purchase';
-import { adminService, orderService } from '@/services';
+import { adminService, orderService } from '@/services/mock';
 import { readDb, resetDb, updateDb } from '@/mocks/database';
 
 beforeEach(() => {

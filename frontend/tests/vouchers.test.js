@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { vouchers } from '@/data/vouchers';
 import { evaluateVoucher, calculateOrderPricing } from '@/utils/vouchers';
-import { orderService } from '@/services';
+import { orderService } from '@/services/mock';
 import { readDb, resetDb } from '@/mocks/database';
 
 beforeEach(() => {

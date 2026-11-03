@@ -1,0 +1,51 @@
+package vn.drinkstore.reporting;
+
+import java.time.LocalDate;
+import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import vn.drinkstore.common.*;
+
+@RestController
+@RequestMapping("/api/v1")
+public class ReportController {
+    private final Db db;
+    public ReportController(Db db) { this.db=db; }
+    @GetMapping("/health") public Object health() { db.number("select 1"); return Map.of("status","UP","service","drink-store-api"); }
+    @GetMapping("/staff/reports/stock") @PreAuthorize("@access.has('REPORT_STOCK')")
+    public Object stock(@RequestParam(defaultValue="false") boolean lowOnly,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        String where=lowOnly?" where canh_bao":""; return db.page("select * from v_ton_san_pham"+where+" order by san_pham_id","select count(*) from v_ton_san_pham"+where,List.of(),page,size);
+    }
+    @GetMapping("/staff/reports/purchases") @PreAuthorize("@access.has('REPORT_STOCK')")
+    public Object purchases(@RequestParam LocalDate from,@RequestParam LocalDate to) {
+        range(from,to);
+        return db.jdbc().queryForList("""
+            select po.nha_cung_cap_id,q.san_pham_id,sum(c.so_luong_thuc_nhan::bigint*l.he_so_quy_doi) as so_luong_co_ban,
+              sum(c.so_luong_thuc_nhan*c.gia_nhap_thuc_te) as tong_gia_tri
+            from chi_tiet_lan_nhap c join lan_nhap_hang r on r.id=c.lan_nhap_id
+            join chi_tiet_don_ncc l on l.id=c.ct_don_ncc_id join quy_cach_san_pham q on q.id=l.quy_cach_id
+            join don_dat_hang_ncc po on po.id=r.don_ncc_id
+            where r.trang_thai='CONFIRMED' and r.ngay_xac_nhan>=cast(? as date) and r.ngay_xac_nhan<cast(? as date)+interval '1 day'
+            group by po.nha_cung_cap_id,q.san_pham_id order by po.nha_cung_cap_id,q.san_pham_id
+            """,from,to);
+    }
+    @GetMapping("/management/reports/revenue") @PreAuthorize("@access.admin()")
+    public Object revenue(@RequestParam LocalDate from,@RequestParam LocalDate to,@RequestParam(defaultValue="day") String group) {
+        range(from,to);
+        if(!Set.of("day","week","month","quarter","year").contains(group)) throw ApiException.bad("group: day, week, month, quarter, year");
+        return db.jdbc().queryForList("""
+            select date_trunc(?,d.ngay_dat at time zone 'Asia/Ho_Chi_Minh') as period,count(*) as orders,
+              sum(d.tong_tien-d.phi_van_chuyen) as net_sales,
+              sum(d.phi_van_chuyen) as shipping_collected
+            from don_hang d
+            where d.trang_thai in ('DA_GIAO','HOAN_TAT') and d.ngay_dat>=cast(? as date) and d.ngay_dat<cast(? as date)+interval '1 day'
+            group by period order by period
+            """,group,from,to);
+    }
+    @GetMapping("/management/reports/order-status") @PreAuthorize("@access.admin()") public Object status() { return db.jdbc().queryForList("select trang_thai,count(*) as total from don_hang group by trang_thai order by trang_thai"); }
+    @GetMapping("/management/reports/promotions") @PreAuthorize("@access.admin()") public Object promotions() {
+        return db.jdbc().queryForList("select p.id,p.ten,count(u.id) as used,coalesce(sum(u.so_tien_giam),0) as discount,coalesce(sum(d.tong_tien),0) as order_value from khuyen_mai p left join su_dung_khuyen_mai u on u.khuyen_mai_id=p.id and u.trang_thai='APPLIED' left join don_hang d on d.id=u.don_hang_id group by p.id order by p.id");
+    }
+    @GetMapping("/management/reports/expiring-documents") @PreAuthorize("@access.admin()") public Object expiring() { return db.jdbc().queryForList("select * from giay_to_ncc where ngay_het_han<=current_date+30 order by ngay_het_han"); }
+    private void range(LocalDate from,LocalDate to) { if(to.isBefore(from) || to.isAfter(from.plusYears(5))) throw ApiException.bad("Khoảng thời gian không hợp lệ hoặc vượt 5 năm"); }
+}

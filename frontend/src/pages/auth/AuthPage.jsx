@@ -9,6 +9,7 @@ import { Field } from '@/components/common/Shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { loginSchema, registerSchema } from '@/schemas';
 import { authReturn } from '@/utils/access';
+import { isMock } from '@/services';
 const demos = [
   { role: 'CUSTOMER', label: 'Khách hàng', email: 'khach@waterbus.demo', icon: UserRound },
   { role: 'STAFF', label: 'Nhân viên', email: 'nhanvien@waterbus.demo', icon: BriefcaseBusiness },
@@ -28,8 +29,8 @@ export default function AuthPage({ registerMode = false, management = false }) {
   } = useForm({
     resolver: zodResolver(registerMode ? registerSchema : loginSchema),
     defaultValues: {
-      email: management && params.get('demo') === 'admin' ? 'admin@waterbus.demo' : '',
-      password: management && params.get('demo') === 'admin' ? 'Demo@123' : '',
+      email: isMock && management && params.get('demo') === 'admin' ? 'admin@waterbus.demo' : '',
+      password: isMock && management && params.get('demo') === 'admin' ? 'Demo@123' : '',
       name: '',
       phone: '',
       confirmPassword: '',
@@ -67,7 +68,7 @@ export default function AuthPage({ registerMode = false, management = false }) {
             : 'Đăng nhập để tiếp tục hành trình khám phá đồ uống.'}
       </p>
 
-      {!registerMode && (
+      {isMock && !registerMode && (
         <div className="demo-accounts">
           <span>Chọn tài khoản trải nghiệm</span>
           <div>

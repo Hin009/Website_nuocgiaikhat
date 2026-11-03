@@ -12,14 +12,16 @@ import { purchaseUnits, purchaseUnit } from '@/utils/purchase';
 import { money } from '@/utils/format';
 function ProductDetail({ product }) {
   const [quantity, setQuantity] = useState(1);
-  const [unit, setUnit] = useState('single');
+  const [unit, setUnit] = useState(() =>
+    product.source === 'api' ? purchaseUnits(product)[0]?.id || 'unavailable' : 'single',
+  );
   const [tab, setTab] = useState('description');
   const { add } = useCart();
   const products = useProducts();
   const categories = useCategories();
   const p = product;
   const chosen = purchaseUnit(p, unit);
-  const available = canPurchase(p);
+  const available = canPurchase(p) && chosen.available !== false && chosen.size <= p.stock;
   const max = available ? Math.floor(p.stock / chosen.size) : 0;
   return (
     <>
@@ -74,7 +76,7 @@ function ProductDetail({ product }) {
               ))}
             </select>
           </label>
-          {unit !== 'single' && (
+          {p.source !== 'api' && unit !== 'single' && (
             <p className="package-savings">
               {unit === 'pack'
                 ? 'Lốc 6: giảm 10% so với mua lẻ.'
@@ -94,7 +96,9 @@ function ProductDetail({ product }) {
           <div className="detail-perks">
             <span>
               <Truck size={19} />
-              Phí giao hàng 20.000đ
+              {p.source === 'api'
+                ? 'Phí giao hàng được tính khi đặt hàng'
+                : 'Phí giao hàng 20.000đ'}
             </span>
           </div>
         </div>

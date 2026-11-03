@@ -10,12 +10,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, useAction } from '@/hooks/useData';
-import { orderService, transitions } from '@/services';
+import { orderService, transitions, isMock } from '@/services';
 import { QueryState, EmptyState, PageHeading, StatusBadge, Pagination, Field } from './Shared';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { DrinkArt } from '@/components/customer/DrinkArt';
-import { money, date, statusLabels } from '@/utils/format';
+import { money, date, statusLabels, paymentMethodLabels } from '@/utils/format';
 export function OrdersPage({ admin = false }) {
   const { user } = useAuth();
   const query = useOrders(user);
@@ -203,7 +203,9 @@ function OrderDetails({ id, admin = false, inline = false }) {
   const order = query.data?.find((o) => o.id === id);
   const allowed = order
     ? admin
-      ? transitions[order.status]
+      ? order.channel === 'TAI_QUAY'
+        ? []
+        : transitions[order.status] || []
       : order.status === 'PENDING'
         ? ['CANCELLED']
         : []
@@ -243,7 +245,10 @@ function OrderDetails({ id, admin = false, inline = false }) {
               <div className="form-card">
                 <h3>Sản phẩm trong đơn</h3>
                 {order.items.map((item) => (
-                  <div className="order-detail-item" key={item.productId}>
+                  <div
+                    className="order-detail-item"
+                    key={item.id || item.packageId || item.productId}
+                  >
                     <div className="mini-art" style={{ background: item.accent }}>
                       <DrinkArt product={item} />
                     </div>
@@ -314,8 +319,12 @@ function OrderDetails({ id, admin = false, inline = false }) {
                 {order.note && <p>Ghi chú: {order.note}</p>}
                 <hr />
                 <h3>Thanh toán</h3>
-                <p>Thanh toán khi nhận hàng (COD)</p>
-                <small>Không phản ánh thanh toán thực tế.</small>
+                <p>
+                  {paymentMethodLabels[order.paymentMethod] ||
+                    order.paymentMethod ||
+                    'Thanh toán khi nhận hàng (COD)'}
+                </p>
+                {isMock && <small>Không phản ánh thanh toán thực tế.</small>}
               </div>
               {allowed.length > 0 && (
                 <div className="form-card">
@@ -349,7 +358,11 @@ function OrderDetails({ id, admin = false, inline = false }) {
             open={!!next}
             onOpenChange={(v) => !v && !action.isPending && setNext('')}
             title={'Chuyển sang “' + (statusLabels[next] || '') + '”?'}
-            description="Tồn kho đã được giữ khi đặt đơn. Hủy đơn sẽ hoàn lại số lượng đã giữ. Vui lòng kiểm tra trước khi tiếp tục."
+            description={
+              isMock
+                ? 'Tồn kho đã được giữ khi đặt đơn. Hủy đơn sẽ hoàn lại số lượng đã giữ.'
+                : 'Xác nhận đơn sẽ giữ số lượng hàng. Hủy đơn đã xác nhận sẽ hoàn lại số lượng. Vui lòng kiểm tra trước khi tiếp tục.'
+            }
             pending={action.isPending}
             onConfirm={confirm}
           >

@@ -29,6 +29,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageHeading, QueryState, StatusBadge, EmptyState } from '@/components/common/Shared';
 import { Button } from '@/components/ui/button';
 import { DrinkArt } from '@/components/customer/DrinkArt';
+import { isMock } from '@/services';
 import { money, date } from '@/utils/format';
 const monthKey = (value) => value.slice(0, 7);
 export default function DashboardPage({ report = false }) {
@@ -362,8 +363,9 @@ export default function DashboardPage({ report = false }) {
               <strong>{filtered.filter((o) => o.status === 'PENDING').length} đơn</strong> đang chờ
               xác nhận.
               <br />
-              <strong>{stockLow.length} sản phẩm</strong> sắp hết hàng (tồn kho từ{' '}
-              {LOW_STOCK_THRESHOLD} trở xuống).
+              <strong>{stockLow.length} sản phẩm</strong> sắp hết hàng{' '}
+              {isMock ? '(tồn kho từ ' : 'theo ngưỡng cảnh báo '}{' '}
+              {isMock ? LOW_STOCK_THRESHOLD + ' trở xuống).' : 'của từng sản phẩm.'}
             </p>
             <Button asChild variant="secondary">
               <Link to="/admin/orders?status=PENDING">

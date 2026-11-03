@@ -5,3 +5,13 @@ dist/
 playwright-report/
 test-results/
 .vite/
+
+# Backend build outputs, local tools, and workspace settings
+backend/target/
+backend/.tools/
+.vscode/
+*.log
+.idea/
+*.iml
+
+backend/uploads/

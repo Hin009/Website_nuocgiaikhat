@@ -68,3 +68,6 @@ Tích hợp Spring Boot; 13 Use Case; thanh toán online, upload ảnh, reset/đ
 Không gửi email, không gọi cổng thanh toán, không xuất hóa đơn hay giao hàng thực tế. Xác thực mock và lưu trữ browser không dùng cho production.
 
 Khu quản lý dùng `/admin` làm điểm vào: chưa xác thực thì hiển thị form đăng nhập, STAFF/ADMIN đã xác thực thì hiển thị tổng quan. Truy cập trang con khi chưa xác thực sẽ về `/admin?redirect=...` và quay lại sau đăng nhập. `/quan-ly` chuyển hướng về `/admin`.
+# Ghi chú bản tích hợp API
+
+Tài liệu bên dưới mô tả bản frontend mock ban đầu. Frontend hiện mặc định đã kết nối Spring Boot/PostgreSQL; xem [README hiện tại](../README.md) và [hợp đồng API](../../backend/docs/API.md) để chạy và kiểm tra. Các nhận định bên dưới về API chưa tồn tại, giá và tồn mẫu chỉ áp dụng cho `VITE_DATA_MODE=mock`.
