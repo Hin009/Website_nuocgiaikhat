@@ -20,6 +20,7 @@ public class AuthService {
     public Map<String,Object> register(String email,String password,String name) { return register(email,password,name,null); }
     @Transactional
     public Map<String,Object> register(String email,String password,String name,String phone) {
+        PhoneNumbers.validate(phone,false);
         long id=createAccount(email,password,"KHACH_HANG");
         db.jdbc().update("insert into khach_hang(tai_khoan_id,ho_ten,dien_thoai) values (?,?,?)",id,name,phone);
         db.audit(id,"REGISTER","tai_khoan",id);

@@ -12,6 +12,16 @@ public class ReportController {
     private final Db db;
     public ReportController(Db db) { this.db=db; }
     @GetMapping("/health") public Object health() { db.number("select 1"); return Map.of("status","UP","service","drink-store-api"); }
+    @GetMapping("/staff/products") @PreAuthorize("@access.has('REPORT_STOCK')")
+    public Object products(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        var result=db.page("select p.id,p.sku,p.ten,p.loai_san_pham_id,p.thuong_hieu_id,p.dung_tich,p.loai_bao_bi,p.mo_ta,p.trang_thai,p.hien_thi,p.ngay_tao,coalesce(k.so_luong_co_ban,0) as so_luong_co_ban,k.nguong_canh_bao from san_pham p left join so_luong_san_pham k on k.san_pham_id=p.id order by p.id desc","select count(*) from san_pham",List.of(),page,size);
+        @SuppressWarnings("unchecked") var rows=(List<Map<String,Object>>)result.get("items");
+        for(var row:rows) {
+            row.put("packages",db.rows("select id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,dang_ban from quy_cach_san_pham where san_pham_id=? order by he_so_quy_doi,id",row.get("id")));
+            row.put("images",db.rows("select duong_dan,anh_chinh from hinh_anh_san_pham where san_pham_id=? order by anh_chinh desc,thu_tu,id",row.get("id")));
+        }
+        return result;
+    }
     @GetMapping("/staff/reports/stock") @PreAuthorize("@access.has('REPORT_STOCK')")
     public Object stock(@RequestParam(defaultValue="false") boolean lowOnly,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
         String where=lowOnly?" where canh_bao":""; return db.page("select * from v_ton_san_pham"+where+" order by san_pham_id","select count(*) from v_ton_san_pham"+where,List.of(),page,size);

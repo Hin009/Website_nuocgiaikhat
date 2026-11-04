@@ -14,11 +14,13 @@ public class AdminService {
     private final Db db; private final Access access; private final AuthService auth; private final PasswordEncoder passwords;
     public AdminService(Db db,Access access,AuthService auth,PasswordEncoder passwords) { this.db=db; this.access=access; this.auth=auth; this.passwords=passwords; }
     @Transactional public Object createStaff(AdminController.NewStaff r) {
+        PhoneNumbers.validate(r.phone(),false);
         long account=auth.createAccount(r.email(),r.password(),"NHAN_VIEN");
         long id=db.id("insert into nhan_vien(tai_khoan_id,ma_nhan_vien,ho_ten,dien_thoai,chuc_vu,ngay_vao_lam) values (?,'NV-'||?::text,?,?,?,current_date) returning id",account,account,r.fullName(),r.phone(),r.position());
         db.audit(access.account(),"STAFF_CREATE","nhan_vien",id); return db.one("select * from nhan_vien where id=?",id);
     }
     @Transactional public Object updateStaff(long id,AdminController.StaffProfile r) {
+        PhoneNumbers.validate(r.phone(),false);
         db.one("select id from nhan_vien where id=? for update",id);
         db.jdbc().update("update nhan_vien set ho_ten=?,ngay_sinh=?,gioi_tinh=?,dien_thoai=?,dia_chi=? where id=?",r.fullName(),r.birthDate(),r.gender(),r.phone(),r.address(),id);
         db.audit(access.account(),"STAFF_PROFILE","nhan_vien",id); return db.one("select * from nhan_vien where id=?",id);
@@ -77,6 +79,7 @@ public class AdminService {
         throw ApiException.bad("Cannot delete one of the three system roles");
     }
     @Transactional public Object accountEditor(Long id,AdminController.AccountEditor r) {
+        PhoneNumbers.validate(r.phone(),false);
         long role=db.id("select id from vai_tro where ma_vai_tro=?",r.role());
         boolean created=id==null;
         if(created) { if(r.password()==null || r.password().isBlank()) throw ApiException.bad("Cần mật khẩu cho tài khoản mới"); id=auth.createAccount(r.email(),r.password(),r.role()); }

@@ -34,6 +34,7 @@ public class OrderService {
         // Require explicit acceptance of current prices before checkout.
         if(lines.stream().anyMatch(l->Boolean.TRUE.equals(l.get("price_changed")))) throw ApiException.bad("Giá đã thay đổi. Cập nhật lại giỏ hàng trước khi đặt");
         var addr=db.one("select * from dia_chi_giao_hang where id=? and khach_hang_id=?",address,customer);
+        PhoneNumbers.validate(addr.get("so_dien_thoai"),true);
         String snapshot=addr.get("ten_nguoi_nhan")+" | "+addr.get("so_dien_thoai")+" | "+addr.get("dia_chi")+", "+Objects.toString(addr.get("phuong_xa"),"")+", "+Objects.toString(addr.get("quan_huyen"),"")+", "+addr.get("tinh_thanh");
         var discount=promotions.calculate(coupon,customer,lines,true);
         BigDecimal subtotal=lines.stream().map(l->Db.money(l,"gia_ban").multiply(BigDecimal.valueOf(Db.n(l,"so_luong")))).reduce(BigDecimal.ZERO,BigDecimal::add);
@@ -70,7 +71,13 @@ public class OrderService {
             || (old.equals("DANG_CHUAN_BI") && Set.of("DANG_GIAO","DA_HUY").contains(status))
             || (old.equals("DANG_GIAO") && Set.of("DA_GIAO","DA_HUY").contains(status));
         if(!valid) throw ApiException.bad("Invalid online order transition");
-        if("DANG_CHUAN_BI".equals(status)) confirmCoupon(order);
+        if("DANG_CHUAN_BI".equals(status)) {
+            confirmCoupon(order);
+            // Snapshot weighted cost at stock issue, while the lines are still editable.
+            for(var p:db.rows("select distinct q.san_pham_id from chi_tiet_don_hang c join quy_cach_san_pham q on q.id=c.quy_cach_id where c.don_hang_id=? order by q.san_pham_id",id))
+                db.one("select san_pham_id from so_luong_san_pham where san_pham_id=? for update",p.get("san_pham_id"));
+            db.jdbc().update("update chi_tiet_don_hang c set gia_von_don_vi=q.gia_von from quy_cach_san_pham q where q.id=c.quy_cach_id and c.don_hang_id=?",id);
+        }
         // Database trigger is the ONLY writer of stock and cancellation rollback.
         db.jdbc().update("update don_hang set trang_thai=?,nhan_vien_xu_ly_id=coalesce(nhan_vien_xu_ly_id,?) where id=?",status,customer==null?access.employee():null,id);
         db.jdbc().update("update lich_su_trang_thai_don set tai_khoan_thuc_hien_id=?,ghi_chu=? where id=(select max(id) from lich_su_trang_thai_don where don_hang_id=?)",access.account(),note,id);

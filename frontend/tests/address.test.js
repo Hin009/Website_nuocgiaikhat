@@ -54,4 +54,28 @@ describe('profile address', () => {
         .success,
     ).toBe(true);
   });
+  it('validates and round trips structured staff and administrator addresses', () => {
+    const province = provinces[0];
+    const values = {
+      name: 'Quản trị',
+      phone: '0901234567',
+      provinceCode: province.code,
+      wardCode: province.wards[0].code,
+      streetAddress: '12 Nguyễn Huệ',
+    };
+    const result = managementProfileSchema.parse(values);
+    expect(profileAddressDefaults({ address: result.address })).toEqual({
+      provinceCode: values.provinceCode,
+      wardCode: values.wardCode,
+      streetAddress: values.streetAddress,
+    });
+    expect(
+      managementProfileSchema.safeParse({ ...values, wardCode: provinces[1].wards[0].code })
+        .success,
+    ).toBe(false);
+    expect(
+      managementProfileSchema.safeParse({ ...values, provinceCode: '', wardCode: '' }).success,
+    ).toBe(false);
+    expect(managementProfileSchema.safeParse({ ...values, streetAddress: '' }).success).toBe(false);
+  });
 });

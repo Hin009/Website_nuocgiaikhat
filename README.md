@@ -1,4 +1,4 @@
-﻿# Website cửa hàng nước giải khát
+# Website cửa hàng nước giải khát
 
 Mã nguồn gồm `backend/` (Java Spring Boot, PostgreSQL, Docker) và `frontend/` (React/Vite). Frontend mặc định gọi API thật để hiển thị dữ liệu PostgreSQL.
 
@@ -37,22 +37,20 @@ Vite chuyển tiếp `/api` đến backend tại `http://127.0.0.1:8080`. Fronte
 
 ## Database và ảnh
 
-Khi tạo database lần đầu, Docker tự chạy theo thứ tự:
+Docker hiện chỉ nạp **một file** `backend/database/beverage_store_13UC_HOAN_CHINH.sql`. File đã đồng bộ từ PostgreSQL Docker hiện tại: 45 bảng, 492 dòng dữ liệu, 39 bộ đếm ID, cùng các hàm, trigger và khóa ngoại. Số dòng từng bảng đã đối chiếu với database nguồn. Phần bổ sung backend và các migration mới nhất đã có trong bản xuất, không cần chạy thêm SQL khác.
 
-1. `backend/database/beverage_store_13UC_HOAN_CHINH.sql`: bảng, quan hệ, trigger và dữ liệu nền.
-2. `backend/database/backend_extensions.sql`: bổ sung hỗ trợ backend.
-3. `backend/database/seed_beverages.sql`: thêm 25 sản phẩm của 22 thương hiệu, chưa có ảnh, tồn ban đầu 0, giá tham khảo để quản trị chỉnh lại.
+Chỉ khôi phục vào database/volume **trống**. Docker chỉ tự nạp file khi tạo volume lần đầu. Không chạy file này lên database đang có dữ liệu và không xóa volume hiện tại chỉ để nạp lại SQL.
 
-SQL khởi tạo chỉ tự chạy khi volume database trống. Script seed có thể chạy lại riêng mà không ghi đè dữ liệu cũ. Không chạy lại schema gốc lên database đang sử dụng.
+Bản xuất chứa dữ liệu thật, bao gồm tài khoản, mật khẩu đã băm, khách hàng và phiên xác thực. Giữ riêng file SQL; không đưa bản snapshot này lên GitHub công khai. Tài khoản quản trị sau khôi phục dùng mật khẩu của database nguồn, không tự đổi theo BOOTSTRAP_ADMIN_PASSWORD nếu đã tồn tại.
 
-Dữ liệu PostgreSQL và ảnh tải lên được giữ trong hai volume Docker. Git chỉ lưu code và dữ liệu khởi tạo; chuyển các tài khoản, đơn hàng, tồn kho hoặc ảnh hiện có sang máy khác cần sao lưu/khôi phục các volume tương ứng.
+SQL lưu đường dẫn ảnh; file ảnh nằm trong volume `product_images`. Ảnh và ba SQL cũ được sao lưu tại `backend/.tools/sql-export-20261104/` (ngoài Git). Xem hướng dẫn khôi phục trong [README backend](backend/README.md).
 
 ## Các chức năng đã kết nối
 
 - Sản phẩm, danh mục, thương hiệu, giá quy cách và tồn kho từ PostgreSQL.
 - Đăng ký, đăng nhập, giỏ hàng, đặt đơn, địa chỉ khách và lịch sử đơn hàng.
 - Quản trị thêm/sửa sản phẩm, tải ảnh JPG/PNG/WebP tối đa 5 MB và điều chỉnh tồn kho kèm lý do, lưu lịch sử.
-- Quản lý tài khoản và quy trình nhập/nhận hàng từ nhà cung cấp.
+- Quản lý tài khoản, nhà cung cấp, mã khuyến mãi và quy trình nhập/nhận hàng. Nhà cung cấp được thêm tại mục quản lý riêng, rồi chọn trong đơn nhập.
 - Miễn phí giao hàng cho đơn mới; khách chọn COD hoặc chuyển khoản ngân hàng. Chuyển khoản được cửa hàng cung cấp thông tin và xác nhận thủ công.
 
 ## Kiểm tra và cập nhật

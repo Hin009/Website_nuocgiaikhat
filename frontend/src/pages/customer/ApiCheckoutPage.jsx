@@ -160,7 +160,13 @@ export default function ApiCheckoutPage() {
               <input {...register('receiver')} readOnly={!!addressId} />
             </Field>
             <Field label="Số điện thoại" error={errors.phone}>
-              <input type="tel" {...register('phone')} readOnly={!!addressId} />
+              <input
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                {...register('phone')}
+                readOnly={!!addressId}
+              />
             </Field>
             <Field label="Địa chỉ nhận hàng" error={errors.address}>
               <textarea {...register('address')} readOnly={!!addressId} />

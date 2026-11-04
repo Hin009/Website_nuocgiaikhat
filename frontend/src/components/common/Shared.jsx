@@ -101,7 +101,7 @@ export function Field({ label, error, children, className = '' }) {
   const id = useId();
   const decorate = (child) => {
     if (!isValidElement(child)) return child;
-    if (['input', 'textarea', 'select'].includes(child.type))
+    if (['input', 'textarea', 'select'].includes(child.type) || child.props['data-field-control'])
       return cloneElement(child, {
         id: id + '-control',
         'aria-labelledby': id + '-label',

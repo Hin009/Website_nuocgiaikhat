@@ -45,15 +45,16 @@ class BackendIntegrationTest {
             try(var c=DriverManager.getConnection(url,System.getenv().getOrDefault("BACKEND_TEST_DB_USER","backend_test"),System.getenv().getOrDefault("BACKEND_TEST_DB_PASSWORD",""));var s=c.createStatement()) {
                 boolean initialized;
                 try(var rs=s.executeQuery("select to_regclass('public.tai_khoan') is not null")) { rs.next(); initialized=rs.getBoolean(1); }
-                if(initialized) { s.execute(new ClassPathResource("testdb/backend_extensions.sql").getContentAsString(StandardCharsets.UTF_8)); return; }
+                if(initialized) return;
                 // PostgreSQL dollar-quoted function bodies must be sent intact, not split on semicolons.
-                for(String file:List.of("beverage_store_13UC_HOAN_CHINH.sql","backend_extensions.sql"))
-                    s.execute(new ClassPathResource("testdb/"+file).getContentAsString(StandardCharsets.UTF_8));
+                s.execute(new ClassPathResource("testdb/beverage_store_test.sql").getContentAsString(StandardCharsets.UTF_8));
             } catch(Exception e) { throw new IllegalStateException("Cannot initialize disposable test database",e); }
         }
     }
     @Autowired Db db; @Autowired AuthService auth; @Autowired CartService carts; @Autowired OrderService orders;
     @Autowired PurchaseService purchases; @Autowired BillingService billing; @Autowired MockMvc mvc;
+    @Autowired SupplierReturnService supplierReturns;
+    @Autowired vn.drinkstore.reporting.ProductFinanceController productFinance;
     long account,customer,admin,employee,product,pack,supplier,address;
     @BeforeEach void setup() {
         account=((Number)auth.register("customer@test.invalid","TestPass123!","Test Customer").get("id")).longValue();
@@ -185,6 +186,55 @@ class BackendIntegrationTest {
             assertEquals(method,payment.get("phuong_thuc"));
             assertEquals("PENDING",payment.get("trang_thai"));
         }
+    }
+    String promotionBody(String code,String scope,String ids) {
+        return """
+            {"code":"%s","fullName":"Test promotion","description":"Test","discountType":"PERCENT","value":10,
+             "minimumOrder":0,"startsAt":"%s","endsAt":"%s","scope":"%s","scopeIds":%s,"status":"ACTIVE"}
+            """.formatted(code,java.time.OffsetDateTime.now().minusDays(1),java.time.OffsetDateTime.now().plusDays(7),scope,ids);
+    }
+    @Test void promotionEditorSavesScopesAtomicallyAndControlsCustomerDiscounts() throws Exception {
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
+        String body=promotionBody("scope10","CATEGORY","["+category+"]");
+        mvc.perform(post("/api/v1/management/promotion-editor").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.ma_code").value("SCOPE10"));
+        long id=db.id("select id from khuyen_mai where ma_code='SCOPE10'");
+        mvc.perform(get("/api/v1/management/promotion-editor").header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].scope_ids[0]").value(category));
+        mvc.perform(put("/api/v1/management/promotion-editor/"+id).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(promotionBody("CHANGED","CATEGORY","[999999999]")))
+            .andExpect(status().isNotFound());
+        assertEquals("SCOPE10",db.one("select ma_code from khuyen_mai where id=?",id).get("ma_code"));
+        assertEquals(category,db.number("select loai_san_pham_id from pham_vi_khuyen_mai where khuyen_mai_id=?",id));
+        mvc.perform(put("/api/v1/management/promotion-editor/"+id).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(body.replace("\"value\":10","\"value\":101")))
+            .andExpect(status().isBadRequest());
+        as(admin); receive(20); as(account); carts.put(customer,pack,2);
+        var quote=orders.quote(customer,List.of(pack),"SCOPE10");
+        assertEquals(0,((BigDecimal)quote.get("subtotal")).multiply(new BigDecimal("0.10")).compareTo((BigDecimal)quote.get("discount")));
+        mvc.perform(patch("/api/v1/management/promotion-editor/"+id+"/status").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"INACTIVE\"}"))
+            .andExpect(status().isOk());
+        as(account); assertThrows(ApiException.class,()->orders.quote(customer,List.of(pack),"SCOPE10"));
+        assertEquals(1,db.number("select count(*) from pham_vi_khuyen_mai where khuyen_mai_id=?",id));
+    }
+    @Test void supplierEditorPreservesPurchaseHistoryAndBlocksInactivePurchasing() throws Exception {
+        receive(5);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        String body="{\"fullName\":\"Managed supplier\",\"contactName\":\"Contact\",\"phone\":\"0900000000\",\"email\":\"supplier@test.invalid\",\"address\":\"123 Street\",\"supplierType\":\"DOANH_NGHIEP\",\"verificationStatus\":\"CHUA_XAC_MINH\",\"verificationNotes\":\"\",\"taxCode\":\"0123456789\",\"status\":\"HOP_TAC\"}";
+        mvc.perform(put("/api/v1/management/supplier-editor/"+supplier).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.nguoi_lien_he").value("Contact"));
+        mvc.perform(patch("/api/v1/management/supplier-editor/"+supplier+"/status").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"NGUNG_HOP_TAC\"}"))
+            .andExpect(status().isOk());
+        assertEquals(1,db.number("select count(*) from don_dat_hang_ncc where nha_cung_cap_id=?",supplier));
+        as(admin); assertThrows(ApiException.class,()->purchases.create(new PurchaseController.Create(supplier,null,List.of(new PurchaseController.Line(pack,1,new BigDecimal("8000"))))));
+    }
+    @Test void employeesCannotUseSupplierAndPromotionEditors() throws Exception {
+        auth.createAccount("staff@test.invalid","TestPass123!","NHAN_VIEN");
+        String token=auth.login("staff@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(post("/api/v1/management/supplier-editor").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content("{\"fullName\":\"Forbidden supplier\",\"status\":\"HOP_TAC\"}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/management/promotion-editor").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(promotionBody("FORBIDDEN","ALL","[]")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/management/promotion-editor").header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
     }
     @Test void receiptConfirmationIsIdempotentAndCreatesDebt() {
         long receipt=receive(20); assertEquals(20,stock());
@@ -344,6 +394,57 @@ class BackendIntegrationTest {
         assertEquals(0,new BigDecimal("69000").compareTo(Db.money(line,"don_gia")));
         as(admin); orders.transition(id,"DANG_CHUAN_BI",null);
         assertEquals(8,stock());
+    }
+    @Test void damagedDeliveryExcludesRejectedGoodsFromStockAndDebt() {
+        var po=(Map<?,?>)purchases.create(new PurchaseController.Create(supplier,null,List.of(new PurchaseController.Line(pack,10,new BigDecimal("10000")))));
+        long purchase=((Number)po.get("id")).longValue(); purchases.decide(purchase,new PurchaseController.Decision("DA_DUYET",null));
+        long line=db.id("select id from chi_tiet_don_ncc where don_ncc_id=?",purchase);
+        var draft=(Map<?,?>)purchases.receipt(purchase,new PurchaseController.Receive(List.of(new PurchaseController.ReceiptLine(line,8,new BigDecimal("10000"),2,"Broken"))));
+        long receipt=((Number)draft.get("id")).longValue();purchases.confirm(receipt);
+        assertEquals(8,stock());
+        assertEquals(0,new BigDecimal("80000").compareTo(Db.money(db.one("select * from cong_no_ncc where lan_nhap_id=?",receipt),"so_tien_con_no")));
+        purchases.confirm(receipt);
+        @SuppressWarnings("unchecked") var history=(Map<String,Object>)supplierReturns.list(0,100);
+        @SuppressWarnings("unchecked") var returned=(List<Map<String,Object>>)history.get("items");
+        var rejection=returned.stream().filter(row->"RECEIPT_REJECTION".equals(row.get("source")) && Db.n(row,"lan_nhap_id")==receipt).toList();
+        assertEquals(1,rejection.size());
+        assertEquals(0,new BigDecimal("20000").compareTo(Db.money(rejection.getFirst(),"tong_tien")));
+        assertEquals(0,Db.money(rejection.getFirst(),"so_tien_giam_no").signum());
+        assertNull(db.jdbc().queryForObject("select to_regclass('public.phieu_tra_ncc')",String.class));
+        assertEquals(8,stock());
+        assertEquals(0,new BigDecimal("10000").compareTo(Db.money(db.one("select gia_von from quy_cach_san_pham where id=?",pack),"gia_von")));
+        assertEquals(8,stock());
+        assertEquals(0,db.number("select so_luong_dat-(select sum(c.so_luong_thuc_nhan+c.so_luong_loai) from chi_tiet_lan_nhap c join lan_nhap_hang r on r.id=c.lan_nhap_id where c.ct_don_ncc_id=d.id and r.trang_thai='CONFIRMED') from chi_tiet_don_ncc d where d.id=?",line));
+        assertThrows(ApiException.class,()->purchases.receipt(purchase,new PurchaseController.Receive(List.of(new PurchaseController.ReceiptLine(line,2,new BigDecimal("10000"))))));
+        assertEquals("DA_NHAN_DU",db.one("select trang_thai from don_dat_hang_ncc where id=?",purchase).get("trang_thai"));
+    }
+    @Test void entirelyRejectedDeliverySettlesThePurchaseWithoutStockOrPayable() {
+        var po=(Map<?,?>)purchases.create(new PurchaseController.Create(supplier,null,List.of(new PurchaseController.Line(pack,10,new BigDecimal("8000")))));
+        long purchase=((Number)po.get("id")).longValue();purchases.decide(purchase,new PurchaseController.Decision("DA_DUYET",null));
+        long line=db.id("select id from chi_tiet_don_ncc where don_ncc_id=?",purchase);
+        var draft=(Map<?,?>)purchases.receipt(purchase,new PurchaseController.Receive(List.of(new PurchaseController.ReceiptLine(line,0,new BigDecimal("8000"),10,"Expired"))));
+        long receipt=((Number)draft.get("id")).longValue();purchases.confirm(receipt);assertEquals(0,stock());
+        assertEquals("DA_NHAN_DU",db.one("select trang_thai from don_dat_hang_ncc where id=?",purchase).get("trang_thai"));
+        assertEquals("DA_TRA",db.one("select trang_thai from cong_no_ncc where lan_nhap_id=?",receipt).get("trang_thai"));
+    }
+    @Test void importCaseFactorCountsOnlyAcceptedCasesInStockAndDebt() {
+        var po=(Map<?,?>)purchases.create(new PurchaseController.Create(supplier,null,List.of(new PurchaseController.Line(null,2,new BigDecimal("240000"),product,"THUNG",48))));
+        long purchase=((Number)po.get("id")).longValue();purchases.decide(purchase,new PurchaseController.Decision("DA_DUYET",null));
+        var line=db.one("select * from chi_tiet_don_ncc where don_ncc_id=?",purchase);
+        assertEquals(48,Db.n(line,"he_so_quy_doi"));assertEquals(false,db.one("select dang_ban from quy_cach_san_pham where id=?",line.get("quy_cach_id")).get("dang_ban"));
+        var draft=(Map<?,?>)purchases.receipt(purchase,new PurchaseController.Receive(List.of(new PurchaseController.ReceiptLine(Db.n(line,"id"),1,new BigDecimal("240000"),1,"Damaged case"))));
+        long receipt=((Number)draft.get("id")).longValue();purchases.confirm(receipt);purchases.confirm(receipt);
+        assertEquals(48,stock());assertEquals(240000,db.number("select so_tien_con_no from cong_no_ncc where lan_nhap_id=?",receipt));
+        assertEquals("DA_NHAN_DU",db.one("select trang_thai from don_dat_hang_ncc where id=?",purchase).get("trang_thai"));
+        assertEquals(0,Db.money(db.one("select gia_von from quy_cach_san_pham where id=?",pack),"gia_von").compareTo(new BigDecimal("5000")));
+    }
+    @Test void productProfitUsesSnapshotCostAndExcludesUnsoldPurchases() {
+        receive(10);long order=checkout();as(admin);orders.transition(order,"DANG_CHUAN_BI",null);orders.transition(order,"DANG_GIAO",null);orders.transition(order,"DA_GIAO",null);
+        @SuppressWarnings("unchecked") var report=(List<Map<String,Object>>)productFinance.products(null,null);
+        var row=report.stream().filter(p->Db.n(p,"product_id")==product).findFirst().orElseThrow();
+        assertEquals(80000,Db.n(row,"import_amount"));assertEquals(16000,Db.n(row,"cost_of_goods"));
+        assertEquals(2,Db.n(row,"sold_qty"));assertEquals(8,Db.n(row,"current_stock"));
+        assertEquals(0,Db.money(row,"net_sales").subtract(new BigDecimal("16000")).compareTo(Db.money(row,"gross_profit")));
     }
     @Test void employeeCannotCreateSupplierOrderUnderNewSeedPermissions() throws Exception {
         auth.createAccount("staff@test.invalid","TestPass123!","NHAN_VIEN");

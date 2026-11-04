@@ -34,7 +34,7 @@ Mặc định `VITE_DATA_MODE=api`, `VITE_API_BASE_URL=/api/v1` (xem `.env.examp
 - Quản trị quản lý sản phẩm, danh mục và tài khoản. Giá sửa là giá của quy cách hiển thị; không tự tính giá lốc/thùng theo phần trăm mẫu.
 - Nhập hàng gồm tạo nhà cung cấp, lập đơn nhập, duyệt đơn, tạo lần nhận nháp và xác nhận nhập. Xác nhận nhận hàng mới cộng tồn; quản trị viên cũng có thể sửa số lượng trên form sản phẩm kèm lý do điều chỉnh. Nhân viên có thể nhận hàng theo quyền backend.
 
-Sản phẩm tồn bằng 0 không thể mua. Muốn tăng tồn, thực hiện quy trình nhập hàng hoặc để quản trị viên điều chỉnh số lượng kèm lý do. Các chức năng chưa có giao diện riêng: quản trị khuyến mãi, thanh toán trực tuyến và hoàn tiền.
+Sản phẩm tồn bằng 0 không thể mua. Muốn tăng tồn, thực hiện quy trình nhập hàng hoặc để quản trị viên điều chỉnh số lượng kèm lý do. Các chức năng chưa có giao diện riêng: thanh toán trực tuyến và hoàn tiền.
 
 ## Kiểm tra
 
@@ -63,7 +63,18 @@ Form thêm/sửa sản phẩm có chọn ảnh JPG/PNG/WebP tối đa 5 MB, xem 
 
 Quản trị viên được sửa số lượng tồn theo đơn vị cơ bản (lon/chai/hộp lẻ), cần lý do nếu thay đổi. Backend ghi người thực hiện và số lượng trước/sau vào lịch sử điều chỉnh; dữ liệu thay đổi trong lúc form đang mở sẽ bị chặn để tải lại. Nhân viên không được dùng chức năng này.
 
-`backend/database/seed_beverages.sql` bổ sung 25 sản phẩm của 22 thương hiệu, không ảnh, tồn ban đầu 0, giá tham khảo cần chỉnh trước khi kinh doanh. Script chạy lại không ghi đè dữ liệu đang dùng.
+`backend/database/beverage_store_13UC_HOAN_CHINH.sql` hiện là snapshot đầy đủ cấu trúc và dữ liệu từ Docker. Danh mục, thương hiệu và tồn kho đã có trong SQL; không chạy seed riêng. File ảnh phải chuyển theo volume ảnh hoặc bản sao lưu ảnh.
 
 
 Khách chọn COD hoặc chuyển khoản ở bước đặt hàng. Chuyển khoản hiện theo quy trình cửa hàng liên hệ cung cấp thông tin và xác nhận đã nhận tiền; tạo đơn không tự chuyển thanh toán sang thành công. Đơn đã đặt trước khi đổi phí ship giữ mức phí đã lưu.
+
+
+## Quản lý nhà cung cấp và mã khuyến mãi
+
+Admin có hai mục mới: `/admin/suppliers` và `/admin/promotions`.
+
+Nhà cung cấp: thêm/sửa tên, mã số thuế, người liên hệ, số điện thoại, email, địa chỉ và trạng thái hợp tác; tìm kiếm, lọc trạng thái, ngừng/khôi phục hợp tác. Trang nhập hàng không thêm nhà cung cấp nữa, chỉ chọn nhà cung cấp đang hợp tác. Nhà cung cấp đã ngừng vẫn giữ lịch sử các đơn nhập cũ.
+
+Mã khuyến mãi: thêm/sửa mã, tên, mô tả, loại giảm phần trăm hoặc số tiền, mức giảm tối đa, giá trị đơn tối thiểu, thời gian và giới hạn lượt dùng. Phạm vi có thể là toàn bộ sản phẩm hoặc các sản phẩm/danh mục/thương hiệu được chọn. Để trống giới hạn là không giới hạn; giá trị 0 là hết lượt. Ngừng mã giữ lại lịch sử; khách không áp dụng được mã đã ngừng hoặc hết hạn.
+
+`npx.cmd playwright test -c playwright.business.config.js` kiểm thử thao tác các trang này bằng API mô phỏng tại trình duyệt, không ghi database thật. Các test tích hợp backend được bổ sung trong `BackendIntegrationTest`, chỉ chạy khi cấu hình database kiểm thử riêng.

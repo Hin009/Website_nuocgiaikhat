@@ -234,28 +234,24 @@ const mapUser = (row) => ({
   createdAt: row.ngay_tao,
 });
 export const purchasingService = {
+  returns: () => allPages('/supplier-returns'),
   receipts: () => allPages('/receipts'),
   orders: () => allPages('/purchases'),
   detail: (id) => get(`/purchases/${id}`),
   suppliers: () => allPages('/management/suppliers'),
-  addSupplier: (values) =>
-    post('/management/suppliers', {
-      ten: values.name,
-      dien_thoai: values.phone || null,
-      email: values.email || null,
-    }),
   async create(v) {
-    await post('/management/supplier-products', {
-      nha_cung_cap_id: numeric(v.supplierId),
-      san_pham_id: numeric(v.productId),
-    }).catch((e) => {
-      if (e.status !== 409) throw e;
-    });
     return post('/purchases', {
       supplierId: numeric(v.supplierId),
+      expectedDate: v.expectedDate || null,
       items: [
         {
-          packageId: numeric(v.packageId),
+          ...(v.packaging
+            ? {
+                productId: numeric(v.productId),
+                packaging: v.packaging,
+                unitsPerPackage: numeric(v.unitsPerPackage),
+              }
+            : { packageId: numeric(v.packageId) }),
           quantity: numeric(v.quantity),
           unitCost: numeric(v.cost),
         },
@@ -269,6 +265,7 @@ export const purchasingService = {
   confirm: (id) => post(`/receipts/${id}/confirm`),
 };
 export const adminService = {
+  adjustStock: (product, values) => patch(`/management/products/${product.id}/stock`, values),
   async uploadImage(file) {
     const data = new FormData();
     data.append('file', file);
@@ -309,7 +306,13 @@ export const adminService = {
           items: r.items,
         }));
     if (key === 'products') {
-      if (user.role !== 'ADMIN') return catalogService.list();
+      if (user.role !== 'ADMIN') {
+        const [rows, brands] = await Promise.all([
+          allPages('/staff/products'),
+          get('/catalog/brands'),
+        ]);
+        return rows.map((r) => mapProduct(r, r.packages, brands, r));
+      }
       const [rows, packages, brands, stock, images] = await Promise.all([
         allPages('/management/products'),
         allPages('/management/packages'),

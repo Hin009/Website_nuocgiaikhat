@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { optionalPhoneSchema } from '@/schemas/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAction } from '@/hooks/useData';
 import { adminService, authService, isMock } from '@/services';
@@ -18,7 +19,7 @@ const userSchema = z
       .trim()
       .email('Email không hợp lệ.')
       .transform((v) => v.toLowerCase()),
-    phone: z.string().max(20),
+    phone: optionalPhoneSchema,
     role: z.enum(['CUSTOMER', 'STAFF', 'ADMIN']),
     active: z.boolean(),
     password: z.string().optional(),
@@ -79,7 +80,7 @@ export default function UserForm({ item, onClose }) {
           <input type="email" readOnly={!!item} {...register('email')} />
         </Field>
         <Field label="Số điện thoại" error={errors.phone}>
-          <input type="tel" {...register('phone')} />
+          <input type="tel" inputMode="numeric" autoComplete="tel" {...register('phone')} />
         </Field>
         {!isMock && item?.roles?.length > 1 && (
           <p className="muted-note">

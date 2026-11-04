@@ -2981,6 +2981,21 @@ td small {
   background: #f0f1eb;
   color: #a1a58e;
 }
+.delivery-status {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.delivery-late {
+  background: #fff1d6;
+  color: #8a5715;
+}
+.delivery-on-time {
+  background: #edf5eb;
+  color: #24583d;
+}
 .stock-warning {
   color: #be9b61;
   font-weight: 600;
@@ -5354,4 +5369,262 @@ td small {
 }
 .product-card.is-unavailable .add-button {
   cursor: not-allowed;
+}
+/* Supplier legal workflow and promotion targeting. */
+.supplier-workflow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.supplier-workflow li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground, #67796d);
+  font-size: 13px;
+}
+.supplier-workflow b {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #eaf0e3;
+  color: #204d3d;
+}
+.supplier-legal {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid #dce5d7;
+  background: #f8faf5;
+  border-radius: 16px;
+}
+.supplier-legal h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.tax-lookup-link {
+  color: #215c47;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.verification-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+}
+.verification-confirm input {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  accent-color: #214e3e;
+}
+.verification-badge {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 12px;
+  background: #f0f1ed;
+  color: #5b665b;
+  white-space: nowrap;
+}
+.verification-DA_XAC_MINH {
+  background: #e3f2e9;
+  color: #1d643e;
+}
+.verification-CAN_KIEM_TRA_LAI {
+  background: #fff0d5;
+  color: #8a5915;
+}
+.promotion-targets {
+  border: 1px solid #dce5d7;
+  border-radius: 16px;
+  padding: 18px;
+  min-width: 0;
+}
+.promotion-targets legend {
+  padding: 0 8px;
+  font-weight: 600;
+  font-size: 15px;
+}
+.target-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.target-toolbar .inline-search {
+  flex: 1;
+  min-width: 0;
+}
+.target-toolbar input {
+  min-width: 0;
+  width: 100%;
+}
+.target-count {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: #eaf0e3;
+  font-size: 12px;
+  color: #214e3e;
+}
+.target-actions {
+  display: flex;
+  gap: 18px;
+  margin: 12px 0;
+}
+.target-actions button {
+  font-size: 13px;
+  color: #245740;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.target-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.promotion-target-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 3px;
+}
+.inline-stock-form {
+  display: grid;
+  gap: 8px;
+  min-width: 160px;
+  max-width: 300px;
+}
+.inline-stock-form input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #dce4d8;
+  border-radius: 8px;
+  background: white;
+}
+.inline-stock-form .row-actions {
+  flex-wrap: wrap;
+}
+.promotion-target {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #e1e6dc;
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.promotion-target.is-selected {
+  border-color: #3e7358;
+  background: #edf5eb;
+  color: #1b4936;
+}
+.promotion-target:focus-within {
+  outline: 2px solid #3e7358;
+  outline-offset: 1px;
+}
+.promotion-target input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: #214e3e;
+}
+@media (max-width: 600px) {
+  .promotion-target-grid {
+    grid-template-columns: 1fr;
+  }
+  .supplier-legal {
+    padding: 14px;
+  }
+  .target-toolbar {
+    flex-wrap: wrap;
+  }
+}
+.supplier-returns-section,
+.product-profit-section {
+  margin: 32px 0;
+}
+.return-product {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #dce5d7;
+  border-radius: 12px;
+  background: #f8faf5;
+}
+.return-product small {
+  color: #6d7b6c;
+}
+.finance-warning {
+  padding: 10px 14px;
+  background: #fff4da;
+  color: #825e1e;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.profit-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.profit-totals .metric-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+.profit-totals strong {
+  font-size: 23px;
+}
+.profit-search {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin: 20px 0;
+  font-size: 14px;
+}
+.profit-search input {
+  width: 100%;
+  border: 1px solid #dce5d7;
+  background: white;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.profit-table td:not(:first-child),
+.profit-table th:not(:first-child) {
+  white-space: nowrap;
+  text-align: right;
+}
+.profit-table td:first-child {
+  min-width: 180px;
+}
+.profit-positive {
+  color: #24573e;
+}
+.profit-negative {
+  color: #ad3e34;
+}
+.receiving-summary {
+  padding: 14px 18px;
+  border: 1px solid #cdddca;
+  border-radius: 12px;
+  background: #edf5eb;
+  color: #21503b;
+  font-size: 14px;
+  line-height: 1.7;
 }

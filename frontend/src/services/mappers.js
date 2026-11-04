@@ -57,6 +57,7 @@ export function mapProduct(row, packages = [], brands = [], stock) {
       packageId: String(q.id),
       label: q.ten_quy_cach,
       size: Number(q.he_so_quy_doi),
+      unit: q.don_vi_tinh,
       price: Number(q.gia_ban),
       available: q.dang_ban !== false,
     })),

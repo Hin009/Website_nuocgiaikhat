@@ -18,6 +18,12 @@ const AuthPage = lazy(() => import('@/pages/auth/AuthPage'));
 const AdminProfilePage = lazy(() => import('@/pages/admin/ProfilePage'));
 const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
 const ProductsPage = lazy(() => import('@/pages/admin/ProductsPage'));
+const SuppliersPage = lazy(() =>
+  import('@/pages/admin/BusinessManagementPages').then((m) => ({ default: m.SuppliersPage })),
+);
+const PromotionsPage = lazy(() =>
+  import('@/pages/admin/BusinessManagementPages').then((m) => ({ default: m.PromotionsPage })),
+);
 const CategoriesPage = lazy(() =>
   import('@/pages/admin/ManagementPages').then((m) => ({ default: m.CategoriesPage })),
 );
@@ -113,8 +119,10 @@ export default function App() {
                 <Route path="customers" element={<UsersPage customers />} />
                 {!isMock && <Route path="stock-receipts" element={<ReceiptsPage />} />}
                 <Route path="reports" element={<DashboardPage report />} />
+                <Route path="products" element={<ProductsPage />} />
                 <Route element={<RoleGuard roles={['ADMIN']} />}>
-                  <Route path="products" element={<ProductsPage />} />
+                  {!isMock && <Route path="suppliers" element={<SuppliersPage />} />}
+                  {!isMock && <Route path="promotions" element={<PromotionsPage />} />}
                   {isMock && <Route path="stock-receipts" element={<ReceiptsPage />} />}
                   <Route path="users" element={<UsersPage />} />
                 </Route>

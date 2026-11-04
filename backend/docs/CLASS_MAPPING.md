@@ -49,6 +49,6 @@ Nguồn hiện tại: `database/beverage_store_13UC_HOAN_CHINH.sql` (43 bảng n
 | CongNoNcc | `cong_no_ncc` |
 | ThanhToanNcc | `thanh_toan_ncc` |
 
-Bổ sung duy nhất về cột ở backend là `don_hang.khuyen_mai_id` để giữ coupon chưa xác nhận. SQL gốc được giữ nguyên. Nghiệp vụ ở AuthService, CartService, OrderService, PurchaseService và BillingService; trigger/hàm SQL chịu trách nhiệm tồn kho, công nợ, lịch sử và lập hóa đơn.
+Bổ sung duy nhất về cột ở backend là `don_hang.khuyen_mai_id` để giữ coupon chưa xác nhận. SQL khởi tạo hiện là snapshot đầy đủ xuất từ Docker, đã bao gồm phần bổ sung này. Nghiệp vụ ở AuthService, CartService, OrderService, PurchaseService và BillingService; trigger/hàm SQL chịu trách nhiệm tồn kho, công nợ, lịch sử và lập hóa đơn.
 
 Sơ đồ SVG cũ trong thư mục docs thuộc phiên bản 35 bảng, không phải sơ đồ của SQL hiện tại.

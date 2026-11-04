@@ -109,7 +109,14 @@ export default function AuthPage({ registerMode = false, management = false }) {
         </Field>
         {registerMode && (
           <Field label="Số điện thoại" error={errors.phone}>
-            <input autoComplete="tel" type="tel" {...register('phone')} placeholder="0901234567" />
+            <input
+              autoComplete="tel"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              {...register('phone')}
+              placeholder="0901234567"
+            />
           </Field>
         )}
         <Field label="Mật khẩu" error={errors.password}>

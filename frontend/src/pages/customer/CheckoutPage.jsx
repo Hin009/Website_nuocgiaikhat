@@ -149,6 +149,8 @@ function MockCheckoutPage() {
                   <Field label="Số điện thoại" error={errors.phone}>
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
                       autoComplete="tel"
                       {...register('phone')}
                       placeholder="0901234567"

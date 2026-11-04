@@ -16,15 +16,24 @@ API: `http://localhost:8080/api/v1`; kiểm tra `GET /health`. pgAdmin kết n�
 
 Đăng nhập `POST /api/v1/auth/login` với `{email,password}`. Email quản trị lấy từ `BOOTSTRAP_ADMIN_EMAIL` (mặc định `admin@example.com`), mật khẩu ban đầu từ `BOOTSTRAP_ADMIN_PASSWORD` trong `.env`. Backend tạo admin và mã nhân viên khi database mới chưa có admin; không ghi đè mật khẩu admin đã tồn tại.
 
-## Database mới và dữ liệu cũ
+## Một file SQL hoàn chỉnh
 
-- `database/beverage_store_13UC_HOAN_CHINH.sql`: bản sao nguyên gốc file SQL mới, được nạp đầu tiên.
-- `database/backend_extensions.sql`: thêm khóa ngoại lưu coupon đang chọn trên đơn và đồng bộ trạng thái hóa đơn khi thu tiền.
-- `compose.yaml` dùng volume mới `beverage_13uc_data`; volume `beverage_data` của bản cũ được giữ lại, không bị xóa và không tự di chuyển dữ liệu sang bản mới.
+`database/beverage_store_13UC_HOAN_CHINH.sql` là bản xuất đầy đủ từ PostgreSQL Docker hiện tại, gồm cấu trúc, dữ liệu thực tế và bộ đếm ID. Bản đồng bộ gần nhất có 45 bảng, 492 dòng dữ liệu và 39 bộ đếm ID; số dòng từng bảng đã đối chiếu với Docker. Đã bao gồm các migration backend mới nhất và đã bỏ ba bảng trả hàng sau nhập kho. Compose chỉ nạp file này, không chạy extensions hoặc seed riêng.
 
-Docker chỉ tự nạp SQL khi volume còn trống. SQL gốc phải chạy trên database trống. Nếu dùng pgAdmin, tạo database trống rồi chạy SQL gốc, sau đó extensions. Không chạy đè SQL lên database cũ. `docker compose down` giữ dữ liệu; thêm `-v` sẽ xóa volume đang dùng.
+Chỉ chạy SQL vào database trống. Script dùng một giao dịch, tạo bảng và nạp dữ liệu trước khi tạo trigger/ràng buộc liên quan để giữ nguyên số lượng và lịch sử đã lưu. Không chạy lên database đang sử dụng. Docker chỉ tự nạp khi volume trống; database/volume hiện tại được giữ nguyên.
 
-SQL gốc gồm 3 vai trò, 30 quyền, 2 sản phẩm và 5 quy cách (script seed bổ sung thêm 25 sản phẩm); chưa có tồn kho, tài khoản, nhà cung cấp hay giao dịch. Admin được bootstrap khi ứng dụng chạy. Muốn thử mua bán: tạo nhà cung cấp → liên kết sản phẩm → lập/duyệt đơn NCC → nhận/xác nhận hàng → khách đặt hàng.
+Đây là snapshot riêng có dữ liệu khách hàng, hash mật khẩu và phiên xác thực; không push snapshot lên GitHub công khai. Người quản trị sau khôi phục dùng tài khoản/mật khẩu của database nguồn; bootstrap không ghi đè admin đã có.
+
+Ba SQL cũ, bản dump gốc, SQL đã kiểm tra, bản đối chiếu và ảnh sao lưu nằm trong `.tools/sql-export-20261104/` (Git bỏ qua). Bản SQL mới đã được khôi phục thử và đối chiếu dữ liệu ở toàn bộ 44 bảng, 39 bộ đếm ID, các ràng buộc, hàm và trigger.
+
+SQL không chứa file ảnh nhị phân. `product_images.tar.gz` trong thư mục sao lưu là bản sao ảnh từ volume Docker. Khi chuyển máy, đưa file này sang máy mới, sau khi chạy Compose thực hiện tại `backend/`:
+
+```powershell
+docker compose cp ./product_images.tar.gz api:/tmp/product_images.tar.gz
+docker compose exec api tar -xzf /tmp/product_images.tar.gz -C /app/uploads
+```
+
+Không cần chạy các lệnh này trên máy hiện tại vì volume ảnh đã có sẵn.
 
 ## Những thay đổi theo schema 13UC
 
@@ -55,12 +64,12 @@ $env:BACKEND_TEST_DB_PASSWORD='mật khẩu database'
 .\mvnw.cmd test
 ```
 
-Test nạp chính hai file trong `database/`. Không dùng lại database kiểm thử của schema cũ. Dữ liệu từng test rollback. Không trỏ test vào database nghiệp vụ.
+Test dùng schema và dữ liệu mẫu riêng tại `src/test/resources/testdb/beverage_store_test.sql`, không dùng snapshot dữ liệu thật trong `database/`. Không dùng lại database kiểm thử của schema cũ. Dữ liệu từng test rollback. Không trỏ test vào database nghiệp vụ.
 
 
 ## Danh mục bổ sung, ảnh và điều chỉnh tồn
 
-`database/seed_beverages.sql` bổ sung 25 sản phẩm và 22 thương hiệu khi chưa có, không ghi đè dữ liệu cũ. Giá là giá tham khảo, tồn khởi đầu 0, chưa có ảnh. Compose tự chạy sau schema/extensions khi volume mới trống. Với database đã có dữ liệu, chạy riêng script này bằng pgAdmin; không chạy lại schema gốc. Chạy seed nhiều lần không thêm trùng SKU.
+Danh mục và dữ liệu tồn kho thực tế đã có trong file SQL hoàn chỉnh. Không nạp thêm seed để tránh trùng hoặc ghi đè dữ liệu.
 
 Ảnh JPG/PNG/WebP tối đa 5 MB được quản trị tải lên từ form sản phẩm. Docker lưu file tại `/app/uploads` trong volume `product_images`; Java chạy ngoài Docker dùng `UPLOAD_DIR` hoặc `./uploads`. Sao lưu volume ảnh cùng database để khôi phục đủ dữ liệu.
 

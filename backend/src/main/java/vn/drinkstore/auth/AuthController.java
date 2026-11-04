@@ -13,7 +13,7 @@ public class AuthController {
     private final AuthService service; private final Access access; private final Db db;
     public AuthController(AuthService service,Access access,Db db) { this.service=service; this.access=access; this.db=db; }
     public record Register(@NotBlank @Email @Size(max=255) String email,
-        @NotBlank @Size(min=8,max=72) String password,@NotBlank @Size(max=150) String fullName,@Size(max=25) String phone) {}
+        @NotBlank @Size(min=8,max=72) String password,@NotBlank @Size(max=150) String fullName,@Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone) {}
     public record Login(@NotBlank @Email @Size(max=255) String email,@NotBlank @Size(max=72) String password) {}
     public record ChangePassword(@NotBlank String oldPassword,@NotBlank @Size(min=8,max=72) String newPassword) {}
     @PostMapping("/register") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

@@ -4,7 +4,8 @@ export const loginSchema = z.object({
   email: z.string().email('Email chưa đúng định dạng.'),
   password: z.string().min(8, 'Mật khẩu cần ít nhất 8 ký tự.'),
 });
-export const phoneSchema = z.string().regex(/^(0|\+84)[0-9]{9,10}$/, 'Số điện thoại chưa hợp lệ.');
+import { phoneSchema } from './phone';
+export { phoneSchema } from './phone';
 const profileFields = {
   name: z.string().trim().min(2, 'Vui lòng nhập họ tên.').max(100),
   phone: phoneSchema,
@@ -34,10 +35,36 @@ export const profileSchema = z
     }
   })
   .transform((values) => ({ ...values, address: formatProfileAddress(values) }));
-export const managementProfileSchema = z.object({
-  ...profileFields,
-  address: z.string().trim().max(300),
-});
+export const managementProfileSchema = z
+  .object({
+    ...profileFields,
+    provinceCode: z.string().default(''),
+    wardCode: z.string().default(''),
+    streetAddress: z.string().trim().max(200).default(''),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.provinceCode && !values.wardCode && !values.streetAddress) return;
+    const province = provinces.find((p) => p.code === values.provinceCode);
+    if (!province)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['provinceCode'],
+        message: 'Vui lòng chọn tỉnh/thành phố.',
+      });
+    if (!province?.wards.some((w) => w.code === values.wardCode))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['wardCode'],
+        message: 'Vui lòng chọn phường/xã thuộc tỉnh/thành phố đã chọn.',
+      });
+    if (values.streetAddress.length < 5)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['streetAddress'],
+        message: 'Vui lòng nhập số nhà và tên đường.',
+      });
+  })
+  .transform((values) => ({ ...values, address: formatProfileAddress(values) }));
 export const registerSchema = loginSchema
   .extend({
     name: z.string().trim().min(2, 'Vui lòng nhập họ tên.'),

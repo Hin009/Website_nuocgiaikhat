@@ -50,7 +50,9 @@ describe('Quyền truy cập', () => {
 describe('Biểu mẫu', () => {
   it('Nhận số điện thoại Việt Nam và từ chối dữ liệu sai', () => {
     expect(phoneSchema.safeParse('0901234567').success).toBe(true);
-    expect(phoneSchema.safeParse('+84901234567').success).toBe(true);
+    expect(phoneSchema.safeParse('01234567890').success).toBe(true);
+    for (const phone of ['123456789', '123456789012', '+84901234567', '090 1234567', '090123456a'])
+      expect(phoneSchema.safeParse(phone).success).toBe(false);
     expect(phoneSchema.safeParse('abc').success).toBe(false);
   });
   it('Chặn phương thức thanh toán chưa hỗ trợ và tồn kho âm', () => {

@@ -12,5 +12,10 @@ public record NhaCungCap(
     String email,
     String diaChi,
     String trangThai,
+    String loaiNhaCungCap,
+    String trangThaiXacMinh,
+    String ghiChuXacMinh,
+    Long nguoiXacMinhId,
+    OffsetDateTime thoiDiemXacMinh,
     OffsetDateTime ngayTao
 ) {}

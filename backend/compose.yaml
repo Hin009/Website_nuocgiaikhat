@@ -13,8 +13,6 @@ services:
     volumes:
       - beverage_13uc_data:/var/lib/postgresql/data
       - ./database/beverage_store_13UC_HOAN_CHINH.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./database/backend_extensions.sql:/docker-entrypoint-initdb.d/02_backend.sql:ro
-      - ./database/seed_beverages.sql:/docker-entrypoint-initdb.d/03_catalog.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s

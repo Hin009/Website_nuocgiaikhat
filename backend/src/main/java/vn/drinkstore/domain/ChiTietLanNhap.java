@@ -10,6 +10,7 @@ public record ChiTietLanNhap(
     Long ctDonNccId,
     Integer soLuongThucNhan,
     Integer soLuongLoai,
+    String lyDoLoai,
     Integer chenhLech,
     BigDecimal giaNhapThucTe
 ) {}

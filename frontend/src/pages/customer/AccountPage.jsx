@@ -62,7 +62,7 @@ export function ProfilePage({ management = false }) {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(management ? managementProfileSchema : profileSchema),
-    defaultValues: management ? user : { ...user, ...profileAddressDefaults(user) },
+    defaultValues: { ...user, ...profileAddressDefaults(user) },
   });
   const provinceCode = useWatch({ control, name: 'provinceCode' });
   const selectedProvince = provinces.find((province) => province.code === provinceCode);
@@ -88,57 +88,51 @@ export function ProfilePage({ management = false }) {
           <input value={user.email} disabled />
         </Field>
         <Field label="Số điện thoại" error={errors.phone}>
-          <input type="tel" autoComplete="tel" {...register('phone')} />
+          <input type="tel" inputMode="numeric" autoComplete="tel" {...register('phone')} />
         </Field>
-        {management ? (
-          <Field label="Địa chỉ" error={errors.address}>
-            <textarea autoComplete="street-address" rows={3} {...register('address')} />
-          </Field>
-        ) : (
-          <>
-            <div className="profile-address-selects">
-              <Field label="Tỉnh/Thành phố" error={errors.provinceCode}>
-                <select
-                  autoComplete="address-level1"
-                  {...register('provinceCode', {
-                    onChange: () =>
-                      setValue('wardCode', '', { shouldValidate: false, shouldDirty: true }),
-                  })}
-                >
-                  <option value="">Chọn tỉnh/thành phố</option>
-                  {provinces.map((province) => (
-                    <option key={province.code} value={province.code}>
-                      {province.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Phường/Xã" error={errors.wardCode}>
-                <select
-                  autoComplete="address-level2"
-                  disabled={!selectedProvince}
-                  {...register('wardCode')}
-                >
-                  <option value="">
-                    {selectedProvince ? 'Chọn phường/xã' : 'Chọn tỉnh/thành phố trước'}
+        <>
+          <div className="profile-address-selects">
+            <Field label="Tỉnh/Thành phố" error={errors.provinceCode}>
+              <select
+                autoComplete="address-level1"
+                {...register('provinceCode', {
+                  onChange: () =>
+                    setValue('wardCode', '', { shouldValidate: false, shouldDirty: true }),
+                })}
+              >
+                <option value="">Chọn tỉnh/thành phố</option>
+                {provinces.map((province) => (
+                  <option key={province.code} value={province.code}>
+                    {province.name}
                   </option>
-                  {(selectedProvince?.wards || []).map((ward) => (
-                    <option key={ward.code} value={ward.code}>
-                      {ward.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <Field label="Số nhà, tên đường" error={errors.streetAddress}>
-              <input
-                autoComplete="address-line1"
-                placeholder="Ví dụ: 12 Nguyễn Huệ"
-                {...register('streetAddress')}
-              />
+                ))}
+              </select>
             </Field>
-          </>
-        )}
+            <Field label="Phường/Xã" error={errors.wardCode}>
+              <select
+                autoComplete="address-level2"
+                disabled={!selectedProvince}
+                {...register('wardCode')}
+              >
+                <option value="">
+                  {selectedProvince ? 'Chọn phường/xã' : 'Chọn tỉnh/thành phố trước'}
+                </option>
+                {(selectedProvince?.wards || []).map((ward) => (
+                  <option key={ward.code} value={ward.code}>
+                    {ward.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="Số nhà, tên đường" error={errors.streetAddress}>
+            <input
+              autoComplete="address-line1"
+              placeholder="Ví dụ: 12 Nguyễn Huệ"
+              {...register('streetAddress')}
+            />
+          </Field>
+        </>
         <Button type="submit" disabled={action.isPending}>
           {action.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
         </Button>

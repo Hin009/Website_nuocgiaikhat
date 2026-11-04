@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Building2,
+  BadgePercent,
   Package,
   Shapes,
   ShoppingBag,
@@ -27,10 +29,24 @@ import { isMock } from '@/services';
 import { roleLabels } from '@/utils/format';
 const items = [
   { to: '/admin', label: 'Tổng quan', icon: LayoutDashboard, end: true },
-  { to: '/admin/products', label: 'Sản phẩm', icon: Package, adminOnly: true },
+  { to: '/admin/products', label: 'Sản phẩm', icon: Package },
   { to: '/admin/categories', label: 'Danh mục', icon: Shapes, adminOnly: !isMock },
+  {
+    to: '/admin/suppliers',
+    label: 'Nhà cung cấp',
+    icon: Building2,
+    adminOnly: true,
+    apiOnly: true,
+  },
+  {
+    to: '/admin/promotions',
+    label: 'Mã khuyến mãi',
+    icon: BadgePercent,
+    adminOnly: true,
+    apiOnly: true,
+  },
   { to: '/admin/orders', label: 'Đơn hàng', icon: ShoppingBag },
-  { to: '/admin/stock-receipts', label: 'Nhập hàng', icon: Truck, adminOnly: isMock },
+  { to: '/admin/stock-receipts', label: 'Đặt hàng & nhập hàng', icon: Truck, adminOnly: isMock },
   { to: '/admin/customers', label: 'Khách hàng', icon: UsersRound },
   { to: '/admin/reports', label: 'Báo cáo & thống kê', icon: ChartNoAxesCombined },
 ];
@@ -73,7 +89,9 @@ export default function AdminLayout() {
         <span className="sidebar-label">KHÔNG GIAN QUẢN LÝ</span>
         <nav>
           {items
-            .filter((item) => !item.adminOnly || user.role === 'ADMIN')
+            .filter(
+              (item) => (!item.adminOnly || user.role === 'ADMIN') && (!item.apiOnly || !isMock),
+            )
             .map((item) => (
               <NavLink
                 end={item.end}

@@ -180,7 +180,7 @@ test('Điện thoại mở menu, lọc và sidebar quản lý', async ({ page })
   await page.getByRole('button', { name: 'Mở menu quản lý' }).click();
   await page
     .locator('.admin-sidebar')
-    .getByRole('link', { name: 'Nhập hàng', exact: true })
+    .getByRole('link', { name: 'Đặt hàng & nhập hàng', exact: true })
     .click();
   await expect(page.getByRole('heading', { name: 'Quản lý nhập hàng' })).toBeVisible();
 });

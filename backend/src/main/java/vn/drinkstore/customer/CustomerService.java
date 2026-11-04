@@ -11,11 +11,13 @@ public class CustomerService {
     private final Db db; private final Access access;
     public CustomerService(Db db,Access access) { this.db=db; this.access=access; }
     @Transactional public Object profile(CustomerController.Profile r) {
+        PhoneNumbers.validate(r.phone(),false);
         long id=access.customer();
         db.jdbc().update("update khach_hang set ho_ten=?,dien_thoai=?,anh_dai_dien=? where id=?",r.fullName(),r.phone(),r.avatar(),id);
         return db.one("select * from khach_hang where id=?",id);
     }
     @Transactional public Object address(Long id,CustomerController.Address r) {
+        PhoneNumbers.validate(r.phone(),true);
         long customer=access.customer();
         // Serializes changes to the partial unique default-address index.
         db.one("select id from khach_hang where id=? for update",customer);

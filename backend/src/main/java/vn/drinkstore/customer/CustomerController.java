@@ -13,8 +13,8 @@ import vn.drinkstore.security.Access;
 public class CustomerController {
     private final Db db; private final Access access; private final CustomerService service;
     public CustomerController(Db db,Access access,CustomerService service) { this.db=db; this.access=access; this.service=service; }
-    public record Profile(@NotBlank @Size(max=160) String fullName,@Size(max=25) String phone,@Size(max=2000) String avatar) {}
-    public record Address(@NotBlank @Size(max=160) String recipient,@NotBlank @Size(max=25) String phone,@NotBlank @Size(max=120) String province,@Size(max=120) String district,@Size(max=120) String ward,@NotBlank @Size(max=1000) String street,boolean isDefault) {}
+    public record Profile(@NotBlank @Size(max=160) String fullName,@Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone,@Size(max=2000) String avatar) {}
+    public record Address(@NotBlank @Size(max=160) String recipient,@NotBlank @Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone,@NotBlank @Size(max=120) String province,@Size(max=120) String district,@Size(max=120) String ward,@NotBlank @Size(max=1000) String street,boolean isDefault) {}
     public record Review(@Positive long orderLineId,@Min(1) @Max(5) int rating,@Size(max=4000) String comment) {}
     public record Text(@NotBlank @Size(max=4000) String content) {}
     public record Visibility(boolean visible) {}

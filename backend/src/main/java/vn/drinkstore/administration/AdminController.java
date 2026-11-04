@@ -14,13 +14,13 @@ import vn.drinkstore.security.Access;
 public class AdminController {
     private final Db db; private final AdminService service; private final Access access;
     public AdminController(Db db,AdminService service,Access access) { this.db=db; this.service=service; this.access=access; }
-    public record NewStaff(@NotBlank @Email @Size(max=255) String email,@NotBlank @Size(min=8,max=72) String password,@NotBlank @Size(max=160) String fullName,@Size(max=25) String phone,@Size(max=120) String position) {}
-    public record AccountEditor(@NotBlank @Email @Size(max=255) String email,@NotBlank @Size(max=150) String fullName,@Size(max=25) String phone,@NotNull @Pattern(regexp="KHACH_HANG|NHAN_VIEN|QUAN_TRI_VIEN") String role,boolean active,@Size(max=72) String password) {}
+    public record NewStaff(@NotBlank @Email @Size(max=255) String email,@NotBlank @Size(min=8,max=72) String password,@NotBlank @Size(max=160) String fullName,@Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone,@Size(max=120) String position) {}
+    public record AccountEditor(@NotBlank @Email @Size(max=255) String email,@NotBlank @Size(max=150) String fullName,@Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone,@NotNull @Pattern(regexp="KHACH_HANG|NHAN_VIEN|QUAN_TRI_VIEN") String role,boolean active,@Size(max=72) String password) {}
     @PostMapping("/management/account-editor") @PreAuthorize("@access.admin() and @access.has('ROLE_MANAGE')")
     public Object editAccount(@Valid @RequestBody AccountEditor r) { return service.accountEditor(null,r); }
     @PutMapping("/management/account-editor/{id}") @PreAuthorize("@access.admin() and @access.has('ROLE_MANAGE')")
     public Object editAccount(@PathVariable long id,@Valid @RequestBody AccountEditor r) { return service.accountEditor(id,r); }
-    public record StaffProfile(@NotBlank @Size(max=160) String fullName,@Past LocalDate birthDate,@Size(max=20) String gender,@Size(max=25) String phone,@Size(max=1000) String address) {}
+    public record StaffProfile(@NotBlank @Size(max=160) String fullName,@Past LocalDate birthDate,@Size(max=20) String gender,@Pattern(regexp=vn.drinkstore.common.PhoneNumbers.OPTIONAL_PATTERN,message=vn.drinkstore.common.PhoneNumbers.MESSAGE) String phone,@Size(max=1000) String address) {}
     public record Employment(@NotNull @Pattern(regexp="ACTIVE|ON_LEAVE|RESIGNED") String status,@Size(max=120) String position) {}
     public record AccountStatus(@NotNull @Pattern(regexp="ACTIVE|LOCKED|DISABLED") String status) {}
     public record Password(@NotBlank @Size(min=8,max=72) String password) {}

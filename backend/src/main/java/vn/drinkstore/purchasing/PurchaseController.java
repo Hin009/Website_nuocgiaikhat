@@ -14,10 +14,14 @@ import vn.drinkstore.common.Db;
 public class PurchaseController {
     private final Db db; private final PurchaseService service;
     public PurchaseController(Db db,PurchaseService service) { this.db=db; this.service=service; }
-    public record Line(@Positive long packageId,@Min(1) @Max(1000000) int quantity,@NotNull @DecimalMin("0") BigDecimal unitCost) {}
-    public record Create(@Positive long supplierId,LocalDate expectedDate,@NotEmpty @Size(max=100) List<@Valid Line> items) {}
+    public record Line(@Positive Long packageId,@Min(1) @Max(1000000) int quantity,@NotNull @DecimalMin("0") @Digits(integer=16,fraction=2) BigDecimal unitCost,@Positive Long productId,@Pattern(regexp="LOC|THUNG") String packaging,@Min(2) @Max(1000000) Integer unitsPerPackage) {
+        public Line(long packageId,int quantity,BigDecimal unitCost) { this(packageId,quantity,unitCost,null,null,null); }
+    }
+    public record Create(@Positive long supplierId,@FutureOrPresent(message="Ngày giao dự kiến phải từ hôm nay trở đi") LocalDate expectedDate,@NotEmpty @Size(max=100) List<@Valid Line> items) {}
     public record Decision(@NotNull @Pattern(regexp="DA_DUYET|TU_CHOI|DANG_GIAO|DA_HUY") String status,@Size(max=2000) String reason) {}
-    public record ReceiptLine(@Positive long purchaseLineId,@Min(1) @Max(1000000) int quantity,@NotNull @DecimalMin("0") BigDecimal actualCost) {}
+    public record ReceiptLine(@Positive long purchaseLineId,@Min(0) @Max(1000000) int quantity,@NotNull @DecimalMin("0") @Digits(integer=16,fraction=2) BigDecimal actualCost,@Min(0) @Max(1000000) int rejectedQuantity,@Size(max=2000) String rejectionReason) {
+        public ReceiptLine(long purchaseLineId,int quantity,BigDecimal actualCost) { this(purchaseLineId,quantity,actualCost,0,null); }
+    }
     public record Receive(@NotEmpty @Size(max=100) List<@Valid ReceiptLine> items) {}
     public record DebtPayment(@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal amount,@NotBlank @Size(max=80) String method,@Size(max=150) String reference) {}
     @PostMapping("/purchases") @PreAuthorize("@access.has('IMPORT_CREATE')") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

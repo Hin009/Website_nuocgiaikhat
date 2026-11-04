@@ -30,6 +30,7 @@ import { PageHeading, QueryState, StatusBadge, EmptyState } from '@/components/c
 import { Button } from '@/components/ui/button';
 import { DrinkArt } from '@/components/customer/DrinkArt';
 import { isMock } from '@/services';
+import ProductProfitPanel from './ProductProfitPanel';
 import { money, date } from '@/utils/format';
 const monthKey = (value) => value.slice(0, 7);
 export default function DashboardPage({ report = false }) {
@@ -47,13 +48,14 @@ export default function DashboardPage({ report = false }) {
       ? new Date(from + 'T00:00:00')
       : range === 'all'
         ? new Date(0)
-        : new Date(endDate.getTime() - Number(range) * 86400000);
+        : new Date(endDate.getTime() - (Number(range) - 1) * 86400000);
+  startDate.setHours(0, 0, 0, 0);
   const invalid = range === 'custom' && from > to;
   const filtered = (orders.data || []).filter(
     (o) => !invalid && new Date(o.createdAt) >= startDate && new Date(o.createdAt) <= endDate,
   );
   const completed = filtered.filter((o) => o.status === 'COMPLETED');
-  const revenue = completed.reduce((s, o) => s + o.subtotal, 0);
+  const revenue = completed.reduce((s, o) => s + o.subtotal - Number(o.discountAmount || 0), 0);
   const received = (receipts.data || []).filter(
     (r) => new Date(r.createdAt) >= startDate && new Date(r.createdAt) <= endDate,
   );
@@ -62,7 +64,7 @@ export default function DashboardPage({ report = false }) {
     const groups = {};
     for (const order of completed) {
       const key = monthKey(order.createdAt);
-      groups[key] = (groups[key] || 0) + order.subtotal;
+      groups[key] = (groups[key] || 0) + order.subtotal - Number(order.discountAmount || 0);
     }
     return Object.entries(groups)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -153,6 +155,12 @@ export default function DashboardPage({ report = false }) {
           {invalid && <p className="form-error">Ngày bắt đầu phải trước ngày kết thúc.</p>}
         </div>
       )}
+      {report && user.role === 'ADMIN' && !isMock && !invalid && (
+        <ProductProfitPanel
+          from={range === 'all' ? undefined : startDate.toLocaleDateString('sv-SE')}
+          to={range === 'all' ? undefined : to}
+        />
+      )}
       <QueryState query={orders}>
         <div className="metrics-grid">
           {metrics.map(([Icon, label, value, note, color]) => (
@@ -173,7 +181,7 @@ export default function DashboardPage({ report = false }) {
             <div className="panel-heading">
               <div>
                 <h3>{report ? 'Doanh thu theo tháng' : 'Nhịp tăng trưởng cửa hàng'}</h3>
-                <p>Giá sản phẩm trong đơn hoàn thành · chưa gồm phí giao hàng</p>
+                <p>Doanh thu sau giảm giá trong đơn hoàn thành · chưa gồm phí giao hàng</p>
               </div>
             </div>
             {chart.length ? (

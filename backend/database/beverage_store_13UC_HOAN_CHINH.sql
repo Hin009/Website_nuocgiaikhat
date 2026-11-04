@@ -1,432 +1,88 @@
--- BEVERAGE STORE: POSTGRESQL 16+, DATABASE TRONG
--- Khop 43 lop du lieu trong So_do_lop_du_lieu_tong_quat_13UC.dot;
--- bo sung bang phien_xac_thuc cho dang nhap.
--- Web online + Desktop POS; backend phai enforce permission theo BR9.
--- DATABASE PHẢI ĐƯỢC TẠO TRƯỚC: CREATE DATABASE beverage_store;
--- CHAY DUY NHAT TREN DATABASE TRONG; KHONG CHAY DE LEN DU LIEU CU.
+-- Complete PostgreSQL 16 schema and data exported from the current Docker database.
+-- PRIVATE SNAPSHOT: includes account hashes, customer data and authentication history.
+-- Restore into an EMPTY database only. Do not apply to a database already in use.
+-- Product image FILES live in the separate product_images Docker volume.
+
 BEGIN;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+--
+-- PostgreSQL database dump
+--
 
--- ===== A. TAI KHOAN, PHAN QUYEN, KHACH HANG, NHAN VIEN =====
-CREATE TABLE quyen (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ma_quyen VARCHAR(100) NOT NULL UNIQUE,
- ten_quyen VARCHAR(150) NOT NULL,
- ma_chuc_nang VARCHAR(30) NOT NULL,
- hanh_dong VARCHAR(30) NOT NULL,
- mo_ta TEXT,
- UNIQUE(ma_chuc_nang,hanh_dong)
-);
-CREATE TABLE vai_tro (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ma_vai_tro VARCHAR(30) NOT NULL UNIQUE CHECK(ma_vai_tro IN ('KHACH_HANG','NHAN_VIEN','QUAN_TRI_VIEN')),
- ten_vai_tro VARCHAR(100) NOT NULL,
- mo_ta TEXT
-);
-CREATE TABLE tai_khoan (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- email VARCHAR(255) NOT NULL,
- mat_khau_hash TEXT NOT NULL,
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK(trang_thai IN ('ACTIVE','LOCKED','DISABLED')),
- email_da_xac_thuc BOOLEAN NOT NULL DEFAULT FALSE,
- so_lan_dang_nhap_sai INT NOT NULL DEFAULT 0 CHECK(so_lan_dang_nhap_sai >= 0),
- khoa_den TIMESTAMPTZ, ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now(),
- ngay_cap_nhat TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX uq_tai_khoan_email_ci ON tai_khoan (lower(email));
-CREATE TABLE tai_khoan_vai_tro (
- tai_khoan_id BIGINT NOT NULL REFERENCES tai_khoan(id) ON DELETE CASCADE,
- vai_tro_id BIGINT NOT NULL REFERENCES vai_tro(id) ON DELETE RESTRICT,
- PRIMARY KEY(tai_khoan_id,vai_tro_id)
-);
-CREATE TABLE vai_tro_quyen (
- vai_tro_id BIGINT NOT NULL REFERENCES vai_tro(id) ON DELETE CASCADE,
- quyen_id BIGINT NOT NULL REFERENCES quyen(id) ON DELETE CASCADE,
- PRIMARY KEY(vai_tro_id,quyen_id)
-);
-CREATE TABLE phien_xac_thuc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- tai_khoan_id BIGINT NOT NULL REFERENCES tai_khoan(id) ON DELETE CASCADE,
- token_hash TEXT NOT NULL UNIQUE,
- het_han TIMESTAMPTZ NOT NULL,
- da_thu_hoi BOOLEAN NOT NULL DEFAULT FALSE,
- ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE khach_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- tai_khoan_id BIGINT NOT NULL UNIQUE REFERENCES tai_khoan(id),
- ho_ten VARCHAR(150) NOT NULL, dien_thoai VARCHAR(25), anh_dai_dien TEXT,
- ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE nhan_vien (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- tai_khoan_id BIGINT NOT NULL UNIQUE REFERENCES tai_khoan(id),
- ma_nhan_vien VARCHAR(30) NOT NULL UNIQUE, ho_ten VARCHAR(150) NOT NULL,
- ngay_sinh DATE, gioi_tinh VARCHAR(15), dien_thoai VARCHAR(25), email_lien_he VARCHAR(255),
- dia_chi TEXT, chuc_vu VARCHAR(100), ngay_vao_lam DATE,
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK(trang_thai IN ('ACTIVE','ON_LEAVE','RESIGNED'))
-);
-CREATE TABLE dia_chi_giao_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khach_hang_id BIGINT NOT NULL REFERENCES khach_hang(id) ON DELETE CASCADE,
- ten_nguoi_nhan VARCHAR(150) NOT NULL, so_dien_thoai VARCHAR(25),
- dia_chi TEXT NOT NULL, phuong_xa VARCHAR(150), quan_huyen VARCHAR(150), tinh_thanh VARCHAR(150),
- mac_dinh BOOLEAN NOT NULL DEFAULT FALSE
-);
-CREATE UNIQUE INDEX uq_dia_chi_mac_dinh ON dia_chi_giao_hang(khach_hang_id) WHERE mac_dinh;
-CREATE TABLE lien_he_khach_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khach_hang_id BIGINT REFERENCES khach_hang(id),
- ho_ten VARCHAR(150), email VARCHAR(255), dien_thoai VARCHAR(25),
- noi_dung TEXT NOT NULL, phan_hoi TEXT,
- nhan_vien_phan_hoi_id BIGINT REFERENCES nhan_vien(id),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'MOI' CHECK(trang_thai IN ('MOI','DANG_XU_LY','DA_PHAN_HOI','DA_DONG')),
- ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now(), ngay_phan_hoi TIMESTAMPTZ
-);
-CREATE TABLE nhat_ky_hoat_dong (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- tai_khoan_id BIGINT REFERENCES tai_khoan(id), hanh_dong VARCHAR(160) NOT NULL,
- doi_tuong VARCHAR(100), doi_tuong_id BIGINT, du_lieu_thay_doi JSONB,
- thoi_diem TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+\restrict H4AlpGPRB3PEOonQYgi7CQ3UXLlHg0TLCP0I1k9qdgKcVEzDh15Igygi94NeKaG
 
--- ===== B. DANH MUC, QUY CACH, SO LUONG, SAN PHAM =====
-CREATE TABLE loai_san_pham (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, ten VARCHAR(150) NOT NULL UNIQUE,
- mo_ta TEXT, hinh_anh TEXT, hien_thi BOOLEAN NOT NULL DEFAULT TRUE
-);
-CREATE TABLE thuong_hieu (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, ten VARCHAR(150) NOT NULL UNIQUE,
- logo TEXT, mo_ta TEXT, hien_thi BOOLEAN NOT NULL DEFAULT TRUE
-);
-CREATE TABLE san_pham (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- loai_san_pham_id BIGINT NOT NULL REFERENCES loai_san_pham(id),
- thuong_hieu_id BIGINT NOT NULL REFERENCES thuong_hieu(id),
- sku VARCHAR(80) NOT NULL UNIQUE, ten VARCHAR(255) NOT NULL,
- mo_ta TEXT, thanh_phan TEXT, dinh_duong TEXT, xuat_xu VARCHAR(150),
- dung_tich VARCHAR(80), loai_bao_bi VARCHAR(40), huong_vi VARCHAR(100),
- so_ngay_han_dung INT CHECK(so_ngay_han_dung > 0), huong_dan_bao_quan TEXT,
- trang_thai VARCHAR(30) NOT NULL DEFAULT 'DANG_BAN' CHECK(trang_thai IN ('DANG_BAN','HET_HANG','NGUNG_KINH_DOANH')),
- hien_thi BOOLEAN NOT NULL DEFAULT TRUE,
- ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now(), ngay_cap_nhat TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE hinh_anh_san_pham (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id) ON DELETE CASCADE,
- duong_dan TEXT NOT NULL, anh_chinh BOOLEAN NOT NULL DEFAULT FALSE, thu_tu INT NOT NULL DEFAULT 0
-);
-CREATE UNIQUE INDEX uq_anh_chinh ON hinh_anh_san_pham(san_pham_id) WHERE anh_chinh;
-CREATE TABLE quy_cach_san_pham (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id),
- ten_quy_cach VARCHAR(60) NOT NULL, don_vi_tinh VARCHAR(30) NOT NULL,
- he_so_quy_doi INT NOT NULL CHECK(he_so_quy_doi > 0),
- gia_ban NUMERIC(18,2) NOT NULL CHECK(gia_ban >= 0),
- gia_von NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(gia_von >= 0),
- dang_ban BOOLEAN NOT NULL DEFAULT TRUE,
- UNIQUE(san_pham_id,ten_quy_cach), UNIQUE(id,san_pham_id)
-);
-CREATE TABLE so_luong_san_pham (
- san_pham_id BIGINT PRIMARY KEY REFERENCES san_pham(id),
- so_luong_co_ban BIGINT NOT NULL DEFAULT 0 CHECK(so_luong_co_ban >= 0),
- nguong_canh_bao BIGINT NOT NULL DEFAULT 10 CHECK(nguong_canh_bao >= 0),
- ngay_cap_nhat TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE OR REPLACE FUNCTION fn_khoi_tao_so_luong() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+-- Dumped from database version 16.15
+-- Dumped by pg_dump version 16.15
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+--
+-- Name: backend_payment_invoice(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.backend_payment_invoice() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
- INSERT INTO so_luong_san_pham(san_pham_id) VALUES(NEW.id) ON CONFLICT DO NOTHING;
+ IF NEW.trang_thai='SUCCESS' AND OLD.trang_thai<>'SUCCESS' THEN
+  UPDATE hoa_don SET trang_thai='PAID' WHERE don_hang_id=NEW.don_hang_id AND trang_thai='ISSUED';
+ END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER trg_khoi_tao_so_luong AFTER INSERT ON san_pham
- FOR EACH ROW EXECUTE FUNCTION fn_khoi_tao_so_luong();
-CREATE TABLE dieu_chinh_so_luong (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id),
- quy_cach_id BIGINT NOT NULL,
- nguoi_dieu_chinh_id BIGINT NOT NULL REFERENCES nhan_vien(id),
- so_luong_truoc BIGINT NOT NULL CHECK(so_luong_truoc >= 0),
- so_luong_sau BIGINT NOT NULL CHECK(so_luong_sau >= 0),
- chenh_lech BIGINT GENERATED ALWAYS AS (so_luong_sau-so_luong_truoc) STORED,
- ly_do TEXT NOT NULL CHECK(length(trim(ly_do)) > 0),
- thoi_diem TIMESTAMPTZ NOT NULL DEFAULT now(),
- FOREIGN KEY(quy_cach_id,san_pham_id) REFERENCES quy_cach_san_pham(id,san_pham_id)
-);
-CREATE TABLE bien_dong_so_luong (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id),
- loai VARCHAR(30) NOT NULL CHECK(loai IN ('BAN_ONLINE','BAN_TAI_QUAY','HUY_DON','NHAP_HANG','DIEU_CHINH')),
- nguon_id BIGINT NOT NULL,
- so_luong_thay_doi BIGINT NOT NULL CHECK(so_luong_thay_doi <> 0),
- so_luong_truoc BIGINT NOT NULL CHECK(so_luong_truoc >= 0),
- so_luong_sau BIGINT NOT NULL CHECK(so_luong_sau >= 0),
- thoi_diem TIMESTAMPTZ NOT NULL DEFAULT now(),
- CHECK(so_luong_sau = so_luong_truoc + so_luong_thay_doi),
- UNIQUE(san_pham_id,loai,nguon_id)
-);
-CREATE TABLE san_pham_yeu_thich (
- khach_hang_id BIGINT NOT NULL REFERENCES khach_hang(id) ON DELETE CASCADE,
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id),
- ngay_them TIMESTAMPTZ NOT NULL DEFAULT now(),
- PRIMARY KEY(khach_hang_id,san_pham_id)
-);
 
--- ===== C. GIO HANG, DON HANG, THANH TOAN, HOA DON =====
-CREATE TABLE gio_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khach_hang_id BIGINT NOT NULL UNIQUE REFERENCES khach_hang(id) ON DELETE CASCADE,
- ngay_cap_nhat TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE chi_tiet_gio_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- gio_hang_id BIGINT NOT NULL REFERENCES gio_hang(id) ON DELETE CASCADE,
- quy_cach_id BIGINT NOT NULL REFERENCES quy_cach_san_pham(id),
- so_luong INT NOT NULL CHECK(so_luong > 0),
- gia_tam_tinh NUMERIC(18,2) NOT NULL CHECK(gia_tam_tinh >= 0),
- UNIQUE(gio_hang_id,quy_cach_id)
-);
-CREATE TABLE don_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ma_don VARCHAR(50) NOT NULL UNIQUE,
- kenh_ban VARCHAR(12) NOT NULL CHECK(kenh_ban IN ('ONLINE','TAI_QUAY')),
- khach_hang_id BIGINT REFERENCES khach_hang(id),
- nhan_vien_xu_ly_id BIGINT REFERENCES nhan_vien(id),
- ngay_dat TIMESTAMPTZ NOT NULL DEFAULT now(),
- ngay_hoan_tat TIMESTAMPTZ,
- trang_thai VARCHAR(25) NOT NULL CHECK(trang_thai IN ('CHO_XAC_NHAN','DANG_CHUAN_BI','DANG_GIAO','DA_GIAO','HOAN_TAT','DA_HUY','TU_CHOI')),
- phi_van_chuyen NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(phi_van_chuyen >= 0),
- giam_gia NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(giam_gia >= 0),
- tong_tien NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(tong_tien >= 0),
- ghi_chu TEXT, ten_nguoi_nhan VARCHAR(150), sdt_nguoi_nhan VARCHAR(25),
- dia_chi_nhan TEXT, thoi_gian_nhan_du_kien TIMESTAMPTZ,
- da_tru_so_luong BOOLEAN NOT NULL DEFAULT FALSE,
- ngay_cap_nhat TIMESTAMPTZ NOT NULL DEFAULT now(),
- CHECK((kenh_ban='ONLINE' AND khach_hang_id IS NOT NULL AND dia_chi_nhan IS NOT NULL)
-    OR (kenh_ban='TAI_QUAY' AND nhan_vien_xu_ly_id IS NOT NULL)),
- CHECK(kenh_ban <> 'TAI_QUAY' OR trang_thai IN ('HOAN_TAT','DA_HUY'))
-);
-CREATE INDEX idx_don_hang_kenh_ngay ON don_hang(kenh_ban,ngay_dat DESC);
-CREATE INDEX idx_don_hang_khach ON don_hang(khach_hang_id,ngay_dat DESC);
-CREATE TABLE chi_tiet_don_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_hang_id BIGINT NOT NULL REFERENCES don_hang(id),
- quy_cach_id BIGINT NOT NULL REFERENCES quy_cach_san_pham(id),
- ten_san_pham VARCHAR(255) NOT NULL, ten_quy_cach VARCHAR(60) NOT NULL,
- so_luong INT NOT NULL CHECK(so_luong > 0),
- he_so_quy_doi INT NOT NULL CHECK(he_so_quy_doi > 0),
- don_gia NUMERIC(18,2) NOT NULL CHECK(don_gia >= 0),
- gia_von_don_vi NUMERIC(18,2) NOT NULL CHECK(gia_von_don_vi >= 0),
- thanh_tien NUMERIC(18,2) GENERATED ALWAYS AS (so_luong*don_gia) STORED,
- UNIQUE(don_hang_id,quy_cach_id)
-);
-CREATE TABLE lich_su_trang_thai_don (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_hang_id BIGINT NOT NULL REFERENCES don_hang(id),
- tai_khoan_thuc_hien_id BIGINT REFERENCES tai_khoan(id),
- trang_thai_cu VARCHAR(25), trang_thai_moi VARCHAR(25) NOT NULL,
- ghi_chu TEXT, thoi_gian TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE danh_gia_san_pham (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khach_hang_id BIGINT NOT NULL REFERENCES khach_hang(id),
- chi_tiet_don_hang_id BIGINT NOT NULL UNIQUE REFERENCES chi_tiet_don_hang(id),
- so_sao INT NOT NULL CHECK(so_sao BETWEEN 1 AND 5), noi_dung TEXT,
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK(trang_thai IN ('PENDING','APPROVED','HIDDEN')),
- ngay_danh_gia TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE thanh_toan (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_hang_id BIGINT NOT NULL REFERENCES don_hang(id),
- phuong_thuc VARCHAR(30) NOT NULL CHECK(phuong_thuc IN ('COD','CASH','BANK_TRANSFER','QR','MOMO','VNPAY','ZALOPAY','CARD')),
- ma_giao_dich VARCHAR(120) UNIQUE, idempotency_key VARCHAR(120) UNIQUE,
- so_tien NUMERIC(18,2) NOT NULL CHECK(so_tien >= 0),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK(trang_thai IN ('PENDING','SUCCESS','FAILED','CANCELLED','REFUNDED')),
- thoi_gian TIMESTAMPTZ NOT NULL DEFAULT now(), thong_tin_cong JSONB
-);
-CREATE TABLE hoan_tien (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- thanh_toan_id BIGINT NOT NULL REFERENCES thanh_toan(id),
- nguoi_xu_ly_id BIGINT NOT NULL REFERENCES nhan_vien(id),
- ly_do TEXT NOT NULL, so_tien NUMERIC(18,2) NOT NULL CHECK(so_tien > 0),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK(trang_thai IN ('PENDING','APPROVED','COMPLETED','REJECTED')),
- ngay_yeu_cau TIMESTAMPTZ NOT NULL DEFAULT now(), ngay_hoan TIMESTAMPTZ
-);
-CREATE TABLE hoa_don (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_hang_id BIGINT NOT NULL UNIQUE REFERENCES don_hang(id),
- nguoi_lap_id BIGINT REFERENCES nhan_vien(id),
- ma_hoa_don VARCHAR(50) NOT NULL UNIQUE,
- ngay_lap TIMESTAMPTZ NOT NULL DEFAULT now(),
- kenh_ban VARCHAR(12) NOT NULL CHECK(kenh_ban IN ('ONLINE','TAI_QUAY')),
- tong_thanh_toan NUMERIC(18,2) NOT NULL CHECK(tong_thanh_toan >= 0),
- phi_van_chuyen NUMERIC(18,2) NOT NULL DEFAULT 0,
- giam_gia NUMERIC(18,2) NOT NULL DEFAULT 0,
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'ISSUED' CHECK(trang_thai IN ('ISSUED','PAID','CANCELLED'))
-);
-CREATE TABLE chi_tiet_hoa_don (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- hoa_don_id BIGINT NOT NULL REFERENCES hoa_don(id),
- chi_tiet_don_hang_id BIGINT NOT NULL REFERENCES chi_tiet_don_hang(id),
- ten_san_pham VARCHAR(255) NOT NULL, ten_quy_cach VARCHAR(60) NOT NULL,
- so_luong INT NOT NULL CHECK(so_luong > 0), don_gia NUMERIC(18,2) NOT NULL CHECK(don_gia >= 0),
- thanh_tien NUMERIC(18,2) GENERATED ALWAYS AS (so_luong*don_gia) STORED,
- UNIQUE(hoa_don_id,chi_tiet_don_hang_id)
-);
-CREATE TABLE lich_su_hoa_don (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- hoa_don_id BIGINT NOT NULL REFERENCES hoa_don(id),
- tai_khoan_thuc_hien_id BIGINT REFERENCES tai_khoan(id),
- trang_thai_cu VARCHAR(20), trang_thai_moi VARCHAR(20) NOT NULL,
- ly_do TEXT NOT NULL, thoi_gian TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
--- ===== D. KHUYEN MAI =====
-CREATE TABLE khuyen_mai (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ma_code VARCHAR(60) UNIQUE, ten VARCHAR(150) NOT NULL, mo_ta TEXT,
- loai_giam VARCHAR(15) NOT NULL CHECK(loai_giam IN ('PERCENT','FIXED')),
- gia_tri_giam NUMERIC(18,2) NOT NULL CHECK(gia_tri_giam >= 0),
- giam_toi_da NUMERIC(18,2) CHECK(giam_toi_da >= 0),
- don_toi_thieu NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(don_toi_thieu >= 0),
- bat_dau TIMESTAMPTZ NOT NULL, ket_thuc TIMESTAMPTZ NOT NULL,
- gioi_han_su_dung INT CHECK(gioi_han_su_dung >= 0),
- gioi_han_moi_khach INT CHECK(gioi_han_moi_khach >= 0),
- pham_vi_ap_dung VARCHAR(20) NOT NULL DEFAULT 'ALL' CHECK(pham_vi_ap_dung IN ('ALL','PRODUCT','CATEGORY','BRAND')),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK(trang_thai IN ('ACTIVE','INACTIVE')),
- CHECK(ket_thuc > bat_dau), CHECK(loai_giam <> 'PERCENT' OR gia_tri_giam <= 100)
-);
-CREATE TABLE pham_vi_khuyen_mai (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khuyen_mai_id BIGINT NOT NULL REFERENCES khuyen_mai(id) ON DELETE CASCADE,
- san_pham_id BIGINT REFERENCES san_pham(id),
- loai_san_pham_id BIGINT REFERENCES loai_san_pham(id),
- thuong_hieu_id BIGINT REFERENCES thuong_hieu(id),
- CHECK(num_nonnulls(san_pham_id,loai_san_pham_id,thuong_hieu_id)=1)
-);
-CREATE UNIQUE INDEX uq_km_sp ON pham_vi_khuyen_mai(khuyen_mai_id,san_pham_id) WHERE san_pham_id IS NOT NULL;
-CREATE UNIQUE INDEX uq_km_loai ON pham_vi_khuyen_mai(khuyen_mai_id,loai_san_pham_id) WHERE loai_san_pham_id IS NOT NULL;
-CREATE UNIQUE INDEX uq_km_th ON pham_vi_khuyen_mai(khuyen_mai_id,thuong_hieu_id) WHERE thuong_hieu_id IS NOT NULL;
-CREATE TABLE uu_dai_so_luong (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khuyen_mai_id BIGINT NOT NULL REFERENCES khuyen_mai(id) ON DELETE CASCADE,
- quy_cach_id BIGINT REFERENCES quy_cach_san_pham(id),
- so_luong_mua INT NOT NULL CHECK(so_luong_mua > 0),
- so_luong_tang INT NOT NULL DEFAULT 0 CHECK(so_luong_tang >= 0),
- ghi_chu_combo TEXT
-);
-CREATE TABLE su_dung_khuyen_mai (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- khuyen_mai_id BIGINT NOT NULL REFERENCES khuyen_mai(id),
- khach_hang_id BIGINT REFERENCES khach_hang(id),
- don_hang_id BIGINT NOT NULL REFERENCES don_hang(id),
- so_tien_giam NUMERIC(18,2) NOT NULL CHECK(so_tien_giam >= 0),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'APPLIED' CHECK(trang_thai IN ('APPLIED','REVERSED')),
- ngay_su_dung TIMESTAMPTZ NOT NULL DEFAULT now(),
- UNIQUE(khuyen_mai_id,don_hang_id)
-);
+--
+-- Name: fn_chi_tiet_hoa_don_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
 
--- ===== E. NHA CUNG CAP, DON NCC, LAN NHAP, CONG NO =====
-CREATE TABLE nha_cung_cap (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ten VARCHAR(255) NOT NULL, ma_so_thue VARCHAR(30) UNIQUE,
- nguoi_lien_he VARCHAR(150), dien_thoai VARCHAR(25), email VARCHAR(255), dia_chi TEXT,
- trang_thai VARCHAR(25) NOT NULL DEFAULT 'HOP_TAC' CHECK(trang_thai IN ('HOP_TAC','NGUNG_HOP_TAC')),
- ngay_tao TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE TABLE nha_cung_cap_san_pham (
- nha_cung_cap_id BIGINT NOT NULL REFERENCES nha_cung_cap(id),
- san_pham_id BIGINT NOT NULL REFERENCES san_pham(id),
- gia_nhap_tham_khao NUMERIC(18,2) CHECK(gia_nhap_tham_khao >= 0),
- PRIMARY KEY(nha_cung_cap_id,san_pham_id)
-);
-CREATE TABLE giay_to_ncc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- nha_cung_cap_id BIGINT NOT NULL REFERENCES nha_cung_cap(id),
- loai_giay VARCHAR(100) NOT NULL, so_giay VARCHAR(120) NOT NULL,
- ngay_cap DATE, ngay_het_han DATE, tep_dinh_kem TEXT,
- CHECK(ngay_het_han IS NULL OR ngay_cap IS NULL OR ngay_het_han >= ngay_cap)
-);
-CREATE TABLE don_dat_hang_ncc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- ma_don_nhap VARCHAR(50) NOT NULL UNIQUE,
- nha_cung_cap_id BIGINT NOT NULL REFERENCES nha_cung_cap(id),
- nguoi_lap_id BIGINT NOT NULL REFERENCES nhan_vien(id),
- nguoi_duyet_id BIGINT REFERENCES nhan_vien(id),
- ngay_dat TIMESTAMPTZ NOT NULL DEFAULT now(), ngay_giao_du_kien DATE,
- trang_thai VARCHAR(30) NOT NULL DEFAULT 'CHO_DUYET' CHECK(trang_thai IN ('CHO_DUYET','DA_DUYET','TU_CHOI','DANG_GIAO','DA_NHAN_MOT_PHAN','DA_NHAN_DU','DA_HUY')),
- ly_do_tu_choi TEXT, ghi_chu TEXT, ngay_duyet TIMESTAMPTZ
-);
-CREATE TABLE chi_tiet_don_ncc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_ncc_id BIGINT NOT NULL REFERENCES don_dat_hang_ncc(id),
- quy_cach_id BIGINT NOT NULL REFERENCES quy_cach_san_pham(id),
- so_luong_dat INT NOT NULL CHECK(so_luong_dat > 0),
- he_so_quy_doi INT NOT NULL CHECK(he_so_quy_doi > 0),
- gia_nhap_du_kien NUMERIC(18,2) NOT NULL CHECK(gia_nhap_du_kien >= 0),
- UNIQUE(don_ncc_id,quy_cach_id), UNIQUE(id,don_ncc_id)
-);
-CREATE TABLE lan_nhap_hang (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- don_ncc_id BIGINT NOT NULL REFERENCES don_dat_hang_ncc(id),
- nguoi_nhan_id BIGINT NOT NULL REFERENCES nhan_vien(id),
- ngay_nhap TIMESTAMPTZ NOT NULL DEFAULT now(),
- trang_thai VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK(trang_thai IN ('DRAFT','CONFIRMED','CANCELLED')),
- ngay_xac_nhan TIMESTAMPTZ, ghi_chu TEXT,
- UNIQUE(id,don_ncc_id)
-);
-CREATE TABLE chi_tiet_lan_nhap (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- lan_nhap_id BIGINT NOT NULL,
- don_ncc_id BIGINT NOT NULL,
- ct_don_ncc_id BIGINT NOT NULL,
- so_luong_thuc_nhan INT NOT NULL CHECK(so_luong_thuc_nhan >= 0),
- so_luong_loai INT NOT NULL DEFAULT 0 CHECK(so_luong_loai >= 0),
- chenh_lech INT NOT NULL DEFAULT 0,
- gia_nhap_thuc_te NUMERIC(18,2) NOT NULL CHECK(gia_nhap_thuc_te >= 0),
- FOREIGN KEY(lan_nhap_id,don_ncc_id) REFERENCES lan_nhap_hang(id,don_ncc_id),
- FOREIGN KEY(ct_don_ncc_id,don_ncc_id) REFERENCES chi_tiet_don_ncc(id,don_ncc_id),
- UNIQUE(lan_nhap_id,ct_don_ncc_id)
-);
-CREATE TABLE cong_no_ncc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- lan_nhap_id BIGINT NOT NULL UNIQUE REFERENCES lan_nhap_hang(id),
- so_tien_phai_tra NUMERIC(18,2) NOT NULL CHECK(so_tien_phai_tra >= 0),
- so_tien_con_no NUMERIC(18,2) NOT NULL CHECK(so_tien_con_no >= 0),
- han_thanh_toan DATE, trang_thai VARCHAR(20) NOT NULL DEFAULT 'CHUA_TRA' CHECK(trang_thai IN ('CHUA_TRA','TRA_MOT_PHAN','DA_TRA')),
- CHECK(so_tien_con_no <= so_tien_phai_tra)
-);
-CREATE TABLE thanh_toan_ncc (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- cong_no_id BIGINT NOT NULL REFERENCES cong_no_ncc(id),
- so_tien NUMERIC(18,2) NOT NULL CHECK(so_tien > 0),
- phuong_thuc VARCHAR(30) NOT NULL, ma_tham_chieu VARCHAR(120) UNIQUE,
- ngay_thanh_toan TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ===== TRIGGERS: TAO DONG SO LUONG/ LICH SU TRONG TRANSACTION =====
--- Trigger la co che toan ven; phan quyen can duoc kiem tra tai service backend.
-CREATE OR REPLACE FUNCTION fn_so_luong_bien_dong() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE current_qty BIGINT;
+CREATE FUNCTION public.fn_chi_tiet_hoa_don_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-  INSERT INTO so_luong_san_pham(san_pham_id) VALUES(NEW.san_pham_id) ON CONFLICT DO NOTHING;
-  SELECT so_luong_co_ban INTO current_qty FROM so_luong_san_pham WHERE san_pham_id=NEW.san_pham_id FOR UPDATE;
-  IF current_qty + NEW.so_luong_thay_doi < 0 THEN
-    RAISE EXCEPTION 'Khong du so luong san pham %: co %, can thay doi %', NEW.san_pham_id,current_qty,NEW.so_luong_thay_doi;
-  END IF;
-  NEW.so_luong_truoc := current_qty;
-  NEW.so_luong_sau := current_qty + NEW.so_luong_thay_doi;
-  UPDATE so_luong_san_pham SET so_luong_co_ban=NEW.so_luong_sau,ngay_cap_nhat=now() WHERE san_pham_id=NEW.san_pham_id;
-  RETURN NEW;
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Chi tiet hoa don bat bien'; END IF;
+ RETURN NEW;
 END $$;
-CREATE TRIGGER trg_so_luong_bien_dong BEFORE INSERT ON bien_dong_so_luong
- FOR EACH ROW EXECUTE FUNCTION fn_so_luong_bien_dong();
-CREATE OR REPLACE FUNCTION fn_chong_sua_bien_dong() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'Nhat ky bien dong so luong chi duoc ghi them'; END $$;
-CREATE TRIGGER trg_chong_sua_bien_dong BEFORE UPDATE OR DELETE ON bien_dong_so_luong
- FOR EACH ROW EXECUTE FUNCTION fn_chong_sua_bien_dong();
 
--- Dieu chinh so luong phai dua vao so luong thuc te, co ly do va nguoi thuc hien.
-CREATE OR REPLACE FUNCTION fn_dieu_chinh_so_luong() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+
+--
+-- Name: fn_chong_sua_bien_dong(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_chong_sua_bien_dong() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'Nhat ky bien dong so luong chi duoc ghi them'; END $$;
+
+
+--
+-- Name: fn_dieu_chinh_so_luong(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_dieu_chinh_so_luong() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 DECLARE current_qty BIGINT;
 BEGIN
  SELECT so_luong_co_ban INTO current_qty FROM so_luong_san_pham WHERE san_pham_id=NEW.san_pham_id FOR UPDATE;
@@ -438,11 +94,94 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$;
--- identity default is available in BEFORE INSERT for generated-always identity
-CREATE TRIGGER trg_dieu_chinh_so_luong BEFORE INSERT ON dieu_chinh_so_luong
- FOR EACH ROW EXECUTE FUNCTION fn_dieu_chinh_so_luong();
 
-CREATE OR REPLACE FUNCTION fn_order_inventory() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+
+--
+-- Name: fn_hoa_don_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_hoa_don_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Khong duoc xoa hoa don noi bo'; END IF;
+ IF ROW(NEW.don_hang_id,NEW.nguoi_lap_id,NEW.ma_hoa_don,NEW.ngay_lap,NEW.kenh_ban,NEW.tong_thanh_toan,NEW.phi_van_chuyen,NEW.giam_gia)
+    IS DISTINCT FROM ROW(OLD.don_hang_id,OLD.nguoi_lap_id,OLD.ma_hoa_don,OLD.ngay_lap,OLD.kenh_ban,OLD.tong_thanh_toan,OLD.phi_van_chuyen,OLD.giam_gia) THEN
+   RAISE EXCEPTION 'Khong duoc sua noi dung hoa don';
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: fn_immutable_posted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_immutable_posted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'Chung tu da ghi so khong duoc sua/xoa'; END $$;
+
+
+--
+-- Name: fn_invoice_history(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_invoice_history() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.trang_thai IS DISTINCT FROM OLD.trang_thai THEN
+   INSERT INTO lich_su_hoa_don(hoa_don_id,trang_thai_cu,trang_thai_moi,ly_do)
+   VALUES(NEW.id,OLD.trang_thai,NEW.trang_thai,'Cap nhat trang thai theo nghiep vu don hang');
+ END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: fn_khoi_tao_so_luong(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_khoi_tao_so_luong() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ INSERT INTO so_luong_san_pham(san_pham_id) VALUES(NEW.id) ON CONFLICT DO NOTHING;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: fn_order_history(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_order_history() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.trang_thai IS DISTINCT FROM OLD.trang_thai THEN
+  INSERT INTO lich_su_trang_thai_don(don_hang_id,trang_thai_cu,trang_thai_moi)
+  VALUES(NEW.id,OLD.trang_thai,NEW.trang_thai);
+  IF NEW.kenh_ban='ONLINE' AND NEW.trang_thai='DANG_CHUAN_BI' THEN
+    PERFORM lap_hoa_don_tu_don(NEW.id,NEW.nhan_vien_xu_ly_id);
+  END IF;
+  IF NEW.trang_thai IN ('DA_HUY','TU_CHOI') THEN
+    UPDATE su_dung_khuyen_mai SET trang_thai='REVERSED' WHERE don_hang_id=NEW.id AND trang_thai='APPLIED';
+    UPDATE hoa_don SET trang_thai='CANCELLED' WHERE don_hang_id=NEW.id AND trang_thai<>'CANCELLED';
+  END IF;
+ END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: fn_order_inventory(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_order_inventory() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 DECLARE r RECORD; sign_qty INT; kind VARCHAR(30);
 BEGIN
  IF TG_OP='INSERT' THEN
@@ -483,59 +222,161 @@ BEGIN
  NEW.ngay_cap_nhat:=now();
  RETURN NEW;
 END $$;
-CREATE TRIGGER trg_order_inventory BEFORE INSERT OR UPDATE OF trang_thai ON don_hang
- FOR EACH ROW EXECUTE FUNCTION fn_order_inventory();
 
-CREATE OR REPLACE FUNCTION fn_order_history() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+
+--
+-- Name: fn_protect_order_lines(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_protect_order_lines() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE o don_hang%ROWTYPE;
 BEGIN
- IF NEW.trang_thai IS DISTINCT FROM OLD.trang_thai THEN
-  INSERT INTO lich_su_trang_thai_don(don_hang_id,trang_thai_cu,trang_thai_moi)
-  VALUES(NEW.id,OLD.trang_thai,NEW.trang_thai);
-  IF NEW.kenh_ban='ONLINE' AND NEW.trang_thai='DANG_CHUAN_BI' THEN
-    PERFORM lap_hoa_don_tu_don(NEW.id,NEW.nhan_vien_xu_ly_id);
-  END IF;
-  IF NEW.trang_thai IN ('DA_HUY','TU_CHOI') THEN
-    UPDATE su_dung_khuyen_mai SET trang_thai='REVERSED' WHERE don_hang_id=NEW.id AND trang_thai='APPLIED';
-    UPDATE hoa_don SET trang_thai='CANCELLED' WHERE don_hang_id=NEW.id AND trang_thai<>'CANCELLED';
-  END IF;
+ SELECT * INTO o FROM don_hang WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.don_hang_id ELSE NEW.don_hang_id END;
+ IF (o.kenh_ban='TAI_QUAY' AND current_setting('beverage.pos_order_id',true) IS DISTINCT FROM o.id::text)
+    OR (o.kenh_ban<>'TAI_QUAY' AND o.trang_thai <> 'CHO_XAC_NHAN') THEN
+   RAISE EXCEPTION 'Khong duoc sua chi tiet don da xac nhan hoac tai quay';
  END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
+END $$;
+
+
+--
+-- Name: fn_protect_received_lines(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_protect_received_lines() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE status_now TEXT;
+BEGIN
+ SELECT trang_thai INTO status_now FROM lan_nhap_hang
+ WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.lan_nhap_id ELSE NEW.lan_nhap_id END;
+ IF status_now='CONFIRMED' THEN RAISE EXCEPTION 'Khong duoc sua chi tiet lan nhap da xac nhan'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
+END $$;
+
+
+--
+-- Name: fn_receive_finalize(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_receive_finalize() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE all_received BOOLEAN; total_due NUMERIC(18,2);
+BEGIN
+ IF NEW.trang_thai<>'CONFIRMED' OR OLD.trang_thai='CONFIRMED' THEN RETURN NULL; END IF;
+ SELECT NOT EXISTS (
+   SELECT 1 FROM chi_tiet_don_ncc d
+   WHERE d.don_ncc_id=NEW.don_ncc_id AND d.so_luong_dat > (
+     SELECT COALESCE(sum(c.so_luong_thuc_nhan::bigint+c.so_luong_loai),0)
+     FROM chi_tiet_lan_nhap c JOIN lan_nhap_hang l ON l.id=c.lan_nhap_id
+     WHERE c.ct_don_ncc_id=d.id AND l.trang_thai='CONFIRMED'
+   )
+ ) INTO all_received;
+ UPDATE don_dat_hang_ncc SET trang_thai=CASE WHEN all_received THEN 'DA_NHAN_DU' ELSE 'DA_NHAN_MOT_PHAN' END
+ WHERE id=NEW.don_ncc_id;
+ SELECT COALESCE(sum(so_luong_thuc_nhan*gia_nhap_thuc_te),0) INTO total_due
+ FROM chi_tiet_lan_nhap WHERE lan_nhap_id=NEW.id;
+ INSERT INTO cong_no_ncc(lan_nhap_id,so_tien_phai_tra,so_tien_con_no,trang_thai)
+ VALUES(NEW.id,total_due,total_due,CASE WHEN total_due=0 THEN 'DA_TRA' ELSE 'CHUA_TRA' END);
  RETURN NULL;
 END $$;
-CREATE TRIGGER trg_order_history AFTER UPDATE OF trang_thai ON don_hang
- FOR EACH ROW EXECUTE FUNCTION fn_order_history();
 
-CREATE OR REPLACE FUNCTION fn_invoice_history() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+
+--
+-- Name: fn_receive_inventory(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_receive_inventory() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE rec RECORD; order_state TEXT; accumulated BIGINT; order_complete BOOLEAN; old_qty BIGINT; old_cost NUMERIC; new_cost NUMERIC;
 BEGIN
- IF NEW.trang_thai IS DISTINCT FROM OLD.trang_thai THEN
-   INSERT INTO lich_su_hoa_don(hoa_don_id,trang_thai_cu,trang_thai_moi,ly_do)
-   VALUES(NEW.id,OLD.trang_thai,NEW.trang_thai,'Cap nhat trang thai theo nghiep vu don hang');
+ IF OLD.trang_thai='CONFIRMED' AND NEW.trang_thai<>'CONFIRMED' THEN
+   RAISE EXCEPTION 'Khong duoc huy xac nhan nhap';
  END IF;
- RETURN NULL;
-END $$;
-CREATE TRIGGER trg_invoice_history AFTER UPDATE OF trang_thai ON hoa_don
- FOR EACH ROW EXECUTE FUNCTION fn_invoice_history();
-CREATE OR REPLACE FUNCTION fn_hoa_don_immutable() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Khong duoc xoa hoa don noi bo'; END IF;
- IF ROW(NEW.don_hang_id,NEW.nguoi_lap_id,NEW.ma_hoa_don,NEW.ngay_lap,NEW.kenh_ban,NEW.tong_thanh_toan,NEW.phi_van_chuyen,NEW.giam_gia)
-    IS DISTINCT FROM ROW(OLD.don_hang_id,OLD.nguoi_lap_id,OLD.ma_hoa_don,OLD.ngay_lap,OLD.kenh_ban,OLD.tong_thanh_toan,OLD.phi_van_chuyen,OLD.giam_gia) THEN
-   RAISE EXCEPTION 'Khong duoc sua noi dung hoa don';
+ IF NEW.trang_thai <> 'CONFIRMED' OR OLD.trang_thai='CONFIRMED' THEN RETURN NEW; END IF;
+ SELECT trang_thai INTO order_state FROM don_dat_hang_ncc WHERE id=NEW.don_ncc_id FOR UPDATE;
+ IF order_state NOT IN ('DA_DUYET','DANG_GIAO','DA_NHAN_MOT_PHAN') THEN
+  RAISE EXCEPTION 'Don NCC chua duoc duyet hoac da ket thuc';
  END IF;
+ IF NOT EXISTS(SELECT 1 FROM chi_tiet_lan_nhap WHERE lan_nhap_id=NEW.id AND (so_luong_thuc_nhan>0 OR so_luong_loai>0)) THEN
+  RAISE EXCEPTION 'Lan nhap phai co it nhat mot san pham du dieu kien nhap';
+ END IF;
+ FOR rec IN
+   SELECT ct.id,ct.ct_don_ncc_id,ct.so_luong_thuc_nhan,ct.so_luong_loai,ct.ly_do_loai,ct.gia_nhap_thuc_te,
+          d.so_luong_dat,d.he_so_quy_doi,q.san_pham_id
+   FROM chi_tiet_lan_nhap ct JOIN chi_tiet_don_ncc d ON d.id=ct.ct_don_ncc_id
+   JOIN quy_cach_san_pham q ON q.id=d.quy_cach_id
+   WHERE ct.lan_nhap_id=NEW.id ORDER BY q.san_pham_id,d.id LOOP
+   SELECT COALESCE(sum(c.so_luong_thuc_nhan::bigint+c.so_luong_loai),0) INTO accumulated
+   FROM chi_tiet_lan_nhap c JOIN lan_nhap_hang l ON l.id=c.lan_nhap_id
+   WHERE c.ct_don_ncc_id=rec.ct_don_ncc_id AND (l.trang_thai='CONFIRMED' OR l.id=NEW.id);
+   IF accumulated > rec.so_luong_dat THEN
+    RAISE EXCEPTION 'Nhan vuot so luong dat cho chi tiet %', rec.ct_don_ncc_id;
+   END IF;
+   IF rec.so_luong_loai>0 AND coalesce(trim(rec.ly_do_loai),'')='' THEN RAISE EXCEPTION 'Can ly do tu choi hang loi'; END IF;
+   IF rec.so_luong_thuc_nhan > 0 THEN
+     SELECT so_luong_co_ban INTO old_qty FROM so_luong_san_pham WHERE san_pham_id=rec.san_pham_id FOR UPDATE;
+     SELECT gia_von/he_so_quy_doi INTO old_cost FROM quy_cach_san_pham WHERE san_pham_id=rec.san_pham_id ORDER BY he_so_quy_doi,id LIMIT 1;
+     new_cost := (old_qty*old_cost+rec.so_luong_thuc_nhan*rec.gia_nhap_thuc_te)/(old_qty+rec.so_luong_thuc_nhan::bigint*rec.he_so_quy_doi);
+     UPDATE quy_cach_san_pham SET gia_von=round(new_cost*he_so_quy_doi,2) WHERE san_pham_id=rec.san_pham_id;
+     INSERT INTO bien_dong_so_luong(san_pham_id,loai,nguon_id,so_luong_thay_doi,so_luong_truoc,so_luong_sau)
+     VALUES(rec.san_pham_id,'NHAP_HANG',rec.id,rec.so_luong_thuc_nhan::bigint*rec.he_so_quy_doi,0,0);
+   END IF;
+ END LOOP;
+ NEW.ngay_xac_nhan:=now();
  RETURN NEW;
 END $$;
-CREATE TRIGGER trg_hoa_don_immutable BEFORE UPDATE OR DELETE ON hoa_don
- FOR EACH ROW EXECUTE FUNCTION fn_hoa_don_immutable();
-CREATE OR REPLACE FUNCTION fn_chi_tiet_hoa_don_immutable() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+
+
+--
+-- Name: fn_so_luong_bien_dong(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_so_luong_bien_dong() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE current_qty BIGINT;
 BEGIN
- IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Chi tiet hoa don bat bien'; END IF;
+  INSERT INTO so_luong_san_pham(san_pham_id) VALUES(NEW.san_pham_id) ON CONFLICT DO NOTHING;
+  SELECT so_luong_co_ban INTO current_qty FROM so_luong_san_pham WHERE san_pham_id=NEW.san_pham_id FOR UPDATE;
+  IF current_qty + NEW.so_luong_thay_doi < 0 THEN
+    RAISE EXCEPTION 'Khong du so luong san pham %: co %, can thay doi %', NEW.san_pham_id,current_qty,NEW.so_luong_thay_doi;
+  END IF;
+  NEW.so_luong_truoc := current_qty;
+  NEW.so_luong_sau := current_qty + NEW.so_luong_thay_doi;
+  UPDATE so_luong_san_pham SET so_luong_co_ban=NEW.so_luong_sau,ngay_cap_nhat=now() WHERE san_pham_id=NEW.san_pham_id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: fn_supplier_payment(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_supplier_payment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ UPDATE cong_no_ncc SET so_tien_con_no=so_tien_con_no-NEW.so_tien,
+ trang_thai=CASE WHEN so_tien_con_no-NEW.so_tien=0 THEN 'DA_TRA' ELSE 'TRA_MOT_PHAN' END
+ WHERE id=NEW.cong_no_id AND so_tien_con_no>=NEW.so_tien;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Thanh toan vuot cong no'; END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER trg_chi_tiet_hoa_don_immutable BEFORE UPDATE OR DELETE ON chi_tiet_hoa_don
- FOR EACH ROW EXECUTE FUNCTION fn_chi_tiet_hoa_don_immutable();
 
--- Tao 1 hoa don noi bo tu don hang da du dieu kien. Idempotent.
-CREATE OR REPLACE FUNCTION lap_hoa_don_tu_don(p_don_hang_id BIGINT,p_nhan_vien_id BIGINT DEFAULT NULL)
- RETURNS BIGINT LANGUAGE plpgsql AS $$
+
+--
+-- Name: lap_hoa_don_tu_don(bigint, bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.lap_hoa_don_tu_don(p_don_hang_id bigint, p_nhan_vien_id bigint DEFAULT NULL::bigint) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
 DECLARE invoice_id BIGINT; od don_hang%ROWTYPE;
 BEGIN
  SELECT * INTO od FROM don_hang WHERE id=p_don_hang_id FOR UPDATE;
@@ -555,112 +396,14 @@ BEGIN
  RETURN invoice_id;
 END $$;
 
--- Nhan hang theo don NCC da duyet, nhieu dot; khoa don va tinh tong theo TUNG dong don.
-CREATE OR REPLACE FUNCTION fn_receive_inventory() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE rec RECORD; order_state TEXT; accumulated BIGINT; order_complete BOOLEAN;
-BEGIN
- IF OLD.trang_thai='CONFIRMED' AND NEW.trang_thai<>'CONFIRMED' THEN
-   RAISE EXCEPTION 'Khong duoc huy xac nhan nhap';
- END IF;
- IF NEW.trang_thai <> 'CONFIRMED' OR OLD.trang_thai='CONFIRMED' THEN RETURN NEW; END IF;
- SELECT trang_thai INTO order_state FROM don_dat_hang_ncc WHERE id=NEW.don_ncc_id FOR UPDATE;
- IF order_state NOT IN ('DA_DUYET','DANG_GIAO','DA_NHAN_MOT_PHAN') THEN
-  RAISE EXCEPTION 'Don NCC chua duoc duyet hoac da ket thuc';
- END IF;
- IF NOT EXISTS(SELECT 1 FROM chi_tiet_lan_nhap WHERE lan_nhap_id=NEW.id AND so_luong_thuc_nhan>0) THEN
-  RAISE EXCEPTION 'Lan nhap phai co it nhat mot san pham du dieu kien nhap';
- END IF;
- FOR rec IN
-   SELECT ct.id,ct.ct_don_ncc_id,ct.so_luong_thuc_nhan,ct.gia_nhap_thuc_te,
-          d.so_luong_dat,d.he_so_quy_doi,q.san_pham_id
-   FROM chi_tiet_lan_nhap ct JOIN chi_tiet_don_ncc d ON d.id=ct.ct_don_ncc_id
-   JOIN quy_cach_san_pham q ON q.id=d.quy_cach_id
-   WHERE ct.lan_nhap_id=NEW.id ORDER BY q.san_pham_id,d.id LOOP
-   SELECT COALESCE(sum(c.so_luong_thuc_nhan),0) INTO accumulated
-   FROM chi_tiet_lan_nhap c JOIN lan_nhap_hang l ON l.id=c.lan_nhap_id
-   WHERE c.ct_don_ncc_id=rec.ct_don_ncc_id AND (l.trang_thai='CONFIRMED' OR l.id=NEW.id);
-   IF accumulated > rec.so_luong_dat THEN
-    RAISE EXCEPTION 'Nhan vuot so luong dat cho chi tiet %', rec.ct_don_ncc_id;
-   END IF;
-   IF rec.so_luong_thuc_nhan > 0 THEN
-     INSERT INTO bien_dong_so_luong(san_pham_id,loai,nguon_id,so_luong_thay_doi,so_luong_truoc,so_luong_sau)
-     VALUES(rec.san_pham_id,'NHAP_HANG',rec.id,rec.so_luong_thuc_nhan::bigint*rec.he_so_quy_doi,0,0);
-   END IF;
- END LOOP;
- NEW.ngay_xac_nhan:=now();
- RETURN NEW;
-END $$;
-CREATE TRIGGER trg_receive_inventory BEFORE UPDATE OF trang_thai ON lan_nhap_hang
- FOR EACH ROW EXECUTE FUNCTION fn_receive_inventory();
 
-CREATE OR REPLACE FUNCTION fn_receive_finalize() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE all_received BOOLEAN; total_due NUMERIC(18,2);
-BEGIN
- IF NEW.trang_thai<>'CONFIRMED' OR OLD.trang_thai='CONFIRMED' THEN RETURN NULL; END IF;
- SELECT NOT EXISTS (
-   SELECT 1 FROM chi_tiet_don_ncc d
-   WHERE d.don_ncc_id=NEW.don_ncc_id AND d.so_luong_dat > (
-     SELECT COALESCE(sum(c.so_luong_thuc_nhan),0)
-     FROM chi_tiet_lan_nhap c JOIN lan_nhap_hang l ON l.id=c.lan_nhap_id
-     WHERE c.ct_don_ncc_id=d.id AND l.trang_thai='CONFIRMED'
-   )
- ) INTO all_received;
- UPDATE don_dat_hang_ncc SET trang_thai=CASE WHEN all_received THEN 'DA_NHAN_DU' ELSE 'DA_NHAN_MOT_PHAN' END
- WHERE id=NEW.don_ncc_id;
- SELECT COALESCE(sum(so_luong_thuc_nhan*gia_nhap_thuc_te),0) INTO total_due
- FROM chi_tiet_lan_nhap WHERE lan_nhap_id=NEW.id;
- INSERT INTO cong_no_ncc(lan_nhap_id,so_tien_phai_tra,so_tien_con_no)
- VALUES(NEW.id,total_due,total_due);
- RETURN NULL;
-END $$;
-CREATE TRIGGER trg_receive_finalize AFTER UPDATE OF trang_thai ON lan_nhap_hang
- FOR EACH ROW EXECUTE FUNCTION fn_receive_finalize();
+--
+-- Name: tao_don_tai_quay(text, bigint, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
 
-CREATE OR REPLACE FUNCTION fn_supplier_payment() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
- UPDATE cong_no_ncc SET so_tien_con_no=so_tien_con_no-NEW.so_tien,
- trang_thai=CASE WHEN so_tien_con_no-NEW.so_tien=0 THEN 'DA_TRA' ELSE 'TRA_MOT_PHAN' END
- WHERE id=NEW.cong_no_id AND so_tien_con_no>=NEW.so_tien;
- IF NOT FOUND THEN RAISE EXCEPTION 'Thanh toan vuot cong no'; END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER trg_supplier_payment AFTER INSERT ON thanh_toan_ncc
- FOR EACH ROW EXECUTE FUNCTION fn_supplier_payment();
-
-CREATE OR REPLACE FUNCTION fn_immutable_posted() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'Chung tu da ghi so khong duoc sua/xoa'; END $$;
-CREATE TRIGGER trg_paid_ncc_immutable BEFORE UPDATE OR DELETE ON thanh_toan_ncc
- FOR EACH ROW EXECUTE FUNCTION fn_immutable_posted();
-CREATE OR REPLACE FUNCTION fn_protect_received_lines() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE status_now TEXT;
-BEGIN
- SELECT trang_thai INTO status_now FROM lan_nhap_hang
- WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.lan_nhap_id ELSE NEW.lan_nhap_id END;
- IF status_now='CONFIRMED' THEN RAISE EXCEPTION 'Khong duoc sua chi tiet lan nhap da xac nhan'; END IF;
- IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
-END $$;
-CREATE TRIGGER trg_protect_received_lines BEFORE INSERT OR UPDATE OR DELETE ON chi_tiet_lan_nhap
- FOR EACH ROW EXECUTE FUNCTION fn_protect_received_lines();
-CREATE OR REPLACE FUNCTION fn_protect_order_lines() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE o don_hang%ROWTYPE;
-BEGIN
- SELECT * INTO o FROM don_hang WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.don_hang_id ELSE NEW.don_hang_id END;
- IF (o.kenh_ban='TAI_QUAY' AND current_setting('beverage.pos_order_id',true) IS DISTINCT FROM o.id::text)
-    OR (o.kenh_ban<>'TAI_QUAY' AND o.trang_thai <> 'CHO_XAC_NHAN') THEN
-   RAISE EXCEPTION 'Khong duoc sua chi tiet don da xac nhan hoac tai quay';
- END IF;
- IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
-END $$;
--- Danh cho don online; don tai quay phai tao qua function POS ben duoi.
-CREATE TRIGGER trg_protect_order_lines BEFORE INSERT OR UPDATE OR DELETE ON chi_tiet_don_hang
- FOR EACH ROW EXECUTE FUNCTION fn_protect_order_lines();
-
--- POS: khong cho ghi truc tiep don tai quay ma bo qua quy trinh; function nay duoc goi trong 1 transaction.
--- CHI GOI SAU KHI DA XAC NHAN THU TIEN MAT HOAC DOI SOAT QR THANH CONG.
--- Khong tu dong tin rang chuyen khoan da thanh cong chi vi client bao thanh cong.
--- p_items = [{"quy_cach_id":1,"so_luong":2}, ...]; gia lay lai tu DB.
-CREATE OR REPLACE FUNCTION tao_don_tai_quay(p_ma_don TEXT,p_nhan_vien_id BIGINT,p_phuong_thuc TEXT,p_items JSONB)
- RETURNS BIGINT LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.tao_don_tai_quay(p_ma_don text, p_nhan_vien_id bigint, p_phuong_thuc text, p_items jsonb) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
 DECLARE order_id BIGINT; r RECORD; total_amount NUMERIC(18,2):=0; payment_id BIGINT;
 BEGIN
  IF p_phuong_thuc NOT IN ('CASH','BANK_TRANSFER','QR') THEN RAISE EXCEPTION 'POS chi ho tro tien mat / chuyen khoan QR'; END IF;
@@ -680,6 +423,8 @@ BEGIN
   WHERE q.dang_ban AND s.hien_thi AND s.trang_thai='DANG_BAN'
   GROUP BY q.id,s.ten ORDER BY q.san_pham_id,q.id LOOP
    IF r.qty<=0 THEN RAISE EXCEPTION 'So luong POS khong hop le'; END IF;
+   PERFORM 1 FROM so_luong_san_pham WHERE san_pham_id=r.san_pham_id FOR UPDATE;
+   SELECT gia_von INTO r.gia_von FROM quy_cach_san_pham WHERE id=r.quy_cach_id;
    INSERT INTO chi_tiet_don_hang(don_hang_id,quy_cach_id,ten_san_pham,ten_quy_cach,so_luong,he_so_quy_doi,don_gia,gia_von_don_vi)
    VALUES(order_id,r.quy_cach_id,r.ten_san_pham,r.ten_quy_cach,r.qty,r.he_so_quy_doi,r.gia_ban,r.gia_von);
    total_amount := total_amount + r.qty*r.gia_ban;
@@ -706,90 +451,3796 @@ BEGIN
  RETURN order_id;
 END $$;
 
--- UC10: VIEW theo thuc te giao dich; phan quyen doc VIEW tai backend.
-CREATE VIEW v_ton_san_pham AS
- SELECT s.id AS san_pham_id,s.sku,s.ten,k.so_luong_co_ban,k.nguong_canh_bao,
-        (k.so_luong_co_ban<=k.nguong_canh_bao) AS canh_bao
- FROM san_pham s JOIN so_luong_san_pham k ON k.san_pham_id=s.id;
-CREATE VIEW v_ton_theo_quy_cach AS
- SELECT q.san_pham_id,q.id AS quy_cach_id,q.ten_quy_cach,q.he_so_quy_doi,
-        k.so_luong_co_ban,(k.so_luong_co_ban/q.he_so_quy_doi)::bigint AS so_luong_co_the_ban
- FROM quy_cach_san_pham q JOIN so_luong_san_pham k ON k.san_pham_id=q.san_pham_id;
-CREATE VIEW v_doanh_thu_ngay AS
- SELECT (t.thoi_gian AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS ngay,
-        count(DISTINCT t.don_hang_id) AS so_don,sum(t.so_tien) AS tong_da_thu
- FROM thanh_toan t WHERE t.trang_thai='SUCCESS' GROUP BY 1;
-CREATE VIEW v_nhap_hang_da_xac_nhan AS
- SELECT d.don_ncc_id,o.nha_cung_cap_id,q.san_pham_id,
-        sum(c.so_luong_thuc_nhan::bigint*d.he_so_quy_doi) AS so_luong_co_ban_nhap,
-        sum(c.so_luong_thuc_nhan*c.gia_nhap_thuc_te) AS gia_tri_nhap
- FROM chi_tiet_lan_nhap c JOIN lan_nhap_hang l ON l.id=c.lan_nhap_id
- JOIN chi_tiet_don_ncc d ON d.id=c.ct_don_ncc_id
- JOIN don_dat_hang_ncc o ON o.id=d.don_ncc_id
- JOIN quy_cach_san_pham q ON q.id=d.quy_cach_id
- WHERE l.trang_thai='CONFIRMED' GROUP BY d.don_ncc_id,o.nha_cung_cap_id,q.san_pham_id;
 
--- ===== DU LIEU MAU AN TOAN: VAI TRO VA QUYEN =====
-INSERT INTO vai_tro(ma_vai_tro,ten_vai_tro,mo_ta) VALUES
- ('KHACH_HANG','Khách hàng','Mua hàng qua Website'),
- ('NHAN_VIEN','Nhân viên','Bán tại quầy, xử lý đơn và nhập hàng theo đơn NCC đã duyệt'),
- ('QUAN_TRI_VIEN','Quản trị viên','Có tất cả quyền nhân viên và nghiệp vụ quản trị');
-INSERT INTO quyen(ma_quyen,ten_quyen,ma_chuc_nang,hanh_dong) VALUES
- ('PRODUCT_READ','Tra cứu sản phẩm','BR1','READ'),
- ('PRODUCT_MANAGE','Quản lý danh mục sản phẩm','BR1','MANAGE'),
- ('PRODUCT_ADJUST','Điều chỉnh số lượng','BR1','ADJUST'),
- ('CATEGORY_READ','Tra cứu loại / thương hiệu','BR2','READ'),
- ('CATEGORY_MANAGE','Quản lý loại / thương hiệu','BR2','MANAGE'),
- ('CART_MANAGE','Giỏ hàng cá nhân','BR3','MANAGE'),
- ('PAYMENT_READ','Đối soát thanh toán','BR4','READ'),
- ('POS_PAYMENT','Thu tiền tại quầy','BR4','POS'),
- ('REFUND_MANAGE','Hoàn tiền','BR4','REFUND'),
- ('ORDER_READ','Tra cứu đơn','BR5','READ'),
- ('ORDER_UPDATE','Xử lý đơn online','BR5','UPDATE'),
- ('POS_SELL','Bán hàng tại quầy','BR5','POS'),
- ('INVOICE_READ','Tra cứu và in hóa đơn','BR6','READ'),
- ('INVOICE_REPORT','Thống kê hóa đơn','BR6','REPORT'),
- ('CUSTOMER_READ','Tra cứu khách hàng','BR7','READ'),
- ('CUSTOMER_SUPPORT','Chăm sóc khách hàng','BR7','SUPPORT'),
- ('CUSTOMER_LOCK','Khóa tài khoản khách hàng','BR7','LOCK'),
- ('STAFF_SELF','Hồ sơ cá nhân nhân viên','BR8','SELF'),
- ('STAFF_MANAGE','Quản lý nhân viên','BR8','MANAGE'),
- ('ROLE_MANAGE','Phân quyền','BR9','MANAGE'),
- ('REPORT_STOCK','Tra cứu tồn và lịch sử nhập','BR10','STOCK'),
- ('REPORT_ALL','Báo cáo quản trị','BR10','ALL'),
- ('PROMOTION_MANAGE','Quản lý khuyến mãi','BR11','MANAGE'),
- ('SUPPLIER_READ','Tra cứu nhà cung cấp','BR12','READ'),
- ('SUPPLIER_MANAGE','Quản lý nhà cung cấp','BR12','MANAGE'),
- ('IMPORT_CREATE','Lập đơn NCC','BR13','CREATE'),
- ('IMPORT_APPROVE','Duyệt đơn NCC','BR13','APPROVE'),
- ('IMPORT_RECEIVE','Xác nhận nhập','BR13','RECEIVE'),
- ('IMPORT_READ','Tra cứu đơn NCC và nhập','BR13','READ'),
- ('IMPORT_REPORT','Thống kê nhập hàng','BR13','REPORT');
--- Nhan vien khong co IMPORT_CREATE/APPROVE; QUAN_TRI_VIEN ke thua tat ca quyen nhan vien.
-INSERT INTO vai_tro_quyen(vai_tro_id,quyen_id)
-SELECT v.id,q.id FROM vai_tro v JOIN quyen q ON (
- (v.ma_vai_tro='NHAN_VIEN' AND q.ma_quyen IN (
-   'PRODUCT_READ','CATEGORY_READ','PAYMENT_READ','POS_PAYMENT','ORDER_READ','ORDER_UPDATE',
-   'POS_SELL','INVOICE_READ','CUSTOMER_READ','CUSTOMER_SUPPORT','STAFF_SELF','REPORT_STOCK',
-   'SUPPLIER_READ','IMPORT_RECEIVE','IMPORT_READ'))
- OR (v.ma_vai_tro='QUAN_TRI_VIEN' AND q.ma_quyen NOT IN ('CART_MANAGE'))
- OR (v.ma_vai_tro='KHACH_HANG' AND q.ma_quyen IN ('PRODUCT_READ','CATEGORY_READ','CART_MANAGE'))
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: backend_schema_migration; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.backend_schema_migration (
+    version character varying(100) NOT NULL,
+    applied_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-INSERT INTO loai_san_pham(ten,mo_ta) VALUES ('Nước ngọt có ga','Nước giải khát có ga'),('Nước suối','Nước tinh khiết'),('Trà đóng chai','Trà pha sẵn');
-INSERT INTO thuong_hieu(ten) VALUES ('Thương hiệu A'),('Thương hiệu B');
-INSERT INTO san_pham(loai_san_pham_id,thuong_hieu_id,sku,ten,dung_tich,loai_bao_bi)
-VALUES (1,1,'SP001','Nước ngọt vị cam 330ml','330ml','LON'),(2,2,'SP002','Nước suối 500ml','500ml','CHAI');
-INSERT INTO so_luong_san_pham(san_pham_id) SELECT id FROM san_pham ON CONFLICT DO NOTHING;
-INSERT INTO quy_cach_san_pham(san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,gia_von)
-VALUES (1,'Lon lẻ','LON',1,12000,8000),(1,'Lốc 6 lon','LOC',6,69000,48000),
-       (1,'Thùng 24 lon','THUNG',24,270000,192000),
-       (2,'Chai lẻ','CHAI',1,7000,4500),(2,'Thùng 24 chai','THUNG',24,160000,108000);
-COMMIT;
 
--- KIEM TRA SAU KHI CHAY:
--- SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';
--- SELECT * FROM v_ton_theo_quy_cach;
--- SELECT v.ma_vai_tro,q.ma_quyen FROM vai_tro_quyen vq
--- JOIN vai_tro v ON v.id=vq.vai_tro_id JOIN quyen q ON q.id=vq.quyen_id
--- WHERE q.ma_quyen IN ('IMPORT_CREATE','IMPORT_RECEIVE','IMPORT_APPROVE') ORDER BY 1,2;
+--
+-- Name: bien_dong_so_luong; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bien_dong_so_luong (
+    id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    loai character varying(30) NOT NULL,
+    nguon_id bigint NOT NULL,
+    so_luong_thay_doi bigint NOT NULL,
+    so_luong_truoc bigint NOT NULL,
+    so_luong_sau bigint NOT NULL,
+    thoi_diem timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT bien_dong_so_luong_check CHECK ((so_luong_sau = (so_luong_truoc + so_luong_thay_doi))),
+    CONSTRAINT bien_dong_so_luong_loai_check CHECK (((loai)::text = ANY ((ARRAY['BAN_ONLINE'::character varying, 'BAN_TAI_QUAY'::character varying, 'HUY_DON'::character varying, 'NHAP_HANG'::character varying, 'DIEU_CHINH'::character varying, 'CACH_LY_TRA_NCC'::character varying, 'HUY_TRA_NCC'::character varying])::text[]))),
+    CONSTRAINT bien_dong_so_luong_so_luong_sau_check CHECK ((so_luong_sau >= 0)),
+    CONSTRAINT bien_dong_so_luong_so_luong_thay_doi_check CHECK ((so_luong_thay_doi <> 0)),
+    CONSTRAINT bien_dong_so_luong_so_luong_truoc_check CHECK ((so_luong_truoc >= 0))
+);
+
+
+--
+-- Name: bien_dong_so_luong_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.bien_dong_so_luong ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.bien_dong_so_luong_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chi_tiet_don_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chi_tiet_don_hang (
+    id bigint NOT NULL,
+    don_hang_id bigint NOT NULL,
+    quy_cach_id bigint NOT NULL,
+    ten_san_pham character varying(255) NOT NULL,
+    ten_quy_cach character varying(60) NOT NULL,
+    so_luong integer NOT NULL,
+    he_so_quy_doi integer NOT NULL,
+    don_gia numeric(18,2) NOT NULL,
+    gia_von_don_vi numeric(18,2) NOT NULL,
+    thanh_tien numeric(18,2) GENERATED ALWAYS AS (((so_luong)::numeric * don_gia)) STORED,
+    CONSTRAINT chi_tiet_don_hang_don_gia_check CHECK ((don_gia >= (0)::numeric)),
+    CONSTRAINT chi_tiet_don_hang_gia_von_don_vi_check CHECK ((gia_von_don_vi >= (0)::numeric)),
+    CONSTRAINT chi_tiet_don_hang_he_so_quy_doi_check CHECK ((he_so_quy_doi > 0)),
+    CONSTRAINT chi_tiet_don_hang_so_luong_check CHECK ((so_luong > 0))
+);
+
+
+--
+-- Name: chi_tiet_don_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chi_tiet_don_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.chi_tiet_don_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chi_tiet_don_ncc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chi_tiet_don_ncc (
+    id bigint NOT NULL,
+    don_ncc_id bigint NOT NULL,
+    quy_cach_id bigint NOT NULL,
+    so_luong_dat integer NOT NULL,
+    he_so_quy_doi integer NOT NULL,
+    gia_nhap_du_kien numeric(18,2) NOT NULL,
+    CONSTRAINT chi_tiet_don_ncc_gia_nhap_du_kien_check CHECK ((gia_nhap_du_kien >= (0)::numeric)),
+    CONSTRAINT chi_tiet_don_ncc_he_so_quy_doi_check CHECK ((he_so_quy_doi > 0)),
+    CONSTRAINT chi_tiet_don_ncc_so_luong_dat_check CHECK ((so_luong_dat > 0))
+);
+
+
+--
+-- Name: chi_tiet_don_ncc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chi_tiet_don_ncc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.chi_tiet_don_ncc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chi_tiet_gio_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chi_tiet_gio_hang (
+    id bigint NOT NULL,
+    gio_hang_id bigint NOT NULL,
+    quy_cach_id bigint NOT NULL,
+    so_luong integer NOT NULL,
+    gia_tam_tinh numeric(18,2) NOT NULL,
+    CONSTRAINT chi_tiet_gio_hang_gia_tam_tinh_check CHECK ((gia_tam_tinh >= (0)::numeric)),
+    CONSTRAINT chi_tiet_gio_hang_so_luong_check CHECK ((so_luong > 0))
+);
+
+
+--
+-- Name: chi_tiet_gio_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chi_tiet_gio_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.chi_tiet_gio_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chi_tiet_hoa_don; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chi_tiet_hoa_don (
+    id bigint NOT NULL,
+    hoa_don_id bigint NOT NULL,
+    chi_tiet_don_hang_id bigint NOT NULL,
+    ten_san_pham character varying(255) NOT NULL,
+    ten_quy_cach character varying(60) NOT NULL,
+    so_luong integer NOT NULL,
+    don_gia numeric(18,2) NOT NULL,
+    thanh_tien numeric(18,2) GENERATED ALWAYS AS (((so_luong)::numeric * don_gia)) STORED,
+    CONSTRAINT chi_tiet_hoa_don_don_gia_check CHECK ((don_gia >= (0)::numeric)),
+    CONSTRAINT chi_tiet_hoa_don_so_luong_check CHECK ((so_luong > 0))
+);
+
+
+--
+-- Name: chi_tiet_hoa_don_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chi_tiet_hoa_don ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.chi_tiet_hoa_don_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chi_tiet_lan_nhap; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chi_tiet_lan_nhap (
+    id bigint NOT NULL,
+    lan_nhap_id bigint NOT NULL,
+    don_ncc_id bigint NOT NULL,
+    ct_don_ncc_id bigint NOT NULL,
+    so_luong_thuc_nhan integer NOT NULL,
+    so_luong_loai integer DEFAULT 0 NOT NULL,
+    chenh_lech integer DEFAULT 0 NOT NULL,
+    gia_nhap_thuc_te numeric(18,2) NOT NULL,
+    ly_do_loai character varying(2000),
+    CONSTRAINT chi_tiet_lan_nhap_gia_nhap_thuc_te_check CHECK ((gia_nhap_thuc_te >= (0)::numeric)),
+    CONSTRAINT chi_tiet_lan_nhap_so_luong_loai_check CHECK ((so_luong_loai >= 0)),
+    CONSTRAINT chi_tiet_lan_nhap_so_luong_thuc_nhan_check CHECK ((so_luong_thuc_nhan >= 0))
+);
+
+
+--
+-- Name: chi_tiet_lan_nhap_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chi_tiet_lan_nhap ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.chi_tiet_lan_nhap_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: cong_no_ncc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cong_no_ncc (
+    id bigint NOT NULL,
+    lan_nhap_id bigint NOT NULL,
+    so_tien_phai_tra numeric(18,2) NOT NULL,
+    so_tien_con_no numeric(18,2) NOT NULL,
+    han_thanh_toan date,
+    trang_thai character varying(20) DEFAULT 'CHUA_TRA'::character varying NOT NULL,
+    CONSTRAINT cong_no_ncc_check CHECK ((so_tien_con_no <= so_tien_phai_tra)),
+    CONSTRAINT cong_no_ncc_so_tien_con_no_check CHECK ((so_tien_con_no >= (0)::numeric)),
+    CONSTRAINT cong_no_ncc_so_tien_phai_tra_check CHECK ((so_tien_phai_tra >= (0)::numeric)),
+    CONSTRAINT cong_no_ncc_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['CHUA_TRA'::character varying, 'TRA_MOT_PHAN'::character varying, 'DA_TRA'::character varying])::text[])))
+);
+
+
+--
+-- Name: cong_no_ncc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cong_no_ncc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.cong_no_ncc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: danh_gia_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.danh_gia_san_pham (
+    id bigint NOT NULL,
+    khach_hang_id bigint NOT NULL,
+    chi_tiet_don_hang_id bigint NOT NULL,
+    so_sao integer NOT NULL,
+    noi_dung text,
+    trang_thai character varying(20) DEFAULT 'PENDING'::character varying NOT NULL,
+    ngay_danh_gia timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT danh_gia_san_pham_so_sao_check CHECK (((so_sao >= 1) AND (so_sao <= 5))),
+    CONSTRAINT danh_gia_san_pham_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'HIDDEN'::character varying])::text[])))
+);
+
+
+--
+-- Name: danh_gia_san_pham_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.danh_gia_san_pham ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.danh_gia_san_pham_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: dia_chi_giao_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.dia_chi_giao_hang (
+    id bigint NOT NULL,
+    khach_hang_id bigint NOT NULL,
+    ten_nguoi_nhan character varying(150) NOT NULL,
+    so_dien_thoai character varying(25),
+    dia_chi text NOT NULL,
+    phuong_xa character varying(150),
+    quan_huyen character varying(150),
+    tinh_thanh character varying(150),
+    mac_dinh boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: dia_chi_giao_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.dia_chi_giao_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.dia_chi_giao_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: dieu_chinh_so_luong; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.dieu_chinh_so_luong (
+    id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    quy_cach_id bigint NOT NULL,
+    nguoi_dieu_chinh_id bigint NOT NULL,
+    so_luong_truoc bigint NOT NULL,
+    so_luong_sau bigint NOT NULL,
+    chenh_lech bigint GENERATED ALWAYS AS ((so_luong_sau - so_luong_truoc)) STORED,
+    ly_do text NOT NULL,
+    thoi_diem timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT dieu_chinh_so_luong_ly_do_check CHECK ((length(TRIM(BOTH FROM ly_do)) > 0)),
+    CONSTRAINT dieu_chinh_so_luong_so_luong_sau_check CHECK ((so_luong_sau >= 0)),
+    CONSTRAINT dieu_chinh_so_luong_so_luong_truoc_check CHECK ((so_luong_truoc >= 0))
+);
+
+
+--
+-- Name: dieu_chinh_so_luong_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.dieu_chinh_so_luong ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.dieu_chinh_so_luong_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: don_dat_hang_ncc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.don_dat_hang_ncc (
+    id bigint NOT NULL,
+    ma_don_nhap character varying(50) NOT NULL,
+    nha_cung_cap_id bigint NOT NULL,
+    nguoi_lap_id bigint NOT NULL,
+    nguoi_duyet_id bigint,
+    ngay_dat timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_giao_du_kien date,
+    trang_thai character varying(30) DEFAULT 'CHO_DUYET'::character varying NOT NULL,
+    ly_do_tu_choi text,
+    ghi_chu text,
+    ngay_duyet timestamp with time zone,
+    CONSTRAINT don_dat_hang_ncc_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['CHO_DUYET'::character varying, 'DA_DUYET'::character varying, 'TU_CHOI'::character varying, 'DANG_GIAO'::character varying, 'DA_NHAN_MOT_PHAN'::character varying, 'DA_NHAN_DU'::character varying, 'DA_HUY'::character varying])::text[])))
+);
+
+
+--
+-- Name: don_dat_hang_ncc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.don_dat_hang_ncc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.don_dat_hang_ncc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: don_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.don_hang (
+    id bigint NOT NULL,
+    ma_don character varying(50) NOT NULL,
+    kenh_ban character varying(12) NOT NULL,
+    khach_hang_id bigint,
+    nhan_vien_xu_ly_id bigint,
+    ngay_dat timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_hoan_tat timestamp with time zone,
+    trang_thai character varying(25) NOT NULL,
+    phi_van_chuyen numeric(18,2) DEFAULT 0 NOT NULL,
+    giam_gia numeric(18,2) DEFAULT 0 NOT NULL,
+    tong_tien numeric(18,2) DEFAULT 0 NOT NULL,
+    ghi_chu text,
+    ten_nguoi_nhan character varying(150),
+    sdt_nguoi_nhan character varying(25),
+    dia_chi_nhan text,
+    thoi_gian_nhan_du_kien timestamp with time zone,
+    da_tru_so_luong boolean DEFAULT false NOT NULL,
+    ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    khuyen_mai_id bigint,
+    CONSTRAINT don_hang_check CHECK (((((kenh_ban)::text = 'ONLINE'::text) AND (khach_hang_id IS NOT NULL) AND (dia_chi_nhan IS NOT NULL)) OR (((kenh_ban)::text = 'TAI_QUAY'::text) AND (nhan_vien_xu_ly_id IS NOT NULL)))),
+    CONSTRAINT don_hang_check1 CHECK ((((kenh_ban)::text <> 'TAI_QUAY'::text) OR ((trang_thai)::text = ANY ((ARRAY['HOAN_TAT'::character varying, 'DA_HUY'::character varying])::text[])))),
+    CONSTRAINT don_hang_giam_gia_check CHECK ((giam_gia >= (0)::numeric)),
+    CONSTRAINT don_hang_kenh_ban_check CHECK (((kenh_ban)::text = ANY ((ARRAY['ONLINE'::character varying, 'TAI_QUAY'::character varying])::text[]))),
+    CONSTRAINT don_hang_phi_van_chuyen_check CHECK ((phi_van_chuyen >= (0)::numeric)),
+    CONSTRAINT don_hang_tong_tien_check CHECK ((tong_tien >= (0)::numeric)),
+    CONSTRAINT don_hang_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['CHO_XAC_NHAN'::character varying, 'DANG_CHUAN_BI'::character varying, 'DANG_GIAO'::character varying, 'DA_GIAO'::character varying, 'HOAN_TAT'::character varying, 'DA_HUY'::character varying, 'TU_CHOI'::character varying])::text[])))
+);
+
+
+--
+-- Name: don_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.don_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.don_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: giay_to_ncc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.giay_to_ncc (
+    id bigint NOT NULL,
+    nha_cung_cap_id bigint NOT NULL,
+    loai_giay character varying(100) NOT NULL,
+    so_giay character varying(120) NOT NULL,
+    ngay_cap date,
+    ngay_het_han date,
+    tep_dinh_kem text,
+    CONSTRAINT giay_to_ncc_check CHECK (((ngay_het_han IS NULL) OR (ngay_cap IS NULL) OR (ngay_het_han >= ngay_cap)))
+);
+
+
+--
+-- Name: giay_to_ncc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.giay_to_ncc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.giay_to_ncc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: gio_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.gio_hang (
+    id bigint NOT NULL,
+    khach_hang_id bigint NOT NULL,
+    ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: gio_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.gio_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.gio_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: hinh_anh_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hinh_anh_san_pham (
+    id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    duong_dan text NOT NULL,
+    anh_chinh boolean DEFAULT false NOT NULL,
+    thu_tu integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: hinh_anh_san_pham_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hinh_anh_san_pham ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.hinh_anh_san_pham_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: hoa_don; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hoa_don (
+    id bigint NOT NULL,
+    don_hang_id bigint NOT NULL,
+    nguoi_lap_id bigint,
+    ma_hoa_don character varying(50) NOT NULL,
+    ngay_lap timestamp with time zone DEFAULT now() NOT NULL,
+    kenh_ban character varying(12) NOT NULL,
+    tong_thanh_toan numeric(18,2) NOT NULL,
+    phi_van_chuyen numeric(18,2) DEFAULT 0 NOT NULL,
+    giam_gia numeric(18,2) DEFAULT 0 NOT NULL,
+    trang_thai character varying(20) DEFAULT 'ISSUED'::character varying NOT NULL,
+    CONSTRAINT hoa_don_kenh_ban_check CHECK (((kenh_ban)::text = ANY ((ARRAY['ONLINE'::character varying, 'TAI_QUAY'::character varying])::text[]))),
+    CONSTRAINT hoa_don_tong_thanh_toan_check CHECK ((tong_thanh_toan >= (0)::numeric)),
+    CONSTRAINT hoa_don_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['ISSUED'::character varying, 'PAID'::character varying, 'CANCELLED'::character varying])::text[])))
+);
+
+
+--
+-- Name: hoa_don_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hoa_don ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.hoa_don_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: hoan_tien; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hoan_tien (
+    id bigint NOT NULL,
+    thanh_toan_id bigint NOT NULL,
+    nguoi_xu_ly_id bigint NOT NULL,
+    ly_do text NOT NULL,
+    so_tien numeric(18,2) NOT NULL,
+    trang_thai character varying(20) DEFAULT 'PENDING'::character varying NOT NULL,
+    ngay_yeu_cau timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_hoan timestamp with time zone,
+    CONSTRAINT hoan_tien_so_tien_check CHECK ((so_tien > (0)::numeric)),
+    CONSTRAINT hoan_tien_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'COMPLETED'::character varying, 'REJECTED'::character varying])::text[])))
+);
+
+
+--
+-- Name: hoan_tien_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hoan_tien ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.hoan_tien_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: khach_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.khach_hang (
+    id bigint NOT NULL,
+    tai_khoan_id bigint NOT NULL,
+    ho_ten character varying(150) NOT NULL,
+    dien_thoai character varying(25),
+    anh_dai_dien text,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: khach_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.khach_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.khach_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: khuyen_mai; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.khuyen_mai (
+    id bigint NOT NULL,
+    ma_code character varying(60),
+    ten character varying(150) NOT NULL,
+    mo_ta text,
+    loai_giam character varying(15) NOT NULL,
+    gia_tri_giam numeric(18,2) NOT NULL,
+    giam_toi_da numeric(18,2),
+    don_toi_thieu numeric(18,2) DEFAULT 0 NOT NULL,
+    bat_dau timestamp with time zone NOT NULL,
+    ket_thuc timestamp with time zone NOT NULL,
+    gioi_han_su_dung integer,
+    gioi_han_moi_khach integer,
+    pham_vi_ap_dung character varying(20) DEFAULT 'ALL'::character varying NOT NULL,
+    trang_thai character varying(20) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    CONSTRAINT khuyen_mai_check CHECK ((ket_thuc > bat_dau)),
+    CONSTRAINT khuyen_mai_check1 CHECK ((((loai_giam)::text <> 'PERCENT'::text) OR (gia_tri_giam <= (100)::numeric))),
+    CONSTRAINT khuyen_mai_don_toi_thieu_check CHECK ((don_toi_thieu >= (0)::numeric)),
+    CONSTRAINT khuyen_mai_gia_tri_giam_check CHECK ((gia_tri_giam >= (0)::numeric)),
+    CONSTRAINT khuyen_mai_giam_toi_da_check CHECK ((giam_toi_da >= (0)::numeric)),
+    CONSTRAINT khuyen_mai_gioi_han_moi_khach_check CHECK ((gioi_han_moi_khach >= 0)),
+    CONSTRAINT khuyen_mai_gioi_han_su_dung_check CHECK ((gioi_han_su_dung >= 0)),
+    CONSTRAINT khuyen_mai_loai_giam_check CHECK (((loai_giam)::text = ANY ((ARRAY['PERCENT'::character varying, 'FIXED'::character varying])::text[]))),
+    CONSTRAINT khuyen_mai_pham_vi_ap_dung_check CHECK (((pham_vi_ap_dung)::text = ANY ((ARRAY['ALL'::character varying, 'PRODUCT'::character varying, 'CATEGORY'::character varying, 'BRAND'::character varying])::text[]))),
+    CONSTRAINT khuyen_mai_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['ACTIVE'::character varying, 'INACTIVE'::character varying])::text[])))
+);
+
+
+--
+-- Name: khuyen_mai_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.khuyen_mai ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.khuyen_mai_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lan_nhap_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lan_nhap_hang (
+    id bigint NOT NULL,
+    don_ncc_id bigint NOT NULL,
+    nguoi_nhan_id bigint NOT NULL,
+    ngay_nhap timestamp with time zone DEFAULT now() NOT NULL,
+    trang_thai character varying(20) DEFAULT 'DRAFT'::character varying NOT NULL,
+    ngay_xac_nhan timestamp with time zone,
+    ghi_chu text,
+    CONSTRAINT lan_nhap_hang_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['DRAFT'::character varying, 'CONFIRMED'::character varying, 'CANCELLED'::character varying])::text[])))
+);
+
+
+--
+-- Name: lan_nhap_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lan_nhap_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.lan_nhap_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lich_su_hoa_don; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lich_su_hoa_don (
+    id bigint NOT NULL,
+    hoa_don_id bigint NOT NULL,
+    tai_khoan_thuc_hien_id bigint,
+    trang_thai_cu character varying(20),
+    trang_thai_moi character varying(20) NOT NULL,
+    ly_do text NOT NULL,
+    thoi_gian timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: lich_su_hoa_don_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lich_su_hoa_don ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.lich_su_hoa_don_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lich_su_trang_thai_don; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lich_su_trang_thai_don (
+    id bigint NOT NULL,
+    don_hang_id bigint NOT NULL,
+    tai_khoan_thuc_hien_id bigint,
+    trang_thai_cu character varying(25),
+    trang_thai_moi character varying(25) NOT NULL,
+    ghi_chu text,
+    thoi_gian timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: lich_su_trang_thai_don_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lich_su_trang_thai_don ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.lich_su_trang_thai_don_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lien_he_khach_hang; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lien_he_khach_hang (
+    id bigint NOT NULL,
+    khach_hang_id bigint,
+    ho_ten character varying(150),
+    email character varying(255),
+    dien_thoai character varying(25),
+    noi_dung text NOT NULL,
+    phan_hoi text,
+    nhan_vien_phan_hoi_id bigint,
+    trang_thai character varying(20) DEFAULT 'MOI'::character varying NOT NULL,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_phan_hoi timestamp with time zone,
+    CONSTRAINT lien_he_khach_hang_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['MOI'::character varying, 'DANG_XU_LY'::character varying, 'DA_PHAN_HOI'::character varying, 'DA_DONG'::character varying])::text[])))
+);
+
+
+--
+-- Name: lien_he_khach_hang_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lien_he_khach_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.lien_he_khach_hang_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: loai_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.loai_san_pham (
+    id bigint NOT NULL,
+    ten character varying(150) NOT NULL,
+    mo_ta text,
+    hinh_anh text,
+    hien_thi boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: loai_san_pham_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.loai_san_pham ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.loai_san_pham_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: nha_cung_cap; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.nha_cung_cap (
+    id bigint NOT NULL,
+    ten character varying(255) NOT NULL,
+    ma_so_thue character varying(30),
+    nguoi_lien_he character varying(150),
+    dien_thoai character varying(25),
+    email character varying(255),
+    dia_chi text,
+    trang_thai character varying(25) DEFAULT 'HOP_TAC'::character varying NOT NULL,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
+    loai_nha_cung_cap character varying(30) DEFAULT 'DOANH_NGHIEP'::character varying NOT NULL,
+    trang_thai_xac_minh character varying(30) DEFAULT 'CHUA_XAC_MINH'::character varying NOT NULL,
+    ghi_chu_xac_minh character varying(2000),
+    nguoi_xac_minh_id bigint,
+    thoi_diem_xac_minh timestamp with time zone,
+    CONSTRAINT nha_cung_cap_loai_nha_cung_cap_check CHECK (((loai_nha_cung_cap)::text = ANY ((ARRAY['DOANH_NGHIEP'::character varying, 'HO_KINH_DOANH'::character varying, 'CA_NHAN'::character varying])::text[]))),
+    CONSTRAINT nha_cung_cap_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['HOP_TAC'::character varying, 'NGUNG_HOP_TAC'::character varying])::text[]))),
+    CONSTRAINT nha_cung_cap_trang_thai_xac_minh_check CHECK (((trang_thai_xac_minh)::text = ANY ((ARRAY['CHUA_XAC_MINH'::character varying, 'DA_XAC_MINH'::character varying, 'CAN_KIEM_TRA_LAI'::character varying])::text[])))
+);
+
+
+--
+-- Name: nha_cung_cap_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.nha_cung_cap ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.nha_cung_cap_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: nha_cung_cap_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.nha_cung_cap_san_pham (
+    nha_cung_cap_id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    gia_nhap_tham_khao numeric(18,2),
+    CONSTRAINT nha_cung_cap_san_pham_gia_nhap_tham_khao_check CHECK ((gia_nhap_tham_khao >= (0)::numeric))
+);
+
+
+--
+-- Name: nhan_vien; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.nhan_vien (
+    id bigint NOT NULL,
+    tai_khoan_id bigint NOT NULL,
+    ma_nhan_vien character varying(30) NOT NULL,
+    ho_ten character varying(150) NOT NULL,
+    ngay_sinh date,
+    gioi_tinh character varying(15),
+    dien_thoai character varying(25),
+    email_lien_he character varying(255),
+    dia_chi text,
+    chuc_vu character varying(100),
+    ngay_vao_lam date,
+    trang_thai character varying(20) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    CONSTRAINT nhan_vien_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['ACTIVE'::character varying, 'ON_LEAVE'::character varying, 'RESIGNED'::character varying])::text[])))
+);
+
+
+--
+-- Name: nhan_vien_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.nhan_vien ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.nhan_vien_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: nhat_ky_hoat_dong; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.nhat_ky_hoat_dong (
+    id bigint NOT NULL,
+    tai_khoan_id bigint,
+    hanh_dong character varying(160) NOT NULL,
+    doi_tuong character varying(100),
+    doi_tuong_id bigint,
+    du_lieu_thay_doi jsonb,
+    thoi_diem timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: nhat_ky_hoat_dong_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.nhat_ky_hoat_dong ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.nhat_ky_hoat_dong_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: pham_vi_khuyen_mai; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pham_vi_khuyen_mai (
+    id bigint NOT NULL,
+    khuyen_mai_id bigint NOT NULL,
+    san_pham_id bigint,
+    loai_san_pham_id bigint,
+    thuong_hieu_id bigint,
+    CONSTRAINT pham_vi_khuyen_mai_check CHECK ((num_nonnulls(san_pham_id, loai_san_pham_id, thuong_hieu_id) = 1))
+);
+
+
+--
+-- Name: pham_vi_khuyen_mai_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pham_vi_khuyen_mai ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.pham_vi_khuyen_mai_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: phien_xac_thuc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.phien_xac_thuc (
+    id bigint NOT NULL,
+    tai_khoan_id bigint NOT NULL,
+    token_hash text NOT NULL,
+    het_han timestamp with time zone NOT NULL,
+    da_thu_hoi boolean DEFAULT false NOT NULL,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: phien_xac_thuc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.phien_xac_thuc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.phien_xac_thuc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: quy_cach_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.quy_cach_san_pham (
+    id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    ten_quy_cach character varying(60) NOT NULL,
+    don_vi_tinh character varying(30) NOT NULL,
+    he_so_quy_doi integer NOT NULL,
+    gia_ban numeric(18,2) NOT NULL,
+    gia_von numeric(18,2) DEFAULT 0 NOT NULL,
+    dang_ban boolean DEFAULT true NOT NULL,
+    CONSTRAINT quy_cach_san_pham_gia_ban_check CHECK ((gia_ban >= (0)::numeric)),
+    CONSTRAINT quy_cach_san_pham_gia_von_check CHECK ((gia_von >= (0)::numeric)),
+    CONSTRAINT quy_cach_san_pham_he_so_quy_doi_check CHECK ((he_so_quy_doi > 0))
+);
+
+
+--
+-- Name: quy_cach_san_pham_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.quy_cach_san_pham ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.quy_cach_san_pham_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: quyen; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.quyen (
+    id bigint NOT NULL,
+    ma_quyen character varying(100) NOT NULL,
+    ten_quyen character varying(150) NOT NULL,
+    ma_chuc_nang character varying(30) NOT NULL,
+    hanh_dong character varying(30) NOT NULL,
+    mo_ta text
+);
+
+
+--
+-- Name: quyen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.quyen ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.quyen_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.san_pham (
+    id bigint NOT NULL,
+    loai_san_pham_id bigint NOT NULL,
+    thuong_hieu_id bigint NOT NULL,
+    sku character varying(80) NOT NULL,
+    ten character varying(255) NOT NULL,
+    mo_ta text,
+    thanh_phan text,
+    dinh_duong text,
+    xuat_xu character varying(150),
+    dung_tich character varying(80),
+    loai_bao_bi character varying(40),
+    huong_vi character varying(100),
+    so_ngay_han_dung integer,
+    huong_dan_bao_quan text,
+    trang_thai character varying(30) DEFAULT 'DANG_BAN'::character varying NOT NULL,
+    hien_thi boolean DEFAULT true NOT NULL,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT san_pham_so_ngay_han_dung_check CHECK ((so_ngay_han_dung > 0)),
+    CONSTRAINT san_pham_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['DANG_BAN'::character varying, 'HET_HANG'::character varying, 'NGUNG_KINH_DOANH'::character varying])::text[])))
+);
+
+
+--
+-- Name: san_pham_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.san_pham ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.san_pham_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: san_pham_yeu_thich; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.san_pham_yeu_thich (
+    khach_hang_id bigint NOT NULL,
+    san_pham_id bigint NOT NULL,
+    ngay_them timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: so_luong_san_pham; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.so_luong_san_pham (
+    san_pham_id bigint NOT NULL,
+    so_luong_co_ban bigint DEFAULT 0 NOT NULL,
+    nguong_canh_bao bigint DEFAULT 10 NOT NULL,
+    ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT so_luong_san_pham_nguong_canh_bao_check CHECK ((nguong_canh_bao >= 0)),
+    CONSTRAINT so_luong_san_pham_so_luong_co_ban_check CHECK ((so_luong_co_ban >= 0))
+);
+
+
+--
+-- Name: su_dung_khuyen_mai; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.su_dung_khuyen_mai (
+    id bigint NOT NULL,
+    khuyen_mai_id bigint NOT NULL,
+    khach_hang_id bigint,
+    don_hang_id bigint NOT NULL,
+    so_tien_giam numeric(18,2) NOT NULL,
+    trang_thai character varying(20) DEFAULT 'APPLIED'::character varying NOT NULL,
+    ngay_su_dung timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT su_dung_khuyen_mai_so_tien_giam_check CHECK ((so_tien_giam >= (0)::numeric)),
+    CONSTRAINT su_dung_khuyen_mai_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['APPLIED'::character varying, 'REVERSED'::character varying])::text[])))
+);
+
+
+--
+-- Name: su_dung_khuyen_mai_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.su_dung_khuyen_mai ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.su_dung_khuyen_mai_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: tai_khoan; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tai_khoan (
+    id bigint NOT NULL,
+    email character varying(255) NOT NULL,
+    mat_khau_hash text NOT NULL,
+    trang_thai character varying(20) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    email_da_xac_thuc boolean DEFAULT false NOT NULL,
+    so_lan_dang_nhap_sai integer DEFAULT 0 NOT NULL,
+    khoa_den timestamp with time zone,
+    ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
+    ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tai_khoan_so_lan_dang_nhap_sai_check CHECK ((so_lan_dang_nhap_sai >= 0)),
+    CONSTRAINT tai_khoan_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['ACTIVE'::character varying, 'LOCKED'::character varying, 'DISABLED'::character varying])::text[])))
+);
+
+
+--
+-- Name: tai_khoan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.tai_khoan ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.tai_khoan_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: tai_khoan_vai_tro; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tai_khoan_vai_tro (
+    tai_khoan_id bigint NOT NULL,
+    vai_tro_id bigint NOT NULL
+);
+
+
+--
+-- Name: thanh_toan; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.thanh_toan (
+    id bigint NOT NULL,
+    don_hang_id bigint NOT NULL,
+    phuong_thuc character varying(30) NOT NULL,
+    ma_giao_dich character varying(120),
+    idempotency_key character varying(120),
+    so_tien numeric(18,2) NOT NULL,
+    trang_thai character varying(20) DEFAULT 'PENDING'::character varying NOT NULL,
+    thoi_gian timestamp with time zone DEFAULT now() NOT NULL,
+    thong_tin_cong jsonb,
+    CONSTRAINT thanh_toan_phuong_thuc_check CHECK (((phuong_thuc)::text = ANY ((ARRAY['COD'::character varying, 'CASH'::character varying, 'BANK_TRANSFER'::character varying, 'QR'::character varying, 'MOMO'::character varying, 'VNPAY'::character varying, 'ZALOPAY'::character varying, 'CARD'::character varying])::text[]))),
+    CONSTRAINT thanh_toan_so_tien_check CHECK ((so_tien >= (0)::numeric)),
+    CONSTRAINT thanh_toan_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['PENDING'::character varying, 'SUCCESS'::character varying, 'FAILED'::character varying, 'CANCELLED'::character varying, 'REFUNDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: thanh_toan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.thanh_toan ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.thanh_toan_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: thanh_toan_ncc; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.thanh_toan_ncc (
+    id bigint NOT NULL,
+    cong_no_id bigint NOT NULL,
+    so_tien numeric(18,2) NOT NULL,
+    phuong_thuc character varying(30) NOT NULL,
+    ma_tham_chieu character varying(120),
+    ngay_thanh_toan timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT thanh_toan_ncc_so_tien_check CHECK ((so_tien > (0)::numeric))
+);
+
+
+--
+-- Name: thanh_toan_ncc_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.thanh_toan_ncc ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.thanh_toan_ncc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: thuong_hieu; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.thuong_hieu (
+    id bigint NOT NULL,
+    ten character varying(150) NOT NULL,
+    logo text,
+    mo_ta text,
+    hien_thi boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: thuong_hieu_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.thuong_hieu ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.thuong_hieu_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: uu_dai_so_luong; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.uu_dai_so_luong (
+    id bigint NOT NULL,
+    khuyen_mai_id bigint NOT NULL,
+    quy_cach_id bigint,
+    so_luong_mua integer NOT NULL,
+    so_luong_tang integer DEFAULT 0 NOT NULL,
+    ghi_chu_combo text,
+    CONSTRAINT uu_dai_so_luong_so_luong_mua_check CHECK ((so_luong_mua > 0)),
+    CONSTRAINT uu_dai_so_luong_so_luong_tang_check CHECK ((so_luong_tang >= 0))
+);
+
+
+--
+-- Name: uu_dai_so_luong_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.uu_dai_so_luong ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.uu_dai_so_luong_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: v_doanh_thu_ngay; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_doanh_thu_ngay AS
+ SELECT ((thoi_gian AT TIME ZONE 'Asia/Ho_Chi_Minh'::text))::date AS ngay,
+    count(DISTINCT don_hang_id) AS so_don,
+    sum(so_tien) AS tong_da_thu
+   FROM public.thanh_toan t
+  WHERE ((trang_thai)::text = 'SUCCESS'::text)
+  GROUP BY (((thoi_gian AT TIME ZONE 'Asia/Ho_Chi_Minh'::text))::date);
+
+
+--
+-- Name: v_nhap_hang_da_xac_nhan; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_nhap_hang_da_xac_nhan AS
+ SELECT d.don_ncc_id,
+    o.nha_cung_cap_id,
+    q.san_pham_id,
+    sum(((c.so_luong_thuc_nhan)::bigint * d.he_so_quy_doi)) AS so_luong_co_ban_nhap,
+    sum(((c.so_luong_thuc_nhan)::numeric * c.gia_nhap_thuc_te)) AS gia_tri_nhap
+   FROM ((((public.chi_tiet_lan_nhap c
+     JOIN public.lan_nhap_hang l ON ((l.id = c.lan_nhap_id)))
+     JOIN public.chi_tiet_don_ncc d ON ((d.id = c.ct_don_ncc_id)))
+     JOIN public.don_dat_hang_ncc o ON ((o.id = d.don_ncc_id)))
+     JOIN public.quy_cach_san_pham q ON ((q.id = d.quy_cach_id)))
+  WHERE ((l.trang_thai)::text = 'CONFIRMED'::text)
+  GROUP BY d.don_ncc_id, o.nha_cung_cap_id, q.san_pham_id;
+
+
+--
+-- Name: v_ton_san_pham; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_ton_san_pham AS
+ SELECT s.id AS san_pham_id,
+    s.sku,
+    s.ten,
+    k.so_luong_co_ban,
+    k.nguong_canh_bao,
+    (k.so_luong_co_ban <= k.nguong_canh_bao) AS canh_bao
+   FROM (public.san_pham s
+     JOIN public.so_luong_san_pham k ON ((k.san_pham_id = s.id)));
+
+
+--
+-- Name: v_ton_theo_quy_cach; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_ton_theo_quy_cach AS
+ SELECT q.san_pham_id,
+    q.id AS quy_cach_id,
+    q.ten_quy_cach,
+    q.he_so_quy_doi,
+    k.so_luong_co_ban,
+    (k.so_luong_co_ban / q.he_so_quy_doi) AS so_luong_co_the_ban
+   FROM (public.quy_cach_san_pham q
+     JOIN public.so_luong_san_pham k ON ((k.san_pham_id = q.san_pham_id)));
+
+
+--
+-- Name: vai_tro; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vai_tro (
+    id bigint NOT NULL,
+    ma_vai_tro character varying(30) NOT NULL,
+    ten_vai_tro character varying(100) NOT NULL,
+    mo_ta text,
+    CONSTRAINT vai_tro_ma_vai_tro_check CHECK (((ma_vai_tro)::text = ANY ((ARRAY['KHACH_HANG'::character varying, 'NHAN_VIEN'::character varying, 'QUAN_TRI_VIEN'::character varying])::text[])))
+);
+
+
+--
+-- Name: vai_tro_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.vai_tro ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.vai_tro_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: vai_tro_quyen; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vai_tro_quyen (
+    vai_tro_id bigint NOT NULL,
+    quyen_id bigint NOT NULL
+);
+
+
+--
+-- Data for Name: backend_schema_migration; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.backend_schema_migration (version, applied_at) VALUES
+	('20261104_supplier_returns_cost', '2026-11-04 12:00:57.363459+07'),
+	('20261104_receiving_disposition', '2026-11-04 12:30:49.926829+07'),
+	('20261104_remove_warehouse_returns', '2026-11-04 14:26:44.024912+07');
+
+
+--
+-- Data for Name: bien_dong_so_luong; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.bien_dong_so_luong (id, san_pham_id, loai, nguon_id, so_luong_thay_doi, so_luong_truoc, so_luong_sau, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+	(1, 27, 'DIEU_CHINH', 1, 30, 0, 30, '2026-11-03 16:15:54.103561+07'),
+	(2, 26, 'DIEU_CHINH', 2, 20, 0, 20, '2026-11-03 16:17:34.908471+07'),
+	(3, 27, 'BAN_ONLINE', 1, -10, 30, 20, '2026-11-03 16:38:23.783332+07'),
+	(4, 21, 'NHAP_HANG', 1, 98, 0, 98, '2026-11-04 10:59:33.262019+07'),
+	(5, 21, 'NHAP_HANG', 2, 100, 98, 198, '2026-11-04 12:12:20.214256+07'),
+	(6, 21, 'CACH_LY_TRA_NCC', 1, -5, 198, 193, '2026-11-04 12:12:29.060721+07'),
+	(7, 25, 'NHAP_HANG', 3, 90, 0, 90, '2026-11-04 12:14:43.161711+07'),
+	(8, 21, 'DIEU_CHINH', 3, -145, 193, 48, '2026-11-04 12:59:11.791323+07'),
+	(9, 17, 'NHAP_HANG', 4, 24, 0, 24, '2026-11-04 13:00:35.391049+07'),
+	(10, 20, 'NHAP_HANG', 5, 30, 0, 30, '2026-11-04 13:01:27.226165+07'),
+	(11, 20, 'BAN_ONLINE', 2, -10, 30, 20, '2026-11-04 13:04:11.849425+07'),
+	(12, 22, 'NHAP_HANG', 6, 36, 0, 36, '2026-11-04 13:15:49.496649+07'),
+	(13, 24, 'NHAP_HANG', 8, 120, 0, 120, '2026-11-15 14:04:27.396664+07'),
+	(14, 24, 'DIEU_CHINH', 4, -110, 120, 10, '2026-11-15 14:08:01.077523+07'),
+	(15, 25, 'DIEU_CHINH', 5, -80, 90, 10, '2026-11-15 14:08:09.629563+07'),
+	(16, 26, 'NHAP_HANG', 10, 120, 20, 140, '2026-11-15 14:09:48.91325+07'),
+	(17, 22, 'BAN_ONLINE', 3, -8, 36, 28, '2026-11-04 14:35:34.329885+07'),
+	(18, 22, 'HUY_DON', 3, 8, 28, 36, '2026-11-04 14:37:04.762617+07'),
+	(19, 26, 'DIEU_CHINH', 6, -90, 140, 50, '2026-11-04 14:38:17.917651+07');
+
+
+--
+-- Data for Name: chi_tiet_don_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.chi_tiet_don_hang (id, don_hang_id, quy_cach_id, ten_san_pham, ten_quy_cach, so_luong, he_so_quy_doi, don_gia, gia_von_don_vi) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 1, 8000.00, 0.00),
+	(2, 2, 6, 'Red Bull 250ml', 'Lon lẻ', 10, 1, 13000.00, 10000.00),
+	(3, 3, 26, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 1, 14000.00, 10000.00);
+
+
+--
+-- Data for Name: chi_tiet_don_ncc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.chi_tiet_don_ncc (id, don_ncc_id, quy_cach_id, so_luong_dat, he_so_quy_doi, gia_nhap_du_kien) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 17, 98, 1, 10000.00),
+	(2, 2, 17, 100, 1, 10000.00),
+	(3, 3, 7, 99, 1, 5000.00),
+	(4, 4, 31, 1, 24, 250000.00),
+	(5, 5, 32, 10, 6, 60000.00),
+	(6, 6, 33, 10, 6, 60000.00),
+	(7, 7, 34, 5, 24, 250000.00),
+	(8, 8, 35, 5, 24, 300000.00),
+	(9, 9, 36, 5, 6, 25000.00),
+	(10, 10, 37, 5, 24, 240000.00);
+
+
+--
+-- Data for Name: chi_tiet_gio_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: chi_tiet_hoa_don; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.chi_tiet_hoa_don (id, hoa_don_id, chi_tiet_don_hang_id, ten_san_pham, ten_quy_cach, so_luong, don_gia) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 8000.00),
+	(2, 2, 2, 'Red Bull 250ml', 'Lon lẻ', 10, 13000.00),
+	(3, 3, 3, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 14000.00);
+
+
+--
+-- Data for Name: chi_tiet_lan_nhap; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.chi_tiet_lan_nhap (id, lan_nhap_id, don_ncc_id, ct_don_ncc_id, so_luong_thuc_nhan, so_luong_loai, chenh_lech, gia_nhap_thuc_te, ly_do_loai) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 1, 98, 0, 0, 10000.00, NULL),
+	(2, 2, 2, 2, 100, 0, 0, 10000.00, ''),
+	(3, 3, 3, 3, 90, 9, 0, 5000.00, 'lỗi'),
+	(4, 4, 4, 4, 1, 0, 0, 250000.00, ''),
+	(5, 5, 5, 5, 5, 5, 0, 60000.00, 'Bể'),
+	(6, 6, 6, 6, 6, 4, 0, 60000.00, 'hư'),
+	(7, 7, 7, 7, 0, 5, 0, 250000.00, 'bể'),
+	(8, 8, 8, 8, 5, 0, 0, 300000.00, ''),
+	(9, 9, 9, 9, 0, 5, 0, 25000.00, 'Hư'),
+	(10, 10, 10, 10, 5, 0, 0, 240000.00, '');
+
+
+--
+-- Data for Name: cong_no_ncc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.cong_no_ncc (id, lan_nhap_id, so_tien_phai_tra, so_tien_con_no, han_thanh_toan, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 980000.00, 980000.00, NULL, 'CHUA_TRA'),
+	(2, 2, 950000.00, 950000.00, NULL, 'CHUA_TRA'),
+	(3, 3, 450000.00, 450000.00, NULL, 'CHUA_TRA'),
+	(4, 4, 250000.00, 250000.00, NULL, 'CHUA_TRA'),
+	(5, 5, 300000.00, 300000.00, NULL, 'CHUA_TRA'),
+	(6, 6, 360000.00, 360000.00, NULL, 'CHUA_TRA'),
+	(7, 7, 0.00, 0.00, NULL, 'DA_TRA'),
+	(8, 8, 1500000.00, 1500000.00, NULL, 'CHUA_TRA'),
+	(9, 9, 0.00, 0.00, NULL, 'DA_TRA'),
+	(10, 10, 1200000.00, 1200000.00, NULL, 'CHUA_TRA');
+
+
+--
+-- Data for Name: danh_gia_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: dia_chi_giao_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.dia_chi_giao_hang (id, khach_hang_id, ten_nguoi_nhan, so_dien_thoai, dia_chi, phuong_xa, quan_huyen, tinh_thanh, mac_dinh) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'SonY', '0123456789', '24/1 Kha Vạn Cân', 'Phường Tam Thắng', NULL, 'Thành phố Hồ Chí Minh', true);
+
+
+--
+-- Data for Name: dieu_chinh_so_luong; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.dieu_chinh_so_luong (id, san_pham_id, quy_cach_id, nguoi_dieu_chinh_id, so_luong_truoc, so_luong_sau, ly_do, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+	(1, 27, 9, 2, 0, 30, 'nhập hàng', '2026-11-03 16:15:54.103561+07'),
+	(2, 26, 8, 2, 0, 20, 'nhập hàng', '2026-11-03 16:17:34.908471+07'),
+	(3, 21, 17, 2, 193, 48, 'Hư', '2026-11-04 12:59:11.791323+07'),
+	(4, 24, 20, 2, 120, 10, 'Hư', '2026-11-15 14:08:01.077523+07'),
+	(5, 25, 7, 2, 90, 10, 'Hư', '2026-11-15 14:08:09.629563+07'),
+	(6, 26, 8, 2, 140, 50, 'Hư', '2026-11-04 14:38:17.917651+07');
+
+
+--
+-- Data for Name: don_dat_hang_ncc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.don_dat_hang_ncc (id, ma_don_nhap, nha_cung_cap_id, nguoi_lap_id, nguoi_duyet_id, ngay_dat, ngay_giao_du_kien, trang_thai, ly_do_tu_choi, ghi_chu, ngay_duyet) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'DN-ecae6c25-7ca9-435f-bccd-80f5c455fae6', 1, 2, 2, '2026-11-04 10:58:45.457189+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 10:59:07.421739+07'),
+	(2, 'DN-e18691d0-8ec6-48f8-b3b3-7dbe47fbb18e', 1, 2, 2, '2026-11-04 10:59:44.233531+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 11:33:58.936078+07'),
+	(3, 'DN-11337488-3885-4f7e-8ea3-01a9dad24208', 1, 2, 2, '2026-11-04 12:13:34.789937+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 12:13:36.855034+07'),
+	(4, 'DN-37bf0eeb-8b1f-40ac-8802-62b141f2380f', 1, 2, 2, '2026-11-04 13:00:10.774914+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:00:16.584068+07'),
+	(5, 'DN-54f754f7-eed1-40dd-b6d5-a68312a5cf00', 1, 2, 2, '2026-11-04 13:01:10.070012+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:01:12.073721+07'),
+	(6, 'DN-b2311acf-426a-4de4-a7da-0860bac2ede3', 2, 2, 2, '2026-11-04 13:11:08.69586+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:15:18.672048+07'),
+	(7, 'DN-186df4ea-c3b7-4179-8038-cdfe0789d491', 1, 2, 2, '2026-11-04 13:43:56.957398+07', '2026-11-14', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:44:16.373392+07'),
+	(8, 'DN-0efa3e03-c2a1-48c9-b57c-b5121035212f', 2, 2, 2, '2026-11-04 13:54:57.810125+07', '2026-11-15', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:55:08.848794+07'),
+	(9, 'DN-360db5b7-4833-4a05-87af-9e3da018617d', 2, 2, 2, '2026-11-15 14:05:54.594634+07', '2026-11-20', 'DA_NHAN_DU', NULL, NULL, '2026-11-15 14:06:07.752294+07'),
+	(10, 'DN-567a53ea-ac4b-42a1-905c-bd6a463c6acb', 2, 2, 2, '2026-11-15 14:09:13.89244+07', '2026-11-17', 'DA_NHAN_DU', NULL, NULL, '2026-11-15 14:09:34.614701+07');
+
+
+--
+-- Data for Name: don_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.don_hang (id, ma_don, kenh_ban, khach_hang_id, nhan_vien_xu_ly_id, ngay_dat, ngay_hoan_tat, trang_thai, phi_van_chuyen, giam_gia, tong_tien, ghi_chu, ten_nguoi_nhan, sdt_nguoi_nhan, dia_chi_nhan, thoi_gian_nhan_du_kien, da_tru_so_luong, ngay_cap_nhat, khuyen_mai_id) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'DH-6c1a7221-fc52-436f-8308-5ac6fbe4a865', 'ONLINE', 1, 2, '2026-11-03 16:37:52.820068+07', NULL, 'DA_GIAO', 0.00, 0.00, 80000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-03 16:38:29.510031+07', NULL),
+	(2, 'DH-0813adbd-aaa0-44dd-8317-57abbe8d3b7d', 'ONLINE', 1, 3, '2026-11-04 13:03:18.413361+07', NULL, 'DA_GIAO', 0.00, 0.00, 130000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-04 13:05:10.352992+07', NULL),
+	(3, 'DH-ad03213a-3dfb-4d0f-bb40-d3c26a4b34dd', 'ONLINE', 1, 3, '2026-11-04 14:34:38.732069+07', NULL, 'DA_HUY', 0.00, 11200.00, 100800.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-04 14:37:04.762617+07', 1);
+
+
+--
+-- Data for Name: giay_to_ncc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: gio_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.gio_hang (id, khach_hang_id, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, '2026-11-04 14:34:08.2256+07');
+
+
+--
+-- Data for Name: hinh_anh_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: hoa_don; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.hoa_don (id, don_hang_id, nguoi_lap_id, ma_hoa_don, ngay_lap, kenh_ban, tong_thanh_toan, phi_van_chuyen, giam_gia, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 2, 'HD-1', '2026-11-03 16:38:23.783332+07', 'ONLINE', 80000.00, 0.00, 0.00, 'ISSUED'),
+	(2, 2, 3, 'HD-2', '2026-11-04 13:04:11.849425+07', 'ONLINE', 130000.00, 0.00, 0.00, 'ISSUED'),
+	(3, 3, 3, 'HD-3', '2026-11-04 14:35:34.329885+07', 'ONLINE', 100800.00, 0.00, 11200.00, 'CANCELLED');
+
+
+--
+-- Data for Name: hoan_tien; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: khach_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.khach_hang (id, tai_khoan_id, ho_ten, dien_thoai, anh_dai_dien, ngay_tao) OVERRIDING SYSTEM VALUE VALUES
+	(1, 3, 'SonY', '1234567890', NULL, '2026-11-03 15:25:38.232189+07');
+
+
+--
+-- Data for Name: khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.khuyen_mai (id, ma_code, ten, mo_ta, loai_giam, gia_tri_giam, giam_toi_da, don_toi_thieu, bat_dau, ket_thuc, gioi_han_su_dung, gioi_han_moi_khach, pham_vi_ap_dung, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'EASPORT', 'Giảm giá mạnh', NULL, 'PERCENT', 10.00, 50000.00, 0.00, '2026-11-04 14:32:25+07', '2026-11-05 14:32:25+07', 2, 1, 'CATEGORY', 'ACTIVE');
+
+
+--
+-- Data for Name: lan_nhap_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.lan_nhap_hang (id, don_ncc_id, nguoi_nhan_id, ngay_nhap, trang_thai, ngay_xac_nhan, ghi_chu) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 2, '2026-11-04 10:59:30.831078+07', 'CONFIRMED', '2026-11-04 10:59:33.262019+07', NULL),
+	(2, 2, 2, '2026-11-04 12:12:17.013658+07', 'CONFIRMED', '2026-11-04 12:12:20.214256+07', NULL),
+	(3, 3, 2, '2026-11-04 12:14:00.716347+07', 'CONFIRMED', '2026-11-04 12:14:43.161711+07', NULL),
+	(4, 4, 2, '2026-11-04 13:00:31.306911+07', 'CONFIRMED', '2026-11-04 13:00:35.391049+07', NULL),
+	(5, 5, 2, '2026-11-04 13:01:23.814677+07', 'CONFIRMED', '2026-11-04 13:01:27.226165+07', NULL),
+	(6, 6, 2, '2026-11-04 13:15:46.748109+07', 'CONFIRMED', '2026-11-04 13:15:49.496649+07', NULL),
+	(7, 7, 2, '2026-11-04 13:53:59.862233+07', 'CONFIRMED', '2026-11-04 13:54:10.677797+07', NULL),
+	(8, 8, 2, '2026-11-15 14:04:19.083592+07', 'CONFIRMED', '2026-11-15 14:04:27.396664+07', NULL),
+	(9, 9, 2, '2026-11-15 14:07:24.035317+07', 'CONFIRMED', '2026-11-15 14:07:28.16431+07', NULL),
+	(10, 10, 2, '2026-11-15 14:09:40.50754+07', 'CONFIRMED', '2026-11-15 14:09:48.91325+07', NULL);
+
+
+--
+-- Data for Name: lich_su_hoa_don; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.lich_su_hoa_don (id, hoa_don_id, tai_khoan_thuc_hien_id, trang_thai_cu, trang_thai_moi, ly_do, thoi_gian) OVERRIDING SYSTEM VALUE VALUES
+	(1, 3, NULL, 'ISSUED', 'CANCELLED', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-04 14:37:04.762617+07');
+
+
+--
+-- Data for Name: lich_su_trang_thai_don; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.lich_su_trang_thai_don (id, don_hang_id, tai_khoan_thuc_hien_id, trang_thai_cu, trang_thai_moi, ghi_chu, thoi_gian) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-03 16:38:23.783332+07'),
+	(2, 1, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-03 16:38:26.349807+07'),
+	(3, 1, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-03 16:38:29.510031+07'),
+	(4, 2, 4, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-04 13:04:11.849425+07'),
+	(5, 2, 4, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-04 13:04:26.28501+07'),
+	(6, 2, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-04 13:05:10.352992+07'),
+	(7, 3, 4, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-04 14:35:34.329885+07'),
+	(8, 3, 4, 'DANG_CHUAN_BI', 'DA_HUY', 'Không thích bán nữa ', '2026-11-04 14:37:04.762617+07');
+
+
+--
+-- Data for Name: lien_he_khach_hang; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: loai_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.loai_san_pham (id, ten, mo_ta, hinh_anh, hien_thi) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'Nước ngọt có ga', 'Nước giải khát có ga', NULL, true),
+	(2, 'Nước suối', 'Nước tinh khiết', NULL, true),
+	(3, 'Trà đóng chai', 'Trà pha sẵn', NULL, true),
+	(7, 'Nước tăng lực', 'Đồ uống tăng lực đóng lon hoặc chai.', NULL, true),
+	(8, 'Nước thể thao', 'Các loại đồ uống thể thao.', NULL, true),
+	(9, 'Nước trái cây', 'Đồ uống và nước ép trái cây đóng gói.', NULL, true),
+	(10, 'Sữa và ca cao', 'Sữa và đồ uống ca cao dùng sẵn.', NULL, true);
+
+
+--
+-- Data for Name: nha_cung_cap; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.nha_cung_cap (id, ten, ma_so_thue, nguoi_lien_he, dien_thoai, email, dia_chi, trang_thai, ngay_tao, loai_nha_cung_cap, trang_thai_xac_minh, ghi_chu_xac_minh, nguoi_xac_minh_id, thoi_diem_xac_minh) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'Boobiboo', '1234567890', 'Mister_Dat', '1234567890', 'Mr.Dat@gmail.com', '24/1 Kha Vạn Cân', 'HOP_TAC', '2026-11-04 10:57:21.919355+07', 'DOANH_NGHIEP', 'DA_XAC_MINH', NULL, 2, '2026-11-04 12:59:43.580452+07'),
+	(2, 'Coca-cola', '1234567777', 'Skywind', '0910209811', 'Coca@gmail.com', NULL, 'HOP_TAC', '2026-11-04 13:10:07.968792+07', 'DOANH_NGHIEP', 'DA_XAC_MINH', NULL, 2, '2026-11-04 13:10:07.968792+07');
+
+
+--
+-- Data for Name: nha_cung_cap_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.nha_cung_cap_san_pham (nha_cung_cap_id, san_pham_id, gia_nhap_tham_khao) VALUES
+	(1, 23, NULL),
+	(1, 20, NULL),
+	(1, 17, NULL),
+	(2, 26, NULL),
+	(2, 24, NULL),
+	(2, 22, NULL);
+
+
+--
+-- Data for Name: nhan_vien; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.nhan_vien (id, tai_khoan_id, ma_nhan_vien, ho_ten, ngay_sinh, gioi_tinh, dien_thoai, email_lien_he, dia_chi, chuc_vu, ngay_vao_lam, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'NV-1', 'Quản trị viên', NULL, NULL, NULL, NULL, NULL, 'ADMIN', '2026-11-03', 'ACTIVE'),
+	(3, 4, 'NV-4', 'Quân AB', NULL, NULL, '0792040241', NULL, NULL, NULL, NULL, 'ACTIVE'),
+	(4, 3, 'NV-3', 'SonY', NULL, NULL, '0123456789', NULL, NULL, NULL, NULL, 'ACTIVE'),
+	(2, 2, 'NV-2', 'Ocean', NULL, NULL, '0786566862', NULL, '31 Chu Văn An, Phường Bình Tiên, Thành phố Hồ Chí Minh', NULL, NULL, 'ACTIVE');
+
+
+--
+-- Data for Name: nhat_ky_hoat_dong; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, doi_tuong_id, du_lieu_thay_doi, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-03 13:15:58.629248+07'),
+	(2, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-03 15:23:53.063427+07'),
+	(3, 1, 'ACCOUNT_CREATE', 'tai_khoan', 2, NULL, '2026-11-03 15:24:45.072766+07'),
+	(4, 1, 'ACCOUNT_CREATE', 'tai_khoan', 3, NULL, '2026-11-03 15:25:38.232189+07'),
+	(5, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-03 15:26:57.972299+07'),
+	(6, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-03 15:27:05.711546+07'),
+	(7, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-03 15:29:54.975792+07'),
+	(8, 2, 'ACCOUNT_CREATE', 'tai_khoan', 4, NULL, '2026-11-03 15:33:33.131211+07'),
+	(9, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:33:57.120073+07'),
+	(10, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:34:06.244885+07'),
+	(11, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:34:21.42966+07'),
+	(12, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:34:31.972223+07'),
+	(13, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-03 15:42:48.875423+07'),
+	(14, 2, 'ACCOUNT_EDIT', 'tai_khoan', 3, NULL, '2026-11-03 15:48:14.871356+07'),
+	(15, 2, 'ACCOUNT_EDIT', 'tai_khoan', 3, NULL, '2026-11-03 15:48:20.501197+07'),
+	(16, 2, 'UPDATE', 'san_pham', 2, NULL, '2026-11-03 15:52:19.69644+07'),
+	(17, 2, 'UPDATE', 'quy_cach_san_pham', 4, NULL, '2026-11-03 15:52:19.69644+07'),
+	(18, 2, 'ACCOUNT_EDIT', 'tai_khoan', 3, NULL, '2026-11-03 15:53:31.383078+07'),
+	(19, 2, 'ACCOUNT_EDIT', 'tai_khoan', 3, NULL, '2026-11-03 15:53:41.725217+07'),
+	(20, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:53:53.114177+07'),
+	(21, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:54:30.035152+07'),
+	(22, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:55:26.226455+07'),
+	(23, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-03 15:56:04.156692+07'),
+	(24, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-03 15:56:17.766715+07'),
+	(25, 2, 'STAFF_PROFILE', 'nhan_vien', 2, NULL, '2026-11-03 15:56:54.639782+07'),
+	(26, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-03 15:57:38.276637+07'),
+	(27, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-03 15:58:52.525088+07'),
+	(28, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-03 16:10:29.983817+07'),
+	(29, 2, 'UPDATE', 'san_pham', 27, NULL, '2026-11-03 16:15:54.103561+07'),
+	(30, 2, 'UPDATE', 'quy_cach_san_pham', 9, NULL, '2026-11-03 16:15:54.103561+07'),
+	(31, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 1, NULL, '2026-11-03 16:15:54.103561+07'),
+	(32, 2, 'UPDATE', 'san_pham', 26, NULL, '2026-11-03 16:17:34.908471+07'),
+	(33, 2, 'UPDATE', 'quy_cach_san_pham', 8, NULL, '2026-11-03 16:17:34.908471+07'),
+	(34, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 2, NULL, '2026-11-03 16:17:34.908471+07'),
+	(35, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-03 16:37:25.617458+07'),
+	(36, 3, 'CHECKOUT', 'don_hang', 1, NULL, '2026-11-03 16:37:52.820068+07'),
+	(37, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 1, NULL, '2026-11-03 16:38:23.783332+07'),
+	(38, 2, 'ORDER_DANG_GIAO', 'don_hang', 1, NULL, '2026-11-03 16:38:26.349807+07'),
+	(39, 2, 'ORDER_DA_GIAO', 'don_hang', 1, NULL, '2026-11-03 16:38:29.510031+07'),
+	(40, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-04 10:31:09.553664+07'),
+	(41, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 10:31:44.162218+07'),
+	(42, 2, 'CREATE', 'nha_cung_cap', 1, NULL, '2026-11-04 10:57:21.919355+07'),
+	(43, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 10:57:29.314875+07'),
+	(44, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 10:57:35.368896+07'),
+	(45, 2, 'CREATE', 'nha_cung_cap_san_pham', 1, NULL, '2026-11-04 10:58:45.08907+07'),
+	(46, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 1, NULL, '2026-11-04 10:58:45.457189+07'),
+	(47, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 1, NULL, '2026-11-04 10:59:07.421739+07'),
+	(48, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 1, NULL, '2026-11-04 10:59:30.831078+07'),
+	(49, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 1, NULL, '2026-11-04 10:59:33.262019+07'),
+	(50, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 2, NULL, '2026-11-04 10:59:44.233531+07'),
+	(51, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 11:31:56.13304+07'),
+	(52, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 11:32:56.205483+07'),
+	(53, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 2, NULL, '2026-11-04 11:33:58.936078+07'),
+	(54, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 2, NULL, '2026-11-04 12:12:17.013658+07'),
+	(55, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 2, NULL, '2026-11-04 12:12:20.214256+07'),
+	(56, 2, 'SUPPLIER_RETURN_QUARANTINE', 'phieu_tra_ncc', 1, NULL, '2026-11-04 12:12:29.060721+07'),
+	(57, 2, 'SUPPLIER_RETURN_CONFIRM', 'phieu_tra_ncc', 1, NULL, '2026-11-04 12:12:44.501429+07'),
+	(58, 2, 'CREATE', 'nha_cung_cap_san_pham', 1, NULL, '2026-11-04 12:13:34.607068+07'),
+	(59, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 3, NULL, '2026-11-04 12:13:34.789937+07'),
+	(60, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 3, NULL, '2026-11-04 12:13:36.855034+07'),
+	(61, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 3, NULL, '2026-11-04 12:14:00.716347+07'),
+	(62, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 3, NULL, '2026-11-04 12:14:43.161711+07'),
+	(63, 2, 'ACCOUNT_EDIT', 'tai_khoan', 3, NULL, '2026-11-04 12:36:34.171497+07'),
+	(64, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 12:58:14.779346+07'),
+	(65, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 1, NULL, '2026-11-04 12:58:14.779346+07'),
+	(66, 2, 'UPDATE', 'san_pham', 21, NULL, '2026-11-04 12:59:11.791323+07'),
+	(67, 2, 'UPDATE', 'quy_cach_san_pham', 17, NULL, '2026-11-04 12:59:11.791323+07'),
+	(68, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 3, NULL, '2026-11-04 12:59:11.791323+07'),
+	(69, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-04 12:59:43.580452+07'),
+	(70, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 1, NULL, '2026-11-04 12:59:43.580452+07'),
+	(71, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 31, NULL, '2026-11-04 13:00:10.774914+07'),
+	(72, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 4, NULL, '2026-11-04 13:00:10.774914+07'),
+	(73, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 4, NULL, '2026-11-04 13:00:16.584068+07'),
+	(74, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 4, NULL, '2026-11-04 13:00:31.306911+07'),
+	(75, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 4, NULL, '2026-11-04 13:00:35.391049+07'),
+	(76, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 32, NULL, '2026-11-04 13:01:10.070012+07'),
+	(77, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 5, NULL, '2026-11-04 13:01:10.070012+07'),
+	(78, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 5, NULL, '2026-11-04 13:01:12.073721+07'),
+	(79, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 5, NULL, '2026-11-04 13:01:23.814677+07'),
+	(80, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 5, NULL, '2026-11-04 13:01:27.226165+07'),
+	(81, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-04 13:02:13.461228+07'),
+	(82, 3, 'CHECKOUT', 'don_hang', 2, NULL, '2026-11-04 13:03:18.413361+07'),
+	(83, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 13:03:44.833403+07'),
+	(84, 4, 'ORDER_DANG_CHUAN_BI', 'don_hang', 2, NULL, '2026-11-04 13:04:11.849425+07'),
+	(85, 4, 'ORDER_DANG_GIAO', 'don_hang', 2, NULL, '2026-11-04 13:04:26.28501+07'),
+	(86, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 13:05:04.978915+07'),
+	(87, 2, 'ORDER_DA_GIAO', 'don_hang', 2, NULL, '2026-11-04 13:05:10.352992+07'),
+	(88, 2, 'CREATE', 'nha_cung_cap', 2, NULL, '2026-11-04 13:10:07.968792+07'),
+	(89, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 2, NULL, '2026-11-04 13:10:07.968792+07'),
+	(90, 2, 'UPDATE', 'nha_cung_cap', 2, NULL, '2026-11-04 13:10:10.779908+07'),
+	(91, 2, 'UPDATE', 'nha_cung_cap', 2, NULL, '2026-11-04 13:10:34.045753+07'),
+	(92, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 33, NULL, '2026-11-04 13:11:08.69586+07'),
+	(93, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 6, NULL, '2026-11-04 13:11:08.69586+07'),
+	(94, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 6, NULL, '2026-11-04 13:15:18.672048+07'),
+	(95, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 6, NULL, '2026-11-04 13:15:46.748109+07'),
+	(96, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 6, NULL, '2026-11-04 13:15:49.496649+07'),
+	(97, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 34, NULL, '2026-11-04 13:43:56.957398+07'),
+	(98, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 7, NULL, '2026-11-04 13:43:56.957398+07'),
+	(99, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 7, NULL, '2026-11-04 13:44:16.373392+07'),
+	(100, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 7, NULL, '2026-11-04 13:53:59.862233+07');
+INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, doi_tuong_id, du_lieu_thay_doi, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+	(101, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 7, NULL, '2026-11-04 13:54:10.677797+07'),
+	(102, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 35, NULL, '2026-11-04 13:54:57.810125+07'),
+	(103, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 8, NULL, '2026-11-04 13:54:57.810125+07'),
+	(104, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 8, NULL, '2026-11-04 13:55:08.848794+07'),
+	(105, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-15 14:03:39.037519+07'),
+	(106, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 8, NULL, '2026-11-15 14:04:19.083592+07'),
+	(107, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 8, NULL, '2026-11-15 14:04:27.396664+07'),
+	(108, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 36, NULL, '2026-11-15 14:05:54.594634+07'),
+	(109, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 9, NULL, '2026-11-15 14:05:54.594634+07'),
+	(110, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 9, NULL, '2026-11-15 14:06:07.752294+07'),
+	(111, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 9, NULL, '2026-11-15 14:07:24.035317+07'),
+	(112, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 9, NULL, '2026-11-15 14:07:28.16431+07'),
+	(113, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 4, NULL, '2026-11-15 14:08:01.077523+07'),
+	(114, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 5, NULL, '2026-11-15 14:08:09.629563+07'),
+	(115, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 37, NULL, '2026-11-15 14:09:13.89244+07'),
+	(116, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 10, NULL, '2026-11-15 14:09:13.89244+07'),
+	(117, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 10, NULL, '2026-11-15 14:09:34.614701+07'),
+	(118, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 10, NULL, '2026-11-15 14:09:40.50754+07'),
+	(119, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 10, NULL, '2026-11-15 14:09:48.91325+07'),
+	(120, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 14:19:52.228479+07'),
+	(121, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 14:28:56.635521+07'),
+	(122, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 14:29:49.451727+07'),
+	(123, 2, 'CREATE', 'khuyen_mai', 1, NULL, '2026-11-04 14:33:44.457276+07'),
+	(124, 3, 'CHECKOUT', 'don_hang', 3, NULL, '2026-11-04 14:34:38.732069+07'),
+	(125, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 14:35:21.951468+07'),
+	(126, 4, 'ORDER_DANG_CHUAN_BI', 'don_hang', 3, NULL, '2026-11-04 14:35:34.329885+07'),
+	(127, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 14:36:06.46461+07'),
+	(128, 4, 'ORDER_DA_HUY', 'don_hang', 3, NULL, '2026-11-04 14:37:04.762617+07'),
+	(129, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 6, NULL, '2026-11-04 14:38:17.917651+07'),
+	(130, 2, 'STAFF_PROFILE', 'nhan_vien', 2, NULL, '2026-11-04 14:49:00.451955+07');
+
+
+--
+-- Data for Name: pham_vi_khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.pham_vi_khuyen_mai (id, khuyen_mai_id, san_pham_id, loai_san_pham_id, thuong_hieu_id) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, NULL, 10, NULL),
+	(2, 1, NULL, 8, NULL),
+	(3, 1, NULL, 7, NULL);
+
+
+--
+-- Data for Name: phien_xac_thuc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.phien_xac_thuc (id, tai_khoan_id, token_hash, het_han, da_thu_hoi, ngay_tao) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, '6167d736b6d17cc669d1072b42f3c79d43b24677b650681445856b902e025309', '2026-11-03 21:15:59.011174+07', true, '2026-11-03 13:15:58.629248+07'),
+	(2, 1, '03ca8c2bf444b990dab5045e081e693f63e3056fe2dfa155aa59d78cfb8b78df', '2026-11-03 23:23:53.391026+07', true, '2026-11-03 15:23:53.063427+07'),
+	(26, 4, 'fa82d9bdc80a0c86a47d08319f47fa4765deab1f55abe88a2841f10bd493550d', '2026-11-04 22:19:52.575499+07', true, '2026-11-04 14:19:52.228479+07'),
+	(6, 4, 'c9fa5b4ae74f3b2da396f4f713b03f1905ef36a7c7653c0fccccd189fc9381f0', '2026-11-03 23:33:57.441364+07', true, '2026-11-03 15:33:57.120073+07'),
+	(5, 2, '942e12434a9146876045a6792edce58b9f5fe6023c4c00f19eebb7d5231d1bb8', '2026-11-03 23:29:55.312403+07', true, '2026-11-03 15:29:54.975792+07'),
+	(7, 4, 'e893555090347beaf46028c9fea11a7b721625f1c03da4879ac8606ca01bec33', '2026-11-03 23:34:06.571629+07', false, '2026-11-03 15:34:06.244885+07'),
+	(8, 4, '2d3f35666ed6e267ea9a69e437b8fb8e53f6d8fabd00675e136600744ee56b0c', '2026-11-03 23:34:21.741593+07', true, '2026-11-03 15:34:21.42966+07'),
+	(9, 4, '5b78973097fa90613987f5019dddc66d70195201c78b1786e5c5d1bcef9556f8', '2026-11-03 23:34:32.354979+07', true, '2026-11-03 15:34:31.972223+07'),
+	(27, 4, 'd60066a6322b7813d6f8441092dce21d15ced1b213ee387d29492400bc379449', '2026-11-04 22:28:57.0393+07', true, '2026-11-04 14:28:56.635521+07'),
+	(28, 2, 'a1e89eff7e79b8a1979c79ea6caa6aecb1154c27705264df6775a6d205383a8c', '2026-11-04 22:29:49.782755+07', true, '2026-11-04 14:29:49.451727+07'),
+	(29, 4, 'f0e12dfda5e13b099532a98d4b4cf1fd4c013875c13ce979defb0bfd2ea21146', '2026-11-04 22:35:22.246273+07', false, '2026-11-04 14:35:21.951468+07'),
+	(30, 2, '5ad374e468341d1b37aae7147314db05f6254e92cdab16c398fcb38d435e786b', '2026-11-04 22:36:06.800234+07', false, '2026-11-04 14:36:06.46461+07'),
+	(3, 3, '074eb33ae4f0639f4efdff2e2b7dac8efb737c388d1dfcdba7cc53b8e9cae0a7', '2026-11-03 23:26:58.319005+07', true, '2026-11-03 15:26:57.972299+07'),
+	(4, 3, '9643564d76961228ea4e7316bee0b131656c370ae9bdd65a9d681750a306192c', '2026-11-03 23:27:06.107111+07', true, '2026-11-03 15:27:05.711546+07'),
+	(10, 2, '9d9d73ceea1bf80b331bb5c0fd8b254ba94a868f41e8e180207f02345ed18509', '2026-11-03 23:42:49.742288+07', true, '2026-11-03 15:42:48.875423+07'),
+	(11, 4, 'de143aebfe36df1e0df7849c4560261ff28c303e91f162a07505b7b19be40288', '2026-11-03 23:53:53.537902+07', true, '2026-11-03 15:53:53.114177+07'),
+	(12, 4, 'eb6f43fbb36370c8766cdaf817ee64dd9fa8c006e67ac4ea804adfc1e815634c', '2026-11-03 23:54:30.446587+07', true, '2026-11-03 15:54:30.035152+07'),
+	(13, 4, '2b35c35c66815371a57c93bac8064b03170e28fdc4ad0554e18896b146703ee1', '2026-11-03 23:55:26.574215+07', true, '2026-11-03 15:55:26.226455+07'),
+	(14, 2, '1d43c8483b2058013db7ed3a46c319686861807d8ea892cb73c89bfa35c66e36', '2026-11-03 23:56:04.550803+07', true, '2026-11-03 15:56:04.156692+07'),
+	(15, 2, 'f892ff8a28407f18869e077d0f2823735c50972123fb789a7be911ec23b9d771', '2026-11-03 23:56:18.159059+07', true, '2026-11-03 15:56:17.766715+07'),
+	(16, 3, '8464b708f475c06cea3c4715277225137197366626d47cc5e4bd826901998ac4', '2026-11-03 23:57:38.577874+07', false, '2026-11-03 15:57:38.276637+07'),
+	(17, 4, '2103c4432ef6ec4f0ef016439e46c8a113dccdfecb4c1cbf9394d095c2038604', '2026-11-03 23:58:52.849175+07', true, '2026-11-03 15:58:52.525088+07'),
+	(19, 3, '494fc5d42d5afccf9df32b907f3787282b517ad865e5299d28f9a9f38c4aa73d', '2026-11-04 00:37:26.574017+07', false, '2026-11-03 16:37:25.617458+07'),
+	(18, 2, '9bb40af5a9cac3c6711d8d09e28cbdc123ef3c6a4064284d5a96374283d4746a', '2026-11-04 00:10:30.837251+07', true, '2026-11-03 16:10:29.983817+07'),
+	(20, 3, '0658149d2b2442f4ac4aadb8cd3608ab3f480d6d277363b15f1f7fd3b77873a3', '2026-11-04 18:31:09.995028+07', false, '2026-11-04 10:31:09.553664+07'),
+	(22, 3, 'd7b6694d8fe10602253034420efb75738fe18528e90c73716a2a549d7a888434', '2026-11-04 21:02:13.817865+07', false, '2026-11-04 13:02:13.461228+07'),
+	(21, 2, 'fbb95406df674d380bcaf8c4e7f479aef4312903ed3f58c09fc1fa87eea73fa4', '2026-11-04 18:31:44.452433+07', true, '2026-11-04 10:31:44.162218+07'),
+	(23, 4, '25dd336e600eb073fc59ab6d016994a4eca7d50b7adeaeec687c2f4e4c9f3824', '2026-11-04 21:03:45.211475+07', true, '2026-11-04 13:03:44.833403+07'),
+	(24, 2, 'ee96ecbe6ff2c6f86170d186d75696ab055744fac760f94ba84eb2d6ce23cdc9', '2026-11-04 21:05:05.256177+07', false, '2026-11-04 13:05:04.978915+07'),
+	(25, 2, '4183a80ffdf26191e8b5c7324729c420faa4ed29b90e3513690221e0ad89406c', '2026-11-15 22:03:39.581231+07', true, '2026-11-15 14:03:39.037519+07');
+
+
+--
+-- Data for Name: quy_cach_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.quy_cach_san_pham (id, san_pham_id, ten_quy_cach, don_vi_tinh, he_so_quy_doi, gia_ban, gia_von, dang_ban) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'Lon lẻ', 'LON', 1, 12000.00, 8000.00, true),
+	(2, 1, 'Lốc 6 lon', 'LOC', 6, 69000.00, 48000.00, true),
+	(3, 1, 'Thùng 24 lon', 'THUNG', 24, 270000.00, 192000.00, true),
+	(5, 2, 'Thùng 24 chai', 'THUNG', 24, 160000.00, 108000.00, true),
+	(4, 2, 'Chai lẻ', 'CHAI', 1, 7010.00, 4500.00, true),
+	(10, 11, 'Lon lẻ', 'LON', 1, 11000.00, 0.00, true),
+	(12, 12, 'Lon lẻ', 'LON', 1, 12000.00, 0.00, true),
+	(13, 10, 'Lon lẻ', 'LON', 1, 11000.00, 0.00, true),
+	(14, 18, 'Chai lẻ', 'CHAI', 1, 10000.00, 0.00, true),
+	(15, 15, 'Chai lẻ', 'CHAI', 1, 6000.00, 0.00, true),
+	(16, 13, 'Chai lẻ', 'CHAI', 1, 6000.00, 0.00, true),
+	(18, 5, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(19, 19, 'Lon lẻ', 'LON', 1, 11000.00, 0.00, true),
+	(21, 8, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(22, 6, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(23, 16, 'Chai lẻ', 'CHAI', 1, 12000.00, 0.00, true),
+	(24, 4, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(25, 23, 'Chai lẻ', 'CHAI', 1, 12000.00, 0.00, true),
+	(27, 3, 'Lon lẻ', 'LON', 1, 11000.00, 0.00, true),
+	(28, 14, 'Chai lẻ', 'CHAI', 1, 6000.00, 0.00, true),
+	(29, 9, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(30, 7, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
+	(9, 27, 'Hộp lẻ', 'HOP', 1, 8000.00, 0.00, true),
+	(7, 25, 'Hộp lẻ', 'HOP', 1, 9000.00, 5000.00, true),
+	(17, 21, 'Lon lẻ', 'LON', 1, 12000.00, 5050.51, true),
+	(11, 17, 'Chai lẻ', 'CHAI', 1, 12000.00, 10416.67, true),
+	(31, 17, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 288000.00, 250000.00, false),
+	(6, 20, 'Lon lẻ', 'LON', 1, 13000.00, 10000.00, true),
+	(32, 20, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 78000.00, 60000.00, false),
+	(26, 22, 'Chai lẻ', 'CHAI', 1, 14000.00, 10000.00, true),
+	(33, 22, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 84000.00, 60000.00, false),
+	(34, 23, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 288000.00, 0.00, false),
+	(20, 24, 'Hộp lẻ', 'HOP', 1, 45000.00, 12500.00, true),
+	(35, 24, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 1080000.00, 300000.00, false),
+	(8, 26, 'Hộp lẻ', 'HOP', 1, 9000.00, 8571.43, true),
+	(36, 26, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 54000.00, 51428.57, false),
+	(37, 26, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 216000.00, 205714.29, false);
+
+
+--
+-- Data for Name: quyen; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.quyen (id, ma_quyen, ten_quyen, ma_chuc_nang, hanh_dong, mo_ta) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'PRODUCT_READ', 'Tra cứu sản phẩm', 'BR1', 'READ', NULL),
+	(2, 'PRODUCT_MANAGE', 'Quản lý danh mục sản phẩm', 'BR1', 'MANAGE', NULL),
+	(3, 'PRODUCT_ADJUST', 'Điều chỉnh số lượng', 'BR1', 'ADJUST', NULL),
+	(4, 'CATEGORY_READ', 'Tra cứu loại / thương hiệu', 'BR2', 'READ', NULL),
+	(5, 'CATEGORY_MANAGE', 'Quản lý loại / thương hiệu', 'BR2', 'MANAGE', NULL),
+	(6, 'CART_MANAGE', 'Giỏ hàng cá nhân', 'BR3', 'MANAGE', NULL),
+	(7, 'PAYMENT_READ', 'Đối soát thanh toán', 'BR4', 'READ', NULL),
+	(8, 'POS_PAYMENT', 'Thu tiền tại quầy', 'BR4', 'POS', NULL),
+	(9, 'REFUND_MANAGE', 'Hoàn tiền', 'BR4', 'REFUND', NULL),
+	(10, 'ORDER_READ', 'Tra cứu đơn', 'BR5', 'READ', NULL),
+	(11, 'ORDER_UPDATE', 'Xử lý đơn online', 'BR5', 'UPDATE', NULL),
+	(12, 'POS_SELL', 'Bán hàng tại quầy', 'BR5', 'POS', NULL),
+	(13, 'INVOICE_READ', 'Tra cứu và in hóa đơn', 'BR6', 'READ', NULL),
+	(14, 'INVOICE_REPORT', 'Thống kê hóa đơn', 'BR6', 'REPORT', NULL),
+	(15, 'CUSTOMER_READ', 'Tra cứu khách hàng', 'BR7', 'READ', NULL),
+	(16, 'CUSTOMER_SUPPORT', 'Chăm sóc khách hàng', 'BR7', 'SUPPORT', NULL),
+	(17, 'CUSTOMER_LOCK', 'Khóa tài khoản khách hàng', 'BR7', 'LOCK', NULL),
+	(18, 'STAFF_SELF', 'Hồ sơ cá nhân nhân viên', 'BR8', 'SELF', NULL),
+	(19, 'STAFF_MANAGE', 'Quản lý nhân viên', 'BR8', 'MANAGE', NULL),
+	(20, 'ROLE_MANAGE', 'Phân quyền', 'BR9', 'MANAGE', NULL),
+	(21, 'REPORT_STOCK', 'Tra cứu tồn và lịch sử nhập', 'BR10', 'STOCK', NULL),
+	(22, 'REPORT_ALL', 'Báo cáo quản trị', 'BR10', 'ALL', NULL),
+	(23, 'PROMOTION_MANAGE', 'Quản lý khuyến mãi', 'BR11', 'MANAGE', NULL),
+	(24, 'SUPPLIER_READ', 'Tra cứu nhà cung cấp', 'BR12', 'READ', NULL),
+	(25, 'SUPPLIER_MANAGE', 'Quản lý nhà cung cấp', 'BR12', 'MANAGE', NULL),
+	(26, 'IMPORT_CREATE', 'Lập đơn NCC', 'BR13', 'CREATE', NULL),
+	(27, 'IMPORT_APPROVE', 'Duyệt đơn NCC', 'BR13', 'APPROVE', NULL),
+	(28, 'IMPORT_RECEIVE', 'Xác nhận nhập', 'BR13', 'RECEIVE', NULL),
+	(29, 'IMPORT_READ', 'Tra cứu đơn NCC và nhập', 'BR13', 'READ', NULL),
+	(30, 'IMPORT_REPORT', 'Thống kê nhập hàng', 'BR13', 'REPORT', NULL);
+
+
+--
+-- Data for Name: san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.san_pham (id, loai_san_pham_id, thuong_hieu_id, sku, ten, mo_ta, thanh_phan, dinh_duong, xuat_xu, dung_tich, loai_bao_bi, huong_vi, so_ngay_han_dung, huong_dan_bao_quan, trang_thai, hien_thi, ngay_tao, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 'SP001', 'Nước ngọt vị cam 330ml', NULL, NULL, NULL, NULL, '330ml', 'LON', NULL, NULL, NULL, 'DANG_BAN', true, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
+	(2, 2, 2, 'SP002', 'Nước suối 500ml', '', NULL, NULL, NULL, '500ml', 'CHAI', NULL, NULL, NULL, 'DANG_BAN', true, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
+	(3, 1, 9, 'CAT-SCHWEPPES-SODA-330', 'Schweppes Soda 330ml', 'Nước soda Schweppes đóng lon; có thể dùng trực tiếp hoặc pha đồ uống.', NULL, NULL, NULL, '330ml', 'LON', 'Soda', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(4, 1, 8, 'CAT-MIRINDA-CAM-320', 'Mirinda cam 320ml', 'Nước ngọt có ga Mirinda hương cam, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(5, 1, 8, 'CAT-MIRINDA-SODA-320', 'Mirinda soda kem 320ml', 'Nước ngọt có ga Mirinda hương soda kem, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Soda kem', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(6, 1, 7, 'CAT-7UP-320', '7Up chanh 320ml', 'Nước ngọt có ga 7Up hương chanh, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(7, 1, 6, 'CAT-FANTA-CAM-330', 'Fanta cam 330ml', 'Nước ngọt có ga Fanta hương cam, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(8, 1, 5, 'CAT-SPRITE-330', 'Sprite chanh 330ml', 'Nước ngọt có ga Sprite hương chanh, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(9, 1, 4, 'CAT-PEPSI-320', 'Pepsi Cola 320ml', 'Nước ngọt có ga Pepsi vị cola, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(10, 1, 4, 'CAT-PEPSI-ZERO-320', 'Pepsi không calo 320ml', 'Nước ngọt Pepsi không calo, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(11, 1, 3, 'CAT-COCA-330', 'Coca-Cola nguyên bản 330ml', 'Nước ngọt có ga vị cola, đóng lon. Dùng ngon hơn khi uống lạnh.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(12, 1, 3, 'CAT-COCA-ZERO-330', 'Coca-Cola Zero Sugar 330ml', 'Nước ngọt có ga Coca-Cola Zero Sugar, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(13, 2, 15, 'CAT-LAVIE-500', 'La Vie 500ml', 'Nước uống La Vie đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(14, 2, 14, 'CAT-DASANI-500', 'Dasani 500ml', 'Nước uống Dasani đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(15, 2, 13, 'CAT-AQUAFINA-500', 'Aquafina 500ml', 'Nước uống Aquafina đóng chai, tiện mang theo.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(16, 3, 18, 'CAT-KHONGDO-500', 'Trà xanh Không Độ 500ml', 'Trà xanh Không Độ đóng chai dùng sẵn.', NULL, NULL, NULL, '500ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(17, 3, 17, 'CAT-TEAPLUS-455', 'TEA+ trà ô long 455ml', 'Trà ô long TEA+ đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Ô long', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(18, 3, 16, 'CAT-C2-CHANH-455', 'C2 trà xanh hương chanh 455ml', 'Trà xanh C2 hương chanh, đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(19, 7, 12, 'CAT-NUMBER1-330', 'Number 1 330ml', 'Nước tăng lực Number 1 đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(20, 7, 11, 'CAT-REDBULL-250', 'Red Bull 250ml', 'Nước tăng lực Red Bull đóng lon.', NULL, NULL, NULL, '250ml', 'LON', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(22, 8, 20, 'CAT-POCARI-350', 'Pocari Sweat 350ml', 'Nước uống Pocari Sweat đóng chai.', NULL, NULL, NULL, '350ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(23, 8, 19, 'CAT-REVIVE-500', 'Revive 500ml', 'Nước uống thể thao Revive đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(24, 9, 21, 'CAT-VFRESH-CAM-1000', 'Vfresh nước cam 1 lít', 'Đồ uống trái cây Vfresh vị cam, đóng hộp.', NULL, NULL, NULL, '1 lít', 'HOP', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(25, 10, 24, 'CAT-MILO-180', 'Milo ca cao 180ml', 'Đồ uống ca cao Milo đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Ca cao', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(27, 10, 22, 'CAT-VINAMILK-180', 'Vinamilk sữa có đường 180ml', 'Sữa Vinamilk có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(26, 10, 23, 'CAT-TH-180', 'TH true MILK sữa có đường 180ml', 'Sữa TH true MILK có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
+	(21, 7, 10, 'CAT-STING-330', 'Sting dâu 330ml', 'Nước tăng lực Sting hương dâu, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Dâu', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07');
+
+
+--
+-- Data for Name: san_pham_yeu_thich; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: so_luong_san_pham; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.so_luong_san_pham (san_pham_id, so_luong_co_ban, nguong_canh_bao, ngay_cap_nhat) VALUES
+	(1, 0, 10, '2026-11-03 13:15:07.268189+07'),
+	(2, 0, 10, '2026-11-03 13:15:07.268189+07'),
+	(3, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(4, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(5, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(6, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(7, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(8, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(9, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(10, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(11, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(12, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(13, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(14, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(15, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(16, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(18, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(19, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(23, 0, 10, '2026-11-03 16:15:08.356368+07'),
+	(27, 20, 10, '2026-11-03 16:38:23.783332+07'),
+	(21, 48, 10, '2026-11-04 12:59:11.791323+07'),
+	(17, 24, 10, '2026-11-04 13:00:35.391049+07'),
+	(20, 20, 10, '2026-11-04 13:04:11.849425+07'),
+	(24, 10, 10, '2026-11-15 14:08:01.077523+07'),
+	(25, 10, 10, '2026-11-15 14:08:09.629563+07'),
+	(22, 36, 10, '2026-11-04 14:37:04.762617+07'),
+	(26, 50, 10, '2026-11-04 14:38:17.917651+07');
+
+
+--
+-- Data for Name: su_dung_khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.su_dung_khuyen_mai (id, khuyen_mai_id, khach_hang_id, don_hang_id, so_tien_giam, trang_thai, ngay_su_dung) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 3, 11200.00, 'REVERSED', '2026-11-04 14:35:34.329885+07');
+
+
+--
+-- Data for Name: tai_khoan; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.tai_khoan (id, email, mat_khau_hash, trang_thai, email_da_xac_thuc, so_lan_dang_nhap_sai, khoa_den, ngay_tao, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'admin@example.com', '$2a$12$MfubYvycFKC0ZqAel2pGE.iRndUT.0pzAoaASMGrF/GlCMYSfPr2e', 'ACTIVE', false, 0, NULL, '2026-11-03 13:15:31.236235+07', '2026-11-03 13:15:31.236235+07'),
+	(3, 'khach@waterbus.demo', '$2a$12$2S9Y9IfCzQLO2j2aWseEEuzCzfaKV5jTQP3V72ziXlyReqybw9CFy', 'ACTIVE', false, 0, NULL, '2026-11-03 15:25:38.232189+07', '2026-11-03 15:25:38.232189+07'),
+	(4, 'quanab@gmail.com', '$2a$12$lCmOhKd9shm64LhJ4Xhe5.qBZFKpwR4muYURmfwwcHpN2xBCcy1wC', 'ACTIVE', false, 0, NULL, '2026-11-03 15:33:33.131211+07', '2026-11-03 15:33:33.131211+07'),
+	(2, 'admin1@gmail.com', '$2a$12$fHKdnzX9UlbpNkVWQta84.ay2gcRG2yixliG7Tco62hPQvVD/kfNe', 'ACTIVE', false, 0, NULL, '2026-11-03 15:24:45.072766+07', '2026-11-03 15:24:45.072766+07');
+
+
+--
+-- Data for Name: tai_khoan_vai_tro; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.tai_khoan_vai_tro (tai_khoan_id, vai_tro_id) VALUES
+	(1, 3),
+	(2, 3),
+	(4, 2),
+	(3, 1);
+
+
+--
+-- Data for Name: thanh_toan; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.thanh_toan (id, don_hang_id, phuong_thuc, ma_giao_dich, idempotency_key, so_tien, trang_thai, thoi_gian, thong_tin_cong) OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'COD', NULL, NULL, 80000.00, 'PENDING', '2026-11-03 16:37:52.820068+07', NULL),
+	(2, 2, 'COD', NULL, NULL, 130000.00, 'PENDING', '2026-11-04 13:03:18.413361+07', NULL),
+	(3, 3, 'COD', NULL, NULL, 100800.00, 'PENDING', '2026-11-04 14:34:38.732069+07', NULL);
+
+
+--
+-- Data for Name: thanh_toan_ncc; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: thuong_hieu; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.thuong_hieu (id, ten, logo, mo_ta, hien_thi) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'Thương hiệu A', NULL, NULL, true),
+	(2, 'Thương hiệu B', NULL, NULL, true),
+	(3, 'Coca-Cola', NULL, 'Thương hiệu nước giải khát Coca-Cola.', true),
+	(4, 'Pepsi', NULL, 'Thương hiệu nước giải khát Pepsi.', true),
+	(5, 'Sprite', NULL, 'Thương hiệu nước ngọt Sprite.', true),
+	(6, 'Fanta', NULL, 'Thương hiệu nước ngọt Fanta.', true),
+	(7, '7Up', NULL, 'Thương hiệu nước ngọt 7Up.', true),
+	(8, 'Mirinda', NULL, 'Thương hiệu nước ngọt Mirinda.', true),
+	(9, 'Schweppes', NULL, 'Thương hiệu nước giải khát Schweppes.', true),
+	(10, 'Sting', NULL, 'Thương hiệu nước tăng lực Sting.', true),
+	(11, 'Red Bull', NULL, 'Thương hiệu nước tăng lực Red Bull.', true),
+	(12, 'Number 1', NULL, 'Thương hiệu nước tăng lực Number 1.', true),
+	(13, 'Aquafina', NULL, 'Thương hiệu nước uống đóng chai Aquafina.', true),
+	(14, 'Dasani', NULL, 'Thương hiệu nước uống đóng chai Dasani.', true),
+	(15, 'La Vie', NULL, 'Thương hiệu nước uống đóng chai La Vie.', true),
+	(16, 'C2', NULL, 'Thương hiệu trà đóng chai C2.', true),
+	(17, 'TEA+', NULL, 'Thương hiệu trà ô long TEA+.', true),
+	(18, 'Không Độ', NULL, 'Thương hiệu trà đóng chai Không Độ.', true),
+	(19, 'Revive', NULL, 'Thương hiệu nước uống thể thao Revive.', true),
+	(20, 'Pocari Sweat', NULL, 'Thương hiệu nước uống Pocari Sweat.', true),
+	(21, 'Vfresh', NULL, 'Thương hiệu đồ uống trái cây Vfresh.', true),
+	(22, 'Vinamilk', NULL, 'Thương hiệu sữa Vinamilk.', true),
+	(23, 'TH true MILK', NULL, 'Thương hiệu sữa TH true MILK.', true),
+	(24, 'Milo', NULL, 'Thương hiệu đồ uống ca cao Milo.', true);
+
+
+--
+-- Data for Name: uu_dai_so_luong; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: vai_tro; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.vai_tro (id, ma_vai_tro, ten_vai_tro, mo_ta) OVERRIDING SYSTEM VALUE VALUES
+	(1, 'KHACH_HANG', 'Khách hàng', 'Mua hàng qua Website'),
+	(2, 'NHAN_VIEN', 'Nhân viên', 'Bán tại quầy, xử lý đơn và nhập hàng theo đơn NCC đã duyệt'),
+	(3, 'QUAN_TRI_VIEN', 'Quản trị viên', 'Có tất cả quyền nhân viên và nghiệp vụ quản trị');
+
+
+--
+-- Data for Name: vai_tro_quyen; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.vai_tro_quyen (vai_tro_id, quyen_id) VALUES
+	(1, 1),
+	(2, 1),
+	(3, 1),
+	(3, 2),
+	(3, 3),
+	(1, 4),
+	(2, 4),
+	(3, 4),
+	(3, 5),
+	(1, 6),
+	(2, 7),
+	(3, 7),
+	(2, 8),
+	(3, 8),
+	(3, 9),
+	(2, 10),
+	(3, 10),
+	(2, 11),
+	(3, 11),
+	(2, 12),
+	(3, 12),
+	(2, 13),
+	(3, 13),
+	(3, 14),
+	(2, 15),
+	(3, 15),
+	(2, 16),
+	(3, 16),
+	(3, 17),
+	(2, 18),
+	(3, 18),
+	(3, 19),
+	(3, 20),
+	(2, 21),
+	(3, 21),
+	(3, 22),
+	(3, 23),
+	(2, 24),
+	(3, 24),
+	(3, 25),
+	(3, 26),
+	(3, 27),
+	(2, 28),
+	(3, 28),
+	(2, 29),
+	(3, 29),
+	(3, 30);
+
+
+--
+-- Name: bien_dong_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.bien_dong_so_luong_id_seq', 19, true);
+
+
+--
+-- Name: chi_tiet_don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chi_tiet_don_hang_id_seq', 3, true);
+
+
+--
+-- Name: chi_tiet_don_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chi_tiet_don_ncc_id_seq', 10, true);
+
+
+--
+-- Name: chi_tiet_gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chi_tiet_gio_hang_id_seq', 19, true);
+
+
+--
+-- Name: chi_tiet_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chi_tiet_hoa_don_id_seq', 3, true);
+
+
+--
+-- Name: chi_tiet_lan_nhap_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chi_tiet_lan_nhap_id_seq', 10, true);
+
+
+--
+-- Name: cong_no_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.cong_no_ncc_id_seq', 10, true);
+
+
+--
+-- Name: danh_gia_san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.danh_gia_san_pham_id_seq', 1, false);
+
+
+--
+-- Name: dia_chi_giao_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.dia_chi_giao_hang_id_seq', 1, true);
+
+
+--
+-- Name: dieu_chinh_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.dieu_chinh_so_luong_id_seq', 6, true);
+
+
+--
+-- Name: don_dat_hang_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.don_dat_hang_ncc_id_seq', 10, true);
+
+
+--
+-- Name: don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.don_hang_id_seq', 3, true);
+
+
+--
+-- Name: giay_to_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.giay_to_ncc_id_seq', 1, false);
+
+
+--
+-- Name: gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.gio_hang_id_seq', 96, true);
+
+
+--
+-- Name: hinh_anh_san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.hinh_anh_san_pham_id_seq', 1, false);
+
+
+--
+-- Name: hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.hoa_don_id_seq', 3, true);
+
+
+--
+-- Name: hoan_tien_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.hoan_tien_id_seq', 1, false);
+
+
+--
+-- Name: khach_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.khach_hang_id_seq', 5, true);
+
+
+--
+-- Name: khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.khuyen_mai_id_seq', 1, true);
+
+
+--
+-- Name: lan_nhap_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lan_nhap_hang_id_seq', 10, true);
+
+
+--
+-- Name: lich_su_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lich_su_hoa_don_id_seq', 1, true);
+
+
+--
+-- Name: lich_su_trang_thai_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lich_su_trang_thai_don_id_seq', 8, true);
+
+
+--
+-- Name: lien_he_khach_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lien_he_khach_hang_id_seq', 1, false);
+
+
+--
+-- Name: loai_san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.loai_san_pham_id_seq', 10, true);
+
+
+--
+-- Name: nha_cung_cap_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.nha_cung_cap_id_seq', 2, true);
+
+
+--
+-- Name: nhan_vien_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.nhan_vien_id_seq', 4, true);
+
+
+--
+-- Name: nhat_ky_hoat_dong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.nhat_ky_hoat_dong_id_seq', 130, true);
+
+
+--
+-- Name: pham_vi_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.pham_vi_khuyen_mai_id_seq', 3, true);
+
+
+--
+-- Name: phien_xac_thuc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.phien_xac_thuc_id_seq', 30, true);
+
+
+--
+-- Name: quy_cach_san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.quy_cach_san_pham_id_seq', 37, true);
+
+
+--
+-- Name: quyen_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.quyen_id_seq', 30, true);
+
+
+--
+-- Name: san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.san_pham_id_seq', 27, true);
+
+
+--
+-- Name: su_dung_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.su_dung_khuyen_mai_id_seq', 1, true);
+
+
+--
+-- Name: tai_khoan_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.tai_khoan_id_seq', 4, true);
+
+
+--
+-- Name: thanh_toan_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.thanh_toan_id_seq', 3, true);
+
+
+--
+-- Name: thanh_toan_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.thanh_toan_ncc_id_seq', 1, false);
+
+
+--
+-- Name: thuong_hieu_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.thuong_hieu_id_seq', 24, true);
+
+
+--
+-- Name: uu_dai_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.uu_dai_so_luong_id_seq', 1, false);
+
+
+--
+-- Name: vai_tro_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.vai_tro_id_seq', 3, true);
+
+
+--
+-- Name: backend_schema_migration backend_schema_migration_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.backend_schema_migration
+    ADD CONSTRAINT backend_schema_migration_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: bien_dong_so_luong bien_dong_so_luong_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bien_dong_so_luong
+    ADD CONSTRAINT bien_dong_so_luong_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bien_dong_so_luong bien_dong_so_luong_san_pham_id_loai_nguon_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bien_dong_so_luong
+    ADD CONSTRAINT bien_dong_so_luong_san_pham_id_loai_nguon_id_key UNIQUE (san_pham_id, loai, nguon_id);
+
+
+--
+-- Name: chi_tiet_don_hang chi_tiet_don_hang_don_hang_id_quy_cach_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_hang
+    ADD CONSTRAINT chi_tiet_don_hang_don_hang_id_quy_cach_id_key UNIQUE (don_hang_id, quy_cach_id);
+
+
+--
+-- Name: chi_tiet_don_hang chi_tiet_don_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_hang
+    ADD CONSTRAINT chi_tiet_don_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chi_tiet_don_ncc chi_tiet_don_ncc_don_ncc_id_quy_cach_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_ncc
+    ADD CONSTRAINT chi_tiet_don_ncc_don_ncc_id_quy_cach_id_key UNIQUE (don_ncc_id, quy_cach_id);
+
+
+--
+-- Name: chi_tiet_don_ncc chi_tiet_don_ncc_id_don_ncc_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_ncc
+    ADD CONSTRAINT chi_tiet_don_ncc_id_don_ncc_id_key UNIQUE (id, don_ncc_id);
+
+
+--
+-- Name: chi_tiet_don_ncc chi_tiet_don_ncc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_ncc
+    ADD CONSTRAINT chi_tiet_don_ncc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chi_tiet_gio_hang chi_tiet_gio_hang_gio_hang_id_quy_cach_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_gio_hang
+    ADD CONSTRAINT chi_tiet_gio_hang_gio_hang_id_quy_cach_id_key UNIQUE (gio_hang_id, quy_cach_id);
+
+
+--
+-- Name: chi_tiet_gio_hang chi_tiet_gio_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_gio_hang
+    ADD CONSTRAINT chi_tiet_gio_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chi_tiet_hoa_don chi_tiet_hoa_don_hoa_don_id_chi_tiet_don_hang_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_hoa_don
+    ADD CONSTRAINT chi_tiet_hoa_don_hoa_don_id_chi_tiet_don_hang_id_key UNIQUE (hoa_don_id, chi_tiet_don_hang_id);
+
+
+--
+-- Name: chi_tiet_hoa_don chi_tiet_hoa_don_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_hoa_don
+    ADD CONSTRAINT chi_tiet_hoa_don_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chi_tiet_lan_nhap chi_tiet_lan_nhap_lan_nhap_id_ct_don_ncc_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_lan_nhap
+    ADD CONSTRAINT chi_tiet_lan_nhap_lan_nhap_id_ct_don_ncc_id_key UNIQUE (lan_nhap_id, ct_don_ncc_id);
+
+
+--
+-- Name: chi_tiet_lan_nhap chi_tiet_lan_nhap_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_lan_nhap
+    ADD CONSTRAINT chi_tiet_lan_nhap_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cong_no_ncc cong_no_ncc_lan_nhap_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cong_no_ncc
+    ADD CONSTRAINT cong_no_ncc_lan_nhap_id_key UNIQUE (lan_nhap_id);
+
+
+--
+-- Name: cong_no_ncc cong_no_ncc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cong_no_ncc
+    ADD CONSTRAINT cong_no_ncc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: danh_gia_san_pham danh_gia_san_pham_chi_tiet_don_hang_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.danh_gia_san_pham
+    ADD CONSTRAINT danh_gia_san_pham_chi_tiet_don_hang_id_key UNIQUE (chi_tiet_don_hang_id);
+
+
+--
+-- Name: danh_gia_san_pham danh_gia_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.danh_gia_san_pham
+    ADD CONSTRAINT danh_gia_san_pham_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: dia_chi_giao_hang dia_chi_giao_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dia_chi_giao_hang
+    ADD CONSTRAINT dia_chi_giao_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: dieu_chinh_so_luong dieu_chinh_so_luong_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dieu_chinh_so_luong
+    ADD CONSTRAINT dieu_chinh_so_luong_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: don_dat_hang_ncc don_dat_hang_ncc_ma_don_nhap_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_dat_hang_ncc
+    ADD CONSTRAINT don_dat_hang_ncc_ma_don_nhap_key UNIQUE (ma_don_nhap);
+
+
+--
+-- Name: don_dat_hang_ncc don_dat_hang_ncc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_dat_hang_ncc
+    ADD CONSTRAINT don_dat_hang_ncc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: don_hang don_hang_ma_don_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_ma_don_key UNIQUE (ma_don);
+
+
+--
+-- Name: don_hang don_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: giay_to_ncc giay_to_ncc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.giay_to_ncc
+    ADD CONSTRAINT giay_to_ncc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: gio_hang gio_hang_khach_hang_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gio_hang
+    ADD CONSTRAINT gio_hang_khach_hang_id_key UNIQUE (khach_hang_id);
+
+
+--
+-- Name: gio_hang gio_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gio_hang
+    ADD CONSTRAINT gio_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hinh_anh_san_pham hinh_anh_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hinh_anh_san_pham
+    ADD CONSTRAINT hinh_anh_san_pham_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hoa_don hoa_don_don_hang_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoa_don
+    ADD CONSTRAINT hoa_don_don_hang_id_key UNIQUE (don_hang_id);
+
+
+--
+-- Name: hoa_don hoa_don_ma_hoa_don_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoa_don
+    ADD CONSTRAINT hoa_don_ma_hoa_don_key UNIQUE (ma_hoa_don);
+
+
+--
+-- Name: hoa_don hoa_don_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoa_don
+    ADD CONSTRAINT hoa_don_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hoan_tien hoan_tien_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoan_tien
+    ADD CONSTRAINT hoan_tien_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: khach_hang khach_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khach_hang
+    ADD CONSTRAINT khach_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: khach_hang khach_hang_tai_khoan_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khach_hang
+    ADD CONSTRAINT khach_hang_tai_khoan_id_key UNIQUE (tai_khoan_id);
+
+
+--
+-- Name: khuyen_mai khuyen_mai_ma_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khuyen_mai
+    ADD CONSTRAINT khuyen_mai_ma_code_key UNIQUE (ma_code);
+
+
+--
+-- Name: khuyen_mai khuyen_mai_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khuyen_mai
+    ADD CONSTRAINT khuyen_mai_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lan_nhap_hang lan_nhap_hang_id_don_ncc_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lan_nhap_hang
+    ADD CONSTRAINT lan_nhap_hang_id_don_ncc_id_key UNIQUE (id, don_ncc_id);
+
+
+--
+-- Name: lan_nhap_hang lan_nhap_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lan_nhap_hang
+    ADD CONSTRAINT lan_nhap_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lich_su_hoa_don lich_su_hoa_don_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_hoa_don
+    ADD CONSTRAINT lich_su_hoa_don_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lich_su_trang_thai_don lich_su_trang_thai_don_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_trang_thai_don
+    ADD CONSTRAINT lich_su_trang_thai_don_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lien_he_khach_hang lien_he_khach_hang_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lien_he_khach_hang
+    ADD CONSTRAINT lien_he_khach_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: loai_san_pham loai_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loai_san_pham
+    ADD CONSTRAINT loai_san_pham_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: loai_san_pham loai_san_pham_ten_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loai_san_pham
+    ADD CONSTRAINT loai_san_pham_ten_key UNIQUE (ten);
+
+
+--
+-- Name: nha_cung_cap nha_cung_cap_ma_so_thue_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap
+    ADD CONSTRAINT nha_cung_cap_ma_so_thue_key UNIQUE (ma_so_thue);
+
+
+--
+-- Name: nha_cung_cap nha_cung_cap_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap
+    ADD CONSTRAINT nha_cung_cap_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: nha_cung_cap_san_pham nha_cung_cap_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap_san_pham
+    ADD CONSTRAINT nha_cung_cap_san_pham_pkey PRIMARY KEY (nha_cung_cap_id, san_pham_id);
+
+
+--
+-- Name: nhan_vien nhan_vien_ma_nhan_vien_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhan_vien
+    ADD CONSTRAINT nhan_vien_ma_nhan_vien_key UNIQUE (ma_nhan_vien);
+
+
+--
+-- Name: nhan_vien nhan_vien_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhan_vien
+    ADD CONSTRAINT nhan_vien_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: nhan_vien nhan_vien_tai_khoan_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhan_vien
+    ADD CONSTRAINT nhan_vien_tai_khoan_id_key UNIQUE (tai_khoan_id);
+
+
+--
+-- Name: nhat_ky_hoat_dong nhat_ky_hoat_dong_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhat_ky_hoat_dong
+    ADD CONSTRAINT nhat_ky_hoat_dong_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pham_vi_khuyen_mai
+    ADD CONSTRAINT pham_vi_khuyen_mai_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: phien_xac_thuc phien_xac_thuc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.phien_xac_thuc
+    ADD CONSTRAINT phien_xac_thuc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: phien_xac_thuc phien_xac_thuc_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.phien_xac_thuc
+    ADD CONSTRAINT phien_xac_thuc_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: quy_cach_san_pham quy_cach_san_pham_id_san_pham_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quy_cach_san_pham
+    ADD CONSTRAINT quy_cach_san_pham_id_san_pham_id_key UNIQUE (id, san_pham_id);
+
+
+--
+-- Name: quy_cach_san_pham quy_cach_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quy_cach_san_pham
+    ADD CONSTRAINT quy_cach_san_pham_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: quy_cach_san_pham quy_cach_san_pham_san_pham_id_ten_quy_cach_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quy_cach_san_pham
+    ADD CONSTRAINT quy_cach_san_pham_san_pham_id_ten_quy_cach_key UNIQUE (san_pham_id, ten_quy_cach);
+
+
+--
+-- Name: quyen quyen_ma_chuc_nang_hanh_dong_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quyen
+    ADD CONSTRAINT quyen_ma_chuc_nang_hanh_dong_key UNIQUE (ma_chuc_nang, hanh_dong);
+
+
+--
+-- Name: quyen quyen_ma_quyen_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quyen
+    ADD CONSTRAINT quyen_ma_quyen_key UNIQUE (ma_quyen);
+
+
+--
+-- Name: quyen quyen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quyen
+    ADD CONSTRAINT quyen_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: san_pham san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham
+    ADD CONSTRAINT san_pham_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: san_pham san_pham_sku_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham
+    ADD CONSTRAINT san_pham_sku_key UNIQUE (sku);
+
+
+--
+-- Name: san_pham_yeu_thich san_pham_yeu_thich_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham_yeu_thich
+    ADD CONSTRAINT san_pham_yeu_thich_pkey PRIMARY KEY (khach_hang_id, san_pham_id);
+
+
+--
+-- Name: so_luong_san_pham so_luong_san_pham_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.so_luong_san_pham
+    ADD CONSTRAINT so_luong_san_pham_pkey PRIMARY KEY (san_pham_id);
+
+
+--
+-- Name: su_dung_khuyen_mai su_dung_khuyen_mai_khuyen_mai_id_don_hang_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.su_dung_khuyen_mai
+    ADD CONSTRAINT su_dung_khuyen_mai_khuyen_mai_id_don_hang_id_key UNIQUE (khuyen_mai_id, don_hang_id);
+
+
+--
+-- Name: su_dung_khuyen_mai su_dung_khuyen_mai_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.su_dung_khuyen_mai
+    ADD CONSTRAINT su_dung_khuyen_mai_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tai_khoan tai_khoan_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tai_khoan
+    ADD CONSTRAINT tai_khoan_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tai_khoan_vai_tro tai_khoan_vai_tro_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tai_khoan_vai_tro
+    ADD CONSTRAINT tai_khoan_vai_tro_pkey PRIMARY KEY (tai_khoan_id, vai_tro_id);
+
+
+--
+-- Name: thanh_toan thanh_toan_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan
+    ADD CONSTRAINT thanh_toan_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: thanh_toan thanh_toan_ma_giao_dich_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan
+    ADD CONSTRAINT thanh_toan_ma_giao_dich_key UNIQUE (ma_giao_dich);
+
+
+--
+-- Name: thanh_toan_ncc thanh_toan_ncc_ma_tham_chieu_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan_ncc
+    ADD CONSTRAINT thanh_toan_ncc_ma_tham_chieu_key UNIQUE (ma_tham_chieu);
+
+
+--
+-- Name: thanh_toan_ncc thanh_toan_ncc_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan_ncc
+    ADD CONSTRAINT thanh_toan_ncc_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thanh_toan thanh_toan_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan
+    ADD CONSTRAINT thanh_toan_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thuong_hieu thuong_hieu_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thuong_hieu
+    ADD CONSTRAINT thuong_hieu_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thuong_hieu thuong_hieu_ten_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thuong_hieu
+    ADD CONSTRAINT thuong_hieu_ten_key UNIQUE (ten);
+
+
+--
+-- Name: uu_dai_so_luong uu_dai_so_luong_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.uu_dai_so_luong
+    ADD CONSTRAINT uu_dai_so_luong_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vai_tro vai_tro_ma_vai_tro_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vai_tro
+    ADD CONSTRAINT vai_tro_ma_vai_tro_key UNIQUE (ma_vai_tro);
+
+
+--
+-- Name: vai_tro vai_tro_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vai_tro
+    ADD CONSTRAINT vai_tro_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vai_tro_quyen vai_tro_quyen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vai_tro_quyen
+    ADD CONSTRAINT vai_tro_quyen_pkey PRIMARY KEY (vai_tro_id, quyen_id);
+
+
+--
+-- Name: idx_don_hang_kenh_ngay; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_don_hang_kenh_ngay ON public.don_hang USING btree (kenh_ban, ngay_dat DESC);
+
+
+--
+-- Name: idx_don_hang_khach; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_don_hang_khach ON public.don_hang USING btree (khach_hang_id, ngay_dat DESC);
+
+
+--
+-- Name: uq_anh_chinh; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_anh_chinh ON public.hinh_anh_san_pham USING btree (san_pham_id) WHERE anh_chinh;
+
+
+--
+-- Name: uq_dia_chi_mac_dinh; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_dia_chi_mac_dinh ON public.dia_chi_giao_hang USING btree (khach_hang_id) WHERE mac_dinh;
+
+
+--
+-- Name: uq_km_loai; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_km_loai ON public.pham_vi_khuyen_mai USING btree (khuyen_mai_id, loai_san_pham_id) WHERE (loai_san_pham_id IS NOT NULL);
+
+
+--
+-- Name: uq_km_sp; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_km_sp ON public.pham_vi_khuyen_mai USING btree (khuyen_mai_id, san_pham_id) WHERE (san_pham_id IS NOT NULL);
+
+
+--
+-- Name: uq_km_th; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_km_th ON public.pham_vi_khuyen_mai USING btree (khuyen_mai_id, thuong_hieu_id) WHERE (thuong_hieu_id IS NOT NULL);
+
+
+--
+-- Name: uq_tai_khoan_email_ci; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_tai_khoan_email_ci ON public.tai_khoan USING btree (lower((email)::text));
+
+
+--
+-- Name: thanh_toan trg_backend_payment_invoice; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_backend_payment_invoice AFTER UPDATE OF trang_thai ON public.thanh_toan FOR EACH ROW EXECUTE FUNCTION public.backend_payment_invoice();
+
+
+--
+-- Name: chi_tiet_hoa_don trg_chi_tiet_hoa_don_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_chi_tiet_hoa_don_immutable BEFORE DELETE OR UPDATE ON public.chi_tiet_hoa_don FOR EACH ROW EXECUTE FUNCTION public.fn_chi_tiet_hoa_don_immutable();
+
+
+--
+-- Name: bien_dong_so_luong trg_chong_sua_bien_dong; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_chong_sua_bien_dong BEFORE DELETE OR UPDATE ON public.bien_dong_so_luong FOR EACH ROW EXECUTE FUNCTION public.fn_chong_sua_bien_dong();
+
+
+--
+-- Name: dieu_chinh_so_luong trg_dieu_chinh_so_luong; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_dieu_chinh_so_luong BEFORE INSERT ON public.dieu_chinh_so_luong FOR EACH ROW EXECUTE FUNCTION public.fn_dieu_chinh_so_luong();
+
+
+--
+-- Name: hoa_don trg_hoa_don_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_hoa_don_immutable BEFORE DELETE OR UPDATE ON public.hoa_don FOR EACH ROW EXECUTE FUNCTION public.fn_hoa_don_immutable();
+
+
+--
+-- Name: hoa_don trg_invoice_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_invoice_history AFTER UPDATE OF trang_thai ON public.hoa_don FOR EACH ROW EXECUTE FUNCTION public.fn_invoice_history();
+
+
+--
+-- Name: san_pham trg_khoi_tao_so_luong; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_khoi_tao_so_luong AFTER INSERT ON public.san_pham FOR EACH ROW EXECUTE FUNCTION public.fn_khoi_tao_so_luong();
+
+
+--
+-- Name: don_hang trg_order_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_order_history AFTER UPDATE OF trang_thai ON public.don_hang FOR EACH ROW EXECUTE FUNCTION public.fn_order_history();
+
+
+--
+-- Name: don_hang trg_order_inventory; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_order_inventory BEFORE INSERT OR UPDATE OF trang_thai ON public.don_hang FOR EACH ROW EXECUTE FUNCTION public.fn_order_inventory();
+
+
+--
+-- Name: thanh_toan_ncc trg_paid_ncc_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_paid_ncc_immutable BEFORE DELETE OR UPDATE ON public.thanh_toan_ncc FOR EACH ROW EXECUTE FUNCTION public.fn_immutable_posted();
+
+
+--
+-- Name: chi_tiet_don_hang trg_protect_order_lines; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_protect_order_lines BEFORE INSERT OR DELETE OR UPDATE ON public.chi_tiet_don_hang FOR EACH ROW EXECUTE FUNCTION public.fn_protect_order_lines();
+
+
+--
+-- Name: chi_tiet_lan_nhap trg_protect_received_lines; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_protect_received_lines BEFORE INSERT OR DELETE OR UPDATE ON public.chi_tiet_lan_nhap FOR EACH ROW EXECUTE FUNCTION public.fn_protect_received_lines();
+
+
+--
+-- Name: lan_nhap_hang trg_receive_finalize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_receive_finalize AFTER UPDATE OF trang_thai ON public.lan_nhap_hang FOR EACH ROW EXECUTE FUNCTION public.fn_receive_finalize();
+
+
+--
+-- Name: lan_nhap_hang trg_receive_inventory; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_receive_inventory BEFORE UPDATE OF trang_thai ON public.lan_nhap_hang FOR EACH ROW EXECUTE FUNCTION public.fn_receive_inventory();
+
+
+--
+-- Name: bien_dong_so_luong trg_so_luong_bien_dong; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_so_luong_bien_dong BEFORE INSERT ON public.bien_dong_so_luong FOR EACH ROW EXECUTE FUNCTION public.fn_so_luong_bien_dong();
+
+
+--
+-- Name: thanh_toan_ncc trg_supplier_payment; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_supplier_payment AFTER INSERT ON public.thanh_toan_ncc FOR EACH ROW EXECUTE FUNCTION public.fn_supplier_payment();
+
+
+--
+-- Name: bien_dong_so_luong bien_dong_so_luong_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bien_dong_so_luong
+    ADD CONSTRAINT bien_dong_so_luong_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: chi_tiet_don_hang chi_tiet_don_hang_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_hang
+    ADD CONSTRAINT chi_tiet_don_hang_don_hang_id_fkey FOREIGN KEY (don_hang_id) REFERENCES public.don_hang(id);
+
+
+--
+-- Name: chi_tiet_don_hang chi_tiet_don_hang_quy_cach_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_hang
+    ADD CONSTRAINT chi_tiet_don_hang_quy_cach_id_fkey FOREIGN KEY (quy_cach_id) REFERENCES public.quy_cach_san_pham(id);
+
+
+--
+-- Name: chi_tiet_don_ncc chi_tiet_don_ncc_don_ncc_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_ncc
+    ADD CONSTRAINT chi_tiet_don_ncc_don_ncc_id_fkey FOREIGN KEY (don_ncc_id) REFERENCES public.don_dat_hang_ncc(id);
+
+
+--
+-- Name: chi_tiet_don_ncc chi_tiet_don_ncc_quy_cach_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_don_ncc
+    ADD CONSTRAINT chi_tiet_don_ncc_quy_cach_id_fkey FOREIGN KEY (quy_cach_id) REFERENCES public.quy_cach_san_pham(id);
+
+
+--
+-- Name: chi_tiet_gio_hang chi_tiet_gio_hang_gio_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_gio_hang
+    ADD CONSTRAINT chi_tiet_gio_hang_gio_hang_id_fkey FOREIGN KEY (gio_hang_id) REFERENCES public.gio_hang(id) ON DELETE CASCADE;
+
+
+--
+-- Name: chi_tiet_gio_hang chi_tiet_gio_hang_quy_cach_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_gio_hang
+    ADD CONSTRAINT chi_tiet_gio_hang_quy_cach_id_fkey FOREIGN KEY (quy_cach_id) REFERENCES public.quy_cach_san_pham(id);
+
+
+--
+-- Name: chi_tiet_hoa_don chi_tiet_hoa_don_chi_tiet_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_hoa_don
+    ADD CONSTRAINT chi_tiet_hoa_don_chi_tiet_don_hang_id_fkey FOREIGN KEY (chi_tiet_don_hang_id) REFERENCES public.chi_tiet_don_hang(id);
+
+
+--
+-- Name: chi_tiet_hoa_don chi_tiet_hoa_don_hoa_don_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_hoa_don
+    ADD CONSTRAINT chi_tiet_hoa_don_hoa_don_id_fkey FOREIGN KEY (hoa_don_id) REFERENCES public.hoa_don(id);
+
+
+--
+-- Name: chi_tiet_lan_nhap chi_tiet_lan_nhap_ct_don_ncc_id_don_ncc_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_lan_nhap
+    ADD CONSTRAINT chi_tiet_lan_nhap_ct_don_ncc_id_don_ncc_id_fkey FOREIGN KEY (ct_don_ncc_id, don_ncc_id) REFERENCES public.chi_tiet_don_ncc(id, don_ncc_id);
+
+
+--
+-- Name: chi_tiet_lan_nhap chi_tiet_lan_nhap_lan_nhap_id_don_ncc_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chi_tiet_lan_nhap
+    ADD CONSTRAINT chi_tiet_lan_nhap_lan_nhap_id_don_ncc_id_fkey FOREIGN KEY (lan_nhap_id, don_ncc_id) REFERENCES public.lan_nhap_hang(id, don_ncc_id);
+
+
+--
+-- Name: cong_no_ncc cong_no_ncc_lan_nhap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cong_no_ncc
+    ADD CONSTRAINT cong_no_ncc_lan_nhap_id_fkey FOREIGN KEY (lan_nhap_id) REFERENCES public.lan_nhap_hang(id);
+
+
+--
+-- Name: danh_gia_san_pham danh_gia_san_pham_chi_tiet_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.danh_gia_san_pham
+    ADD CONSTRAINT danh_gia_san_pham_chi_tiet_don_hang_id_fkey FOREIGN KEY (chi_tiet_don_hang_id) REFERENCES public.chi_tiet_don_hang(id);
+
+
+--
+-- Name: danh_gia_san_pham danh_gia_san_pham_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.danh_gia_san_pham
+    ADD CONSTRAINT danh_gia_san_pham_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id);
+
+
+--
+-- Name: dia_chi_giao_hang dia_chi_giao_hang_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dia_chi_giao_hang
+    ADD CONSTRAINT dia_chi_giao_hang_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id) ON DELETE CASCADE;
+
+
+--
+-- Name: dieu_chinh_so_luong dieu_chinh_so_luong_nguoi_dieu_chinh_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dieu_chinh_so_luong
+    ADD CONSTRAINT dieu_chinh_so_luong_nguoi_dieu_chinh_id_fkey FOREIGN KEY (nguoi_dieu_chinh_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: dieu_chinh_so_luong dieu_chinh_so_luong_quy_cach_id_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dieu_chinh_so_luong
+    ADD CONSTRAINT dieu_chinh_so_luong_quy_cach_id_san_pham_id_fkey FOREIGN KEY (quy_cach_id, san_pham_id) REFERENCES public.quy_cach_san_pham(id, san_pham_id);
+
+
+--
+-- Name: dieu_chinh_so_luong dieu_chinh_so_luong_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dieu_chinh_so_luong
+    ADD CONSTRAINT dieu_chinh_so_luong_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: don_dat_hang_ncc don_dat_hang_ncc_nguoi_duyet_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_dat_hang_ncc
+    ADD CONSTRAINT don_dat_hang_ncc_nguoi_duyet_id_fkey FOREIGN KEY (nguoi_duyet_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: don_dat_hang_ncc don_dat_hang_ncc_nguoi_lap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_dat_hang_ncc
+    ADD CONSTRAINT don_dat_hang_ncc_nguoi_lap_id_fkey FOREIGN KEY (nguoi_lap_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: don_dat_hang_ncc don_dat_hang_ncc_nha_cung_cap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_dat_hang_ncc
+    ADD CONSTRAINT don_dat_hang_ncc_nha_cung_cap_id_fkey FOREIGN KEY (nha_cung_cap_id) REFERENCES public.nha_cung_cap(id);
+
+
+--
+-- Name: don_hang don_hang_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id);
+
+
+--
+-- Name: don_hang don_hang_khuyen_mai_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_khuyen_mai_id_fkey FOREIGN KEY (khuyen_mai_id) REFERENCES public.khuyen_mai(id);
+
+
+--
+-- Name: don_hang don_hang_nhan_vien_xu_ly_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_nhan_vien_xu_ly_id_fkey FOREIGN KEY (nhan_vien_xu_ly_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: giay_to_ncc giay_to_ncc_nha_cung_cap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.giay_to_ncc
+    ADD CONSTRAINT giay_to_ncc_nha_cung_cap_id_fkey FOREIGN KEY (nha_cung_cap_id) REFERENCES public.nha_cung_cap(id);
+
+
+--
+-- Name: gio_hang gio_hang_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gio_hang
+    ADD CONSTRAINT gio_hang_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hinh_anh_san_pham hinh_anh_san_pham_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hinh_anh_san_pham
+    ADD CONSTRAINT hinh_anh_san_pham_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hoa_don hoa_don_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoa_don
+    ADD CONSTRAINT hoa_don_don_hang_id_fkey FOREIGN KEY (don_hang_id) REFERENCES public.don_hang(id);
+
+
+--
+-- Name: hoa_don hoa_don_nguoi_lap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoa_don
+    ADD CONSTRAINT hoa_don_nguoi_lap_id_fkey FOREIGN KEY (nguoi_lap_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: hoan_tien hoan_tien_nguoi_xu_ly_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoan_tien
+    ADD CONSTRAINT hoan_tien_nguoi_xu_ly_id_fkey FOREIGN KEY (nguoi_xu_ly_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: hoan_tien hoan_tien_thanh_toan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hoan_tien
+    ADD CONSTRAINT hoan_tien_thanh_toan_id_fkey FOREIGN KEY (thanh_toan_id) REFERENCES public.thanh_toan(id);
+
+
+--
+-- Name: khach_hang khach_hang_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khach_hang
+    ADD CONSTRAINT khach_hang_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: lan_nhap_hang lan_nhap_hang_don_ncc_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lan_nhap_hang
+    ADD CONSTRAINT lan_nhap_hang_don_ncc_id_fkey FOREIGN KEY (don_ncc_id) REFERENCES public.don_dat_hang_ncc(id);
+
+
+--
+-- Name: lan_nhap_hang lan_nhap_hang_nguoi_nhan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lan_nhap_hang
+    ADD CONSTRAINT lan_nhap_hang_nguoi_nhan_id_fkey FOREIGN KEY (nguoi_nhan_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: lich_su_hoa_don lich_su_hoa_don_hoa_don_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_hoa_don
+    ADD CONSTRAINT lich_su_hoa_don_hoa_don_id_fkey FOREIGN KEY (hoa_don_id) REFERENCES public.hoa_don(id);
+
+
+--
+-- Name: lich_su_hoa_don lich_su_hoa_don_tai_khoan_thuc_hien_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_hoa_don
+    ADD CONSTRAINT lich_su_hoa_don_tai_khoan_thuc_hien_id_fkey FOREIGN KEY (tai_khoan_thuc_hien_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: lich_su_trang_thai_don lich_su_trang_thai_don_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_trang_thai_don
+    ADD CONSTRAINT lich_su_trang_thai_don_don_hang_id_fkey FOREIGN KEY (don_hang_id) REFERENCES public.don_hang(id);
+
+
+--
+-- Name: lich_su_trang_thai_don lich_su_trang_thai_don_tai_khoan_thuc_hien_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lich_su_trang_thai_don
+    ADD CONSTRAINT lich_su_trang_thai_don_tai_khoan_thuc_hien_id_fkey FOREIGN KEY (tai_khoan_thuc_hien_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: lien_he_khach_hang lien_he_khach_hang_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lien_he_khach_hang
+    ADD CONSTRAINT lien_he_khach_hang_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id);
+
+
+--
+-- Name: lien_he_khach_hang lien_he_khach_hang_nhan_vien_phan_hoi_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lien_he_khach_hang
+    ADD CONSTRAINT lien_he_khach_hang_nhan_vien_phan_hoi_id_fkey FOREIGN KEY (nhan_vien_phan_hoi_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: nha_cung_cap nha_cung_cap_nguoi_xac_minh_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap
+    ADD CONSTRAINT nha_cung_cap_nguoi_xac_minh_id_fkey FOREIGN KEY (nguoi_xac_minh_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: nha_cung_cap_san_pham nha_cung_cap_san_pham_nha_cung_cap_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap_san_pham
+    ADD CONSTRAINT nha_cung_cap_san_pham_nha_cung_cap_id_fkey FOREIGN KEY (nha_cung_cap_id) REFERENCES public.nha_cung_cap(id);
+
+
+--
+-- Name: nha_cung_cap_san_pham nha_cung_cap_san_pham_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nha_cung_cap_san_pham
+    ADD CONSTRAINT nha_cung_cap_san_pham_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: nhan_vien nhan_vien_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhan_vien
+    ADD CONSTRAINT nhan_vien_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: nhat_ky_hoat_dong nhat_ky_hoat_dong_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.nhat_ky_hoat_dong
+    ADD CONSTRAINT nhat_ky_hoat_dong_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id);
+
+
+--
+-- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_khuyen_mai_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pham_vi_khuyen_mai
+    ADD CONSTRAINT pham_vi_khuyen_mai_khuyen_mai_id_fkey FOREIGN KEY (khuyen_mai_id) REFERENCES public.khuyen_mai(id) ON DELETE CASCADE;
+
+
+--
+-- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_loai_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pham_vi_khuyen_mai
+    ADD CONSTRAINT pham_vi_khuyen_mai_loai_san_pham_id_fkey FOREIGN KEY (loai_san_pham_id) REFERENCES public.loai_san_pham(id);
+
+
+--
+-- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pham_vi_khuyen_mai
+    ADD CONSTRAINT pham_vi_khuyen_mai_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_thuong_hieu_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pham_vi_khuyen_mai
+    ADD CONSTRAINT pham_vi_khuyen_mai_thuong_hieu_id_fkey FOREIGN KEY (thuong_hieu_id) REFERENCES public.thuong_hieu(id);
+
+
+--
+-- Name: phien_xac_thuc phien_xac_thuc_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.phien_xac_thuc
+    ADD CONSTRAINT phien_xac_thuc_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id) ON DELETE CASCADE;
+
+
+--
+-- Name: quy_cach_san_pham quy_cach_san_pham_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quy_cach_san_pham
+    ADD CONSTRAINT quy_cach_san_pham_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: san_pham san_pham_loai_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham
+    ADD CONSTRAINT san_pham_loai_san_pham_id_fkey FOREIGN KEY (loai_san_pham_id) REFERENCES public.loai_san_pham(id);
+
+
+--
+-- Name: san_pham san_pham_thuong_hieu_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham
+    ADD CONSTRAINT san_pham_thuong_hieu_id_fkey FOREIGN KEY (thuong_hieu_id) REFERENCES public.thuong_hieu(id);
+
+
+--
+-- Name: san_pham_yeu_thich san_pham_yeu_thich_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham_yeu_thich
+    ADD CONSTRAINT san_pham_yeu_thich_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id) ON DELETE CASCADE;
+
+
+--
+-- Name: san_pham_yeu_thich san_pham_yeu_thich_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.san_pham_yeu_thich
+    ADD CONSTRAINT san_pham_yeu_thich_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: so_luong_san_pham so_luong_san_pham_san_pham_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.so_luong_san_pham
+    ADD CONSTRAINT so_luong_san_pham_san_pham_id_fkey FOREIGN KEY (san_pham_id) REFERENCES public.san_pham(id);
+
+
+--
+-- Name: su_dung_khuyen_mai su_dung_khuyen_mai_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.su_dung_khuyen_mai
+    ADD CONSTRAINT su_dung_khuyen_mai_don_hang_id_fkey FOREIGN KEY (don_hang_id) REFERENCES public.don_hang(id);
+
+
+--
+-- Name: su_dung_khuyen_mai su_dung_khuyen_mai_khach_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.su_dung_khuyen_mai
+    ADD CONSTRAINT su_dung_khuyen_mai_khach_hang_id_fkey FOREIGN KEY (khach_hang_id) REFERENCES public.khach_hang(id);
+
+
+--
+-- Name: su_dung_khuyen_mai su_dung_khuyen_mai_khuyen_mai_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.su_dung_khuyen_mai
+    ADD CONSTRAINT su_dung_khuyen_mai_khuyen_mai_id_fkey FOREIGN KEY (khuyen_mai_id) REFERENCES public.khuyen_mai(id);
+
+
+--
+-- Name: tai_khoan_vai_tro tai_khoan_vai_tro_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tai_khoan_vai_tro
+    ADD CONSTRAINT tai_khoan_vai_tro_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id) ON DELETE CASCADE;
+
+
+--
+-- Name: tai_khoan_vai_tro tai_khoan_vai_tro_vai_tro_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tai_khoan_vai_tro
+    ADD CONSTRAINT tai_khoan_vai_tro_vai_tro_id_fkey FOREIGN KEY (vai_tro_id) REFERENCES public.vai_tro(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: thanh_toan thanh_toan_don_hang_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan
+    ADD CONSTRAINT thanh_toan_don_hang_id_fkey FOREIGN KEY (don_hang_id) REFERENCES public.don_hang(id);
+
+
+--
+-- Name: thanh_toan_ncc thanh_toan_ncc_cong_no_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thanh_toan_ncc
+    ADD CONSTRAINT thanh_toan_ncc_cong_no_id_fkey FOREIGN KEY (cong_no_id) REFERENCES public.cong_no_ncc(id);
+
+
+--
+-- Name: uu_dai_so_luong uu_dai_so_luong_khuyen_mai_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.uu_dai_so_luong
+    ADD CONSTRAINT uu_dai_so_luong_khuyen_mai_id_fkey FOREIGN KEY (khuyen_mai_id) REFERENCES public.khuyen_mai(id) ON DELETE CASCADE;
+
+
+--
+-- Name: uu_dai_so_luong uu_dai_so_luong_quy_cach_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.uu_dai_so_luong
+    ADD CONSTRAINT uu_dai_so_luong_quy_cach_id_fkey FOREIGN KEY (quy_cach_id) REFERENCES public.quy_cach_san_pham(id);
+
+
+--
+-- Name: vai_tro_quyen vai_tro_quyen_quyen_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vai_tro_quyen
+    ADD CONSTRAINT vai_tro_quyen_quyen_id_fkey FOREIGN KEY (quyen_id) REFERENCES public.quyen(id) ON DELETE CASCADE;
+
+
+--
+-- Name: vai_tro_quyen vai_tro_quyen_vai_tro_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vai_tro_quyen
+    ADD CONSTRAINT vai_tro_quyen_vai_tro_id_fkey FOREIGN KEY (vai_tro_id) REFERENCES public.vai_tro(id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict H4AlpGPRB3PEOonQYgi7CQ3UXLlHg0TLCP0I1k9qdgKcVEzDh15Igygi94NeKaG
+
+COMMIT;

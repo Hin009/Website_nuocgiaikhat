@@ -1,4 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import SupplierReturns from './SupplierReturns';
+import PurchaseOrderForm from './PurchaseOrderForm';
+import ReceiptAcceptanceForm from './ReceiptAcceptanceForm';
+import { remainingToReceive } from '@/utils/receiving';
+import { inPurchasingDateRange, purchasingDate } from '@/utils/purchasing-dates';
+import { supplierDeliveryStatus } from '@/utils/supplier-delivery';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdmin, useAction } from '@/hooks/useData';
@@ -6,7 +12,7 @@ import { purchasingService } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
-import { PageHeading, QueryState, EmptyState, Field } from '@/components/common/Shared';
+import { PageHeading, QueryState, EmptyState } from '@/components/common/Shared';
 import { money, date } from '@/utils/format';
 const labels = {
   CHO_DUYET: 'Chờ duyệt',
@@ -17,9 +23,32 @@ const labels = {
   DA_NHAN_DU: 'Đã nhận đủ',
   DA_HUY: 'Đã hủy',
 };
+function DeliverySchedule({ order, today }) {
+  const status = supplierDeliveryStatus(order, today);
+  return (
+    <>
+      {order.ngay_giao_du_kien ? date(`${order.ngay_giao_du_kien}T12:00:00+07:00`) : 'Chưa hẹn'}
+      {status && (
+        <small
+          className={`delivery-status ${['overdue', 'late'].includes(status.kind) ? 'delivery-late' : 'delivery-on-time'}`}
+        >
+          {status.label}
+        </small>
+      )}
+      {status?.completedOn && (
+        <small>Nhận đủ: {date(`${status.completedOn}T12:00:00+07:00`)}</small>
+      )}
+    </>
+  );
+}
 export default function ApiReceiptsPage() {
   const { user } = useAuth();
   const admin = user.role === 'ADMIN';
+  const [today, setToday] = useState(() => purchasingDate());
+  useEffect(() => {
+    const timer = setInterval(() => setToday(purchasingDate()), 60000);
+    return () => clearInterval(timer);
+  }, []);
   const orders = useQuery({
     queryKey: ['purchase-orders'],
     queryFn: async () =>
@@ -35,11 +64,19 @@ export default function ApiReceiptsPage() {
     enabled: admin,
   });
   const products = useAdmin('products');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [orderDateField, setOrderDateField] = useState('ngay_giao_du_kien');
+  const invalidRange = !!(from && to && from > to);
+  const filteredOrders = (orders.data || []).filter((o) =>
+    inPurchasingDateRange(o[orderDateField], from, to),
+  );
+  const filteredReceipts = (receipts.data || []).filter((r) =>
+    inPurchasingDateRange(r.ngay_nhap, from, to),
+  );
   const [dialog, setDialog] = useState(null);
-  const [productId, setProductId] = useState('');
   const [pending, setPending] = useState(null);
   const action = useAction((task) => task(), 'Đã lưu thay đổi');
-  const product = products.data?.find((p) => p.id === productId);
   const supplierName = (id) => suppliers.data?.find((s) => s.id === id)?.ten || `#${id}`;
   const packageName = (id) => {
     for (const p of products.data || []) {
@@ -48,13 +85,7 @@ export default function ApiReceiptsPage() {
     }
     return `Quy cách #${id}`;
   };
-  const remaining = (line) =>
-    line.so_luong_dat -
-    (receipts.data || [])
-      .filter((r) => r.trang_thai === 'CONFIRMED')
-      .flatMap((r) => r.items)
-      .filter((l) => l.ct_don_ncc_id === line.id)
-      .reduce((sum, l) => sum + l.so_luong_thuc_nhan, 0);
+  const remaining = (line) => remainingToReceive(line, receipts.data || []);
   const confirm = async () => {
     try {
       await action.mutateAsync(pending.run);
@@ -67,45 +98,103 @@ export default function ApiReceiptsPage() {
   return (
     <>
       <PageHeading
-        title="Đơn nhập và nhận hàng"
-        description="Theo dõi đơn nhà cung cấp và từng lần nhận hàng."
+        title="Đơn đặt hàng và nhập hàng"
+        description="Theo dõi đơn đặt hàng nhà cung cấp, lịch giao dự kiến và từng lần nhập hàng."
         action={
           admin && (
             <div className="row-actions">
-              <Button variant="outline" onClick={() => setDialog({ type: 'supplier' })}>
-                Thêm nhà cung cấp
-              </Button>
-              <Button onClick={() => setDialog({ type: 'order' })}>Lập đơn nhập</Button>
+              <Button onClick={() => setDialog({ type: 'order' })}>Lập đơn đặt hàng</Button>
             </div>
           )
         }
       />
+      <div className="date-filter" aria-label="Lọc ngày đặt hàng và nhập hàng">
+        <label>
+          Lọc đơn đặt hàng theo
+          <select value={orderDateField} onChange={(e) => setOrderDateField(e.target.value)}>
+            <option value="ngay_giao_du_kien">Ngày giao dự kiến</option>
+            <option value="ngay_dat">Ngày đặt đơn</option>
+          </select>
+        </label>
+        <label>
+          Từ ngày
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+        <label>
+          Đến ngày
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
+        {(from || to) && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          >
+            Xóa bộ lọc ngày
+          </Button>
+        )}
+      </div>
+      <p className="muted-note">
+        Đơn đặt hàng lọc theo{' '}
+        {orderDateField === 'ngay_giao_du_kien' ? 'ngày giao dự kiến' : 'ngày đặt đơn'}. Các lần
+        nhập hàng lọc theo ngày nhập; phiếu trả lọc theo ngày xác nhận/lập phiếu. Để trống hai mốc
+        để xem tất cả.
+        {orderDateField === 'ngay_giao_du_kien' &&
+          (from || to) &&
+          ' Đơn chưa hẹn ngày giao không xuất hiện trong khoảng lọc này; chọn Ngày đặt đơn để tra cứu.'}
+      </p>
+      {invalidRange && (
+        <p className="form-error" role="alert">
+          Từ ngày phải nhỏ hơn hoặc bằng Đến ngày.
+        </p>
+      )}
       <QueryState query={orders}>
-        {orders.data?.length ? (
+        {filteredOrders.length ? (
           <div className="data-panel table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Mã đơn</th>
                   <th>Nhà cung cấp</th>
+                  <th>Ngày giao dự kiến</th>
                   <th>Trạng thái</th>
                   <th>Sản phẩm</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.data.map((o) => (
+                {filteredOrders.map((o) => (
                   <tr key={o.id}>
                     <td>
                       {o.ma_don_nhap}
                       <small>{date(o.ngay_dat)}</small>
                     </td>
                     <td>{supplierName(o.nha_cung_cap_id)}</td>
+                    <td>
+                      <DeliverySchedule order={o} today={today} />
+                    </td>
                     <td>{labels[o.trang_thai]}</td>
                     <td>
                       {o.items.map((l) => (
                         <div key={l.id}>
                           {packageName(l.quy_cach_id)} × {l.so_luong_dat}
+                          <small>
+                            Nhập kho: {Number(l.so_luong_da_nhan || 0).toLocaleString('vi-VN')} ·
+                            Trả lỗi: {Number(l.so_luong_da_tra_loi || 0).toLocaleString('vi-VN')} ·
+                            Chờ nhận: {remaining(l).toLocaleString('vi-VN')}
+                          </small>
                         </div>
                       ))}
                     </td>
@@ -115,7 +204,7 @@ export default function ApiReceiptsPage() {
                           <Button
                             onClick={() =>
                               setPending({
-                                title: 'Duyệt đơn nhập?',
+                                title: 'Duyệt đơn đặt hàng?',
                                 run: () => purchasingService.decide(o.id, 'DA_DUYET'),
                               })
                             }
@@ -123,11 +212,12 @@ export default function ApiReceiptsPage() {
                             Duyệt đơn
                           </Button>
                         )}
-                        {['DA_DUYET', 'DANG_GIAO', 'DA_NHAN_MOT_PHAN'].includes(o.trang_thai) && (
-                          <Button onClick={() => setDialog({ type: 'receive', order: o })}>
-                            Nhận hàng
-                          </Button>
-                        )}
+                        {['DA_DUYET', 'DANG_GIAO', 'DA_NHAN_MOT_PHAN'].includes(o.trang_thai) &&
+                          o.items.some((l) => remaining(l) > 0) && (
+                            <Button onClick={() => setDialog({ type: 'receive', order: o })}>
+                              Nhận hàng
+                            </Button>
+                          )}
                       </div>
                     </td>
                   </tr>
@@ -137,14 +227,18 @@ export default function ApiReceiptsPage() {
           </div>
         ) : (
           <EmptyState
-            title="Chưa có đơn nhập"
+            title={
+              from || to
+                ? 'Không có đơn đặt hàng trong khoảng ngày đã chọn'
+                : 'Chưa có đơn đặt hàng'
+            }
             description="Đơn nhà cung cấp sẽ xuất hiện tại đây sau khi được lập."
           />
         )}
       </QueryState>
-      <h2>Các lần nhận hàng</h2>
+      <h2>Các lần nhập hàng</h2>
       <QueryState query={receipts}>
-        {receipts.data?.length ? (
+        {filteredReceipts.length ? (
           <div className="data-panel table-scroll">
             <table>
               <thead>
@@ -157,7 +251,7 @@ export default function ApiReceiptsPage() {
                 </tr>
               </thead>
               <tbody>
-                {receipts.data.map((r) => (
+                {filteredReceipts.map((r) => (
                   <tr key={r.id}>
                     <td>
                       #{r.id}
@@ -169,12 +263,22 @@ export default function ApiReceiptsPage() {
                         <div key={l.id}>
                           {l.ten_san_pham} — {l.ten_quy_cach}: {l.so_luong_thuc_nhan} ×{' '}
                           {money(l.gia_nhap_thuc_te)}
+                          {l.so_luong_loai > 0 && (
+                            <small className="finance-warning">
+                              {r.trang_thai === 'CONFIRMED'
+                                ? 'Đã trả lỗi NCC'
+                                : 'Sẽ trả lỗi khi xác nhận'}
+                              : {l.so_luong_loai} — {l.ly_do_loai}
+                            </small>
+                          )}
                         </div>
                       ))}
                     </td>
                     <td>
                       {r.trang_thai === 'CONFIRMED'
-                        ? 'Đã nhập'
+                        ? r.items.some((l) => Number(l.so_luong_loai) > 0)
+                          ? 'Đã nhận và trả hàng lỗi'
+                          : 'Đã nhập kho'
                         : r.trang_thai === 'DRAFT'
                           ? 'Nháp'
                           : 'Đã hủy'}
@@ -184,12 +288,14 @@ export default function ApiReceiptsPage() {
                         <Button
                           onClick={() =>
                             setPending({
-                              title: 'Xác nhận nhận hàng và cập nhật tồn kho?',
+                              title: 'Xác nhận hàng đạt nhập kho và hàng lỗi trả NCC?',
                               run: () => purchasingService.confirm(r.id),
                             })
                           }
                         >
-                          Xác nhận nhập
+                          {r.items.some((l) => Number(l.so_luong_loai) > 0)
+                            ? 'Xác nhận nhận / trả hàng'
+                            : 'Xác nhận nhập'}
                         </Button>
                       )}
                     </td>
@@ -199,161 +305,48 @@ export default function ApiReceiptsPage() {
             </table>
           </div>
         ) : (
-          <EmptyState title="Chưa có lần nhận hàng" />
+          <EmptyState
+            title={
+              from || to
+                ? 'Không có lần nhập hàng trong khoảng ngày đã chọn'
+                : 'Chưa có lần nhập hàng'
+            }
+          />
         )}
       </QueryState>
+      <SupplierReturns from={from} to={to} />
       <Dialog open={!!dialog} onOpenChange={(v) => !v && setDialog(null)}>
         <DialogContent
           title={
-            dialog?.type === 'supplier'
-              ? 'Nhà cung cấp mới'
-              : dialog?.type === 'receive'
-                ? 'Lập lần nhận hàng'
-                : 'Lập đơn nhà cung cấp'
+            dialog?.type === 'receive'
+              ? 'Kiểm nhận và trả hàng lỗi'
+              : 'Lập đơn đặt hàng nhà cung cấp'
           }
         >
-          {dialog?.type === 'supplier' && (
-            <form
-              className="form-stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const d = new FormData(e.currentTarget);
-                setPending({
-                  title: 'Tạo nhà cung cấp?',
-                  run: () =>
-                    purchasingService.addSupplier({
-                      name: d.get('name'),
-                      phone: d.get('phone'),
-                      email: d.get('email'),
-                    }),
-                });
-              }}
-            >
-              <Field label="Tên nhà cung cấp">
-                <input name="name" required maxLength={255} />
-              </Field>
-              <Field label="Điện thoại">
-                <input name="phone" maxLength={25} />
-              </Field>
-              <Field label="Email">
-                <input name="email" type="email" />
-              </Field>
-              <Button type="submit">Lưu nhà cung cấp</Button>
-            </form>
-          )}
           {dialog?.type === 'order' && (
-            <form
-              className="form-stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const d = new FormData(e.currentTarget);
+            <PurchaseOrderForm
+              suppliers={suppliers}
+              products={products}
+              onSubmit={(values) =>
                 setPending({
-                  title: 'Lập đơn nhập chờ duyệt?',
-                  run: () =>
-                    purchasingService.create({
-                      supplierId: d.get('supplier'),
-                      productId,
-                      packageId: d.get('package'),
-                      quantity: d.get('quantity'),
-                      cost: d.get('cost'),
-                    }),
-                });
-              }}
-            >
-              <Field label="Nhà cung cấp">
-                <select name="supplier" required>
-                  <option value="">Chọn nhà cung cấp</option>
-                  {suppliers.data
-                    ?.filter((s) => s.trang_thai === 'HOP_TAC')
-                    .map((s) => (
-                      <option value={s.id} key={s.id}>
-                        {s.ten}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              {suppliers.isError && <p className="form-error">{suppliers.error.message}</p>}
-              <Field label="Sản phẩm">
-                <select required value={productId} onChange={(e) => setProductId(e.target.value)}>
-                  <option value="">Chọn sản phẩm</option>
-                  {products.data?.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Quy cách">
-                <select key={productId} name="package" required>
-                  <option value="">Chọn quy cách</option>
-                  {product?.packages.map((q) => (
-                    <option key={q.packageId} value={q.packageId}>
-                      {q.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Số lượng quy cách">
-                <input name="quantity" type="number" min="1" max="1000000" required />
-              </Field>
-              <Field label="Giá nhập mỗi quy cách (đ)">
-                <input name="cost" type="number" min="0" step="0.01" required />
-              </Field>
-              <p className="muted-note">
-                Đơn mới ở trạng thái chờ duyệt; chỉ cộng tồn sau khi xác nhận nhận hàng.
-              </p>
-              <Button type="submit">Lập đơn nhập</Button>
-            </form>
+                  title: 'Lập đơn đặt hàng chờ duyệt?',
+                  run: () => purchasingService.create(values),
+                })
+              }
+            />
           )}
           {dialog?.type === 'receive' && (
-            <form
-              className="form-stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const d = new FormData(e.currentTarget);
-                const items = dialog.order.items
-                  .map((l) => ({
-                    purchaseLineId: l.id,
-                    quantity: Number(d.get(`qty-${l.id}`)),
-                    actualCost: Number(d.get(`cost-${l.id}`)),
-                  }))
-                  .filter((l) => l.quantity > 0);
+            <ReceiptAcceptanceForm
+              order={dialog.order}
+              receipts={receipts.data || []}
+              packageName={packageName}
+              onSubmit={(items) =>
                 setPending({
-                  title: 'Tạo lần nhận hàng nháp?',
-                  run: () => {
-                    if (!items.length) throw new Error('Nhập ít nhất một số lượng lớn hơn 0.');
-                    return purchasingService.receive(dialog.order.id, items);
-                  },
-                });
-              }}
-            >
-              {dialog.order.items.map((l) => (
-                <div key={l.id}>
-                  <strong>{packageName(l.quy_cach_id)}</strong>
-                  <Field label={`Số lượng nhận (còn ${remaining(l)})`}>
-                    <input
-                      name={`qty-${l.id}`}
-                      type="number"
-                      min="0"
-                      max={remaining(l)}
-                      defaultValue={remaining(l)}
-                      required
-                    />
-                  </Field>
-                  <Field label="Giá thực tế mỗi quy cách (đ)">
-                    <input
-                      name={`cost-${l.id}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={l.gia_nhap_du_kien}
-                      required
-                    />
-                  </Field>
-                </div>
-              ))}
-              <Button type="submit">Lưu lần nhận nháp</Button>
-            </form>
+                  title: 'Lưu phiếu kiểm nhận và hàng lỗi trả NCC?',
+                  run: () => purchasingService.receive(dialog.order.id, items),
+                })
+              }
+            />
           )}
         </DialogContent>
       </Dialog>

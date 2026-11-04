@@ -1,8 +1,10 @@
 import { isLowStock } from '@/utils/inventory';
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Pencil, Archive, Package } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import { MoneyInput } from '@/components/common/MoneyInput';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '@/schemas';
 import { useAdmin, useAction } from '@/hooks/useData';
@@ -44,6 +46,7 @@ function ProductForm({ item, categories, onClose }) {
   }, 'Đã lưu sản phẩm');
   const {
     register,
+    control,
     handleSubmit,
     watch,
     formState: { errors },
@@ -97,9 +100,15 @@ function ProductForm({ item, categories, onClose }) {
         <Field label="Quy cách" error={errors.volume}>
           <input {...register('volume')} />
         </Field>
-        <Field label="Giá bán (đ)" error={errors.price}>
-          <input type="number" min="0" {...register('price')} />
-        </Field>
+        <Controller
+          name="price"
+          control={control}
+          render={({ field }) => (
+            <Field label="Giá bán (đ)" error={errors.price}>
+              <MoneyInput data-field-control {...field} />
+            </Field>
+          )}
+        />
         <Field label="Số lượng tồn kho" error={errors.stock}>
           <input type="number" min="0" {...register('stock')} />
         </Field>
@@ -180,7 +189,90 @@ function ProductForm({ item, categories, onClose }) {
     </form>
   );
 }
+function StockCell({ product, editable, reload }) {
+  const [stock, setStock] = useState(String(product.stock));
+  const [reason, setReason] = useState('');
+  const changed = stock !== '' && Number(stock) !== Number(product.stock);
+  const action = useAction(
+    (values) =>
+      isMock
+        ? adminService.save('products', {
+            ...product,
+            stock: values.stock,
+            stockReason: values.reason,
+          })
+        : adminService.adjustStock(product, values),
+    'Đã cập nhật tồn kho',
+  );
+  if (!editable) return <span>{product.stock.toLocaleString('vi-VN')}</span>;
+  return (
+    <form
+      className="inline-stock-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!changed) return;
+        try {
+          await action.mutateAsync({ stock: Number(stock), expectedStock: product.stock, reason });
+        } catch {
+          /* Error displayed below and in toast. */
+        }
+      }}
+    >
+      <input
+        aria-label={`Tồn kho ${product.name}`}
+        type="number"
+        min="0"
+        max="1000000000"
+        step="1"
+        required
+        value={stock}
+        disabled={action.isPending}
+        onChange={(e) => setStock(e.target.value)}
+      />
+      {changed && (
+        <>
+          <input
+            aria-label={`Lý do điều chỉnh ${product.name}`}
+            placeholder="Lý do điều chỉnh"
+            maxLength={1000}
+            required
+            value={reason}
+            disabled={action.isPending}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="row-actions">
+            <Button type="submit" disabled={action.isPending}>
+              {action.isPending ? 'Đang lưu…' : 'Lưu số lượng'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={action.isPending}
+              onClick={() => {
+                setStock(String(product.stock));
+                setReason('');
+                action.reset();
+              }}
+            >
+              Hủy
+            </Button>
+          </div>
+        </>
+      )}
+      {action.isError && (
+        <p className="form-error" role="alert">
+          {action.error.message}{' '}
+          <button type="button" onClick={reload}>
+            Tải lại danh sách
+          </button>
+        </p>
+      )}
+    </form>
+  );
+}
 export default function ProductsPage() {
+  const { user } = useAuth();
+  const editable = user?.role === 'ADMIN';
   const query = useAdmin('products');
   const categories = useAdmin('categories');
   const [params] = useSearchParams();
@@ -205,12 +297,18 @@ export default function ProductsPage() {
     <>
       <PageHeading
         title="Quản lý sản phẩm"
-        description="Chăm chút danh mục đồ uống của cửa hàng."
+        description={
+          editable
+            ? 'Sửa số lượng ngay trên danh sách; tính theo đơn vị lẻ, không phải thùng/lốc.'
+            : 'Xem sản phẩm và số lượng tồn kho theo đơn vị lẻ.'
+        }
         action={
-          <Button onClick={() => setEdit(null)} disabled={!categories.data?.length}>
-            <Plus size={18} />
-            Thêm sản phẩm
-          </Button>
+          editable && (
+            <Button onClick={() => setEdit(null)} disabled={!categories.data?.length}>
+              <Plus size={18} />
+              Thêm sản phẩm
+            </Button>
+          )
         }
       />
       <div className="data-panel">
@@ -267,7 +365,7 @@ export default function ProductsPage() {
                       <th>Giá bán</th>
                       <th>Tồn kho</th>
                       <th>Trạng thái</th>
-                      <th>Thao tác</th>
+                      {editable && <th>Thao tác</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -291,7 +389,12 @@ export default function ProductsPage() {
                           <strong>{money(p.price)}</strong>
                         </td>
                         <td>
-                          <span className={isLowStock(p) ? 'stock-warning' : ''}>{p.stock}</span>
+                          <StockCell
+                            key={`${p.id}:${p.stock}`}
+                            product={p}
+                            editable={editable}
+                            reload={query.refetch}
+                          />
                           {isLowStock(p) && (
                             <small className="stock-warning">Sắp hết hàng — cần nhập thêm</small>
                           )}
@@ -301,26 +404,28 @@ export default function ProductsPage() {
                             {p.active ? 'Đang bán' : 'Ngừng bán'}
                           </span>
                         </td>
-                        <td>
-                          <div className="row-actions">
-                            <button
-                              className="icon-button"
-                              aria-label={'Sửa ' + p.name}
-                              onClick={() => setEdit(p)}
-                            >
-                              <Pencil size={16} />
-                            </button>
-                            {p.active && (
+                        {editable && (
+                          <td>
+                            <div className="row-actions">
                               <button
                                 className="icon-button"
-                                aria-label={'Ngừng bán ' + p.name}
-                                onClick={() => setRemove(p)}
+                                aria-label={'Sửa ' + p.name}
+                                onClick={() => setEdit(p)}
                               >
-                                <Archive size={16} />
+                                <Pencil size={16} />
                               </button>
-                            )}
-                          </div>
-                        </td>
+                              {p.active && (
+                                <button
+                                  className="icon-button"
+                                  aria-label={'Ngừng bán ' + p.name}
+                                  onClick={() => setRemove(p)}
+                                >
+                                  <Archive size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -337,7 +442,7 @@ export default function ProductsPage() {
           )}
         </QueryState>
       </div>
-      <Dialog open={edit !== undefined} onOpenChange={(v) => !v && setEdit(undefined)}>
+      <Dialog open={editable && edit !== undefined} onOpenChange={(v) => !v && setEdit(undefined)}>
         <DialogContent
           title={edit ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm'}
           description="Nhập thông tin sản phẩm và kiểm tra trước khi lưu."
@@ -351,7 +456,7 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
       <ConfirmDialog
-        open={!!remove}
+        open={editable && !!remove}
         onOpenChange={(v) => !v && !action.isPending && setRemove(null)}
         title="Ngừng kinh doanh sản phẩm?"
         description={
