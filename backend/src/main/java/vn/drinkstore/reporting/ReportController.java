@@ -22,6 +22,26 @@ public class ReportController {
         }
         return result;
     }
+    @GetMapping("/staff/products/{id}/inventory-details") @PreAuthorize("@access.admin() or @access.has('REPORT_STOCK')")
+    public Object inventoryDetails(@PathVariable long id) {
+        db.one("select id from san_pham where id=?",id);
+        var batches=db.rows("""
+            select c.id,r.id as receipt_id,r.ngay_nhap,c.ngay_san_xuat,c.ngay_het_han,
+              c.so_luong_thuc_nhan*l.he_so_quy_doi::bigint as received_units
+            from chi_tiet_lan_nhap c join lan_nhap_hang r on r.id=c.lan_nhap_id
+            join chi_tiet_don_ncc l on l.id=c.ct_don_ncc_id
+            join quy_cach_san_pham q on q.id=l.quy_cach_id
+            where q.san_pham_id=? and r.trang_thai='CONFIRMED' and c.so_luong_thuc_nhan>0
+            order by c.ngay_het_han asc nulls last,r.ngay_nhap desc,c.id desc
+            """,id);
+        var adjustments=db.rows("""
+            select d.id,d.so_luong_truoc,d.so_luong_sau,d.chenh_lech,d.ly_do,d.thoi_diem,
+              n.ho_ten as adjusted_by
+            from dieu_chinh_so_luong d join nhan_vien n on n.id=d.nguoi_dieu_chinh_id
+            where d.san_pham_id=? order by d.thoi_diem desc,d.id desc limit 100
+            """,id);
+        return Map.of("batches",batches,"adjustments",adjustments);
+    }
     @GetMapping("/staff/reports/stock") @PreAuthorize("@access.has('REPORT_STOCK')")
     public Object stock(@RequestParam(defaultValue="false") boolean lowOnly,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
         String where=lowOnly?" where canh_bao":""; return db.page("select * from v_ton_san_pham"+where+" order by san_pham_id","select count(*) from v_ton_san_pham"+where,List.of(),page,size);

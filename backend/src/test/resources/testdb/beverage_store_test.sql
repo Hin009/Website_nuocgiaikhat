@@ -1017,4 +1017,21 @@ DROP TABLE IF EXISTS hoan_tien_tra_ncc,chi_tiet_tra_ncc,phieu_tra_ncc;
 DROP FUNCTION IF EXISTS fn_protect_supplier_return_lines();
 INSERT INTO backend_schema_migration(version) VALUES ('20261104_remove_warehouse_returns') ON CONFLICT DO NOTHING;
 
+ALTER TABLE public.chi_tiet_lan_nhap ADD COLUMN IF NOT EXISTS ngay_san_xuat date;
+ALTER TABLE public.chi_tiet_lan_nhap ADD COLUMN IF NOT EXISTS ngay_het_han date;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.chi_tiet_lan_nhap'::regclass AND conname='receipt_product_dates_check') THEN
+  ALTER TABLE public.chi_tiet_lan_nhap ADD CONSTRAINT receipt_product_dates_check CHECK (
+   (ngay_san_xuat IS NULL AND ngay_het_han IS NULL) OR
+   (ngay_san_xuat IS NOT NULL AND ngay_het_han IS NOT NULL AND ngay_het_han>=ngay_san_xuat));
+ END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_receipt_pending_purchase ON public.lan_nhap_hang(don_ncc_id) WHERE trang_thai='DRAFT';
+INSERT INTO public.backend_schema_migration(version) VALUES ('20261104_receiving_product_dates') ON CONFLICT DO NOTHING;
+
+-- Direct receiving: no separate approval step; no stock/debt changes here.
+ALTER TABLE public.don_dat_hang_ncc ALTER COLUMN trang_thai SET DEFAULT 'DA_DUYET';
+UPDATE public.don_dat_hang_ncc SET trang_thai='DA_DUYET' WHERE trang_thai='CHO_DUYET';
+INSERT INTO public.backend_schema_migration(version) VALUES ('20261104_direct_receiving') ON CONFLICT DO NOTHING;
+
 COMMIT;

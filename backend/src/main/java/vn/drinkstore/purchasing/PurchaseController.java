@@ -19,10 +19,14 @@ public class PurchaseController {
     }
     public record Create(@Positive long supplierId,@FutureOrPresent(message="Ngày giao dự kiến phải từ hôm nay trở đi") LocalDate expectedDate,@NotEmpty @Size(max=100) List<@Valid Line> items) {}
     public record Decision(@NotNull @Pattern(regexp="DA_DUYET|TU_CHOI|DANG_GIAO|DA_HUY") String status,@Size(max=2000) String reason) {}
-    public record ReceiptLine(@Positive long purchaseLineId,@Min(0) @Max(1000000) int quantity,@NotNull @DecimalMin("0") @Digits(integer=16,fraction=2) BigDecimal actualCost,@Min(0) @Max(1000000) int rejectedQuantity,@Size(max=2000) String rejectionReason) {
+    public record ReceiptLine(@Positive long purchaseLineId,@Min(0) @Max(1000000) int quantity,@NotNull @DecimalMin("0") @Digits(integer=16,fraction=2) BigDecimal actualCost,@Min(0) @Max(1000000) int rejectedQuantity,@Size(max=2000) String rejectionReason,@NotNull @PastOrPresent LocalDate manufacturedOn,@NotNull LocalDate expiresOn) {
+        public ReceiptLine(long purchaseLineId,int quantity,BigDecimal actualCost,int rejectedQuantity,String rejectionReason) { this(purchaseLineId,quantity,actualCost,rejectedQuantity,rejectionReason,null,null); }
         public ReceiptLine(long purchaseLineId,int quantity,BigDecimal actualCost) { this(purchaseLineId,quantity,actualCost,0,null); }
     }
     public record Receive(@NotEmpty @Size(max=100) List<@Valid ReceiptLine> items) {}
+    public record ReceiptDates(@NotNull @PastOrPresent LocalDate manufacturedOn,@NotNull LocalDate expiresOn) {}
+    @PatchMapping("/receipts/{id}/lines/{lineId}/dates") @PreAuthorize("@access.has('IMPORT_RECEIVE')")
+    public Object receiptDates(@PathVariable long id,@PathVariable long lineId,@Valid @RequestBody ReceiptDates r) { return service.updateReceiptDates(id,lineId,r); }
     public record DebtPayment(@NotNull @DecimalMin(value="0",inclusive=false) BigDecimal amount,@NotBlank @Size(max=80) String method,@Size(max=150) String reference) {}
     @PostMapping("/purchases") @PreAuthorize("@access.has('IMPORT_CREATE')") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
     public Object create(@Valid @RequestBody Create r) { return service.create(r); }

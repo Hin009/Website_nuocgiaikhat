@@ -1,3 +1,12 @@
+import { purchasingDate } from './purchasing-dates';
+
+export function hasPendingReceipt(order, receipts = []) {
+  return (
+    (order.receipts || []).some((r) => r.trang_thai === 'DRAFT') ||
+    receipts.some((r) => String(r.don_ncc_id) === String(order.id) && r.trang_thai === 'DRAFT')
+  );
+}
+
 export function remainingToReceive(line, receipts = []) {
   if (line.so_luong_con_lai != null) return Math.max(0, Number(line.so_luong_con_lai));
   const processed = receipts
@@ -36,7 +45,16 @@ export function receiptItems(lines, drafts, receipts = []) {
     const cost = Number(draft.cost);
     if (String(draft.cost ?? '').trim() === '' || !Number.isFinite(cost) || cost < 0)
       throw new Error('Nhập giá thực tế hợp lệ.');
+    const manufacturedOn = draft.manufacturedOn || '',
+      expiresOn = draft.expiresOn || '';
+    if (!manufacturedOn || !expiresOn) throw new Error('Nhập đủ ngày sản xuất và ngày hết hạn.');
+    if (manufacturedOn > purchasingDate()) throw new Error('Ngày sản xuất không được sau hôm nay.');
+    if (expiresOn < manufacturedOn) throw new Error('Ngày hết hạn không được trước ngày sản xuất.');
+    if (delivered > rejected && expiresOn < purchasingDate())
+      throw new Error('Hàng hết hạn phải ghi vào số lượng hàng lỗi trả NCC, không nhập kho.');
     items.push({
+      manufacturedOn,
+      expiresOn,
       purchaseLineId: line.id,
       quantity: delivered - rejected,
       rejectedQuantity: rejected,

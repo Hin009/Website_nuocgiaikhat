@@ -145,6 +145,12 @@ Các ô nhập tiền dùng dấu chấm nhóm nghìn (`1.250.000`) và dấu ph
 
 ### Nhập lốc/thùng và xử lý hàng lỗi tại cửa nhận
 
+- Quy cách đặt hàng chỉ chọn Thùng / Lốc / Lẻ. Thùng, lốc nhập hệ số đơn vị lẻ; server tái sử dụng quy cách đúng loại/hệ số đã có. Lẻ dùng quy cách hệ số 1, không xóa các quy cách lịch sử.
+- Mỗi dòng `POST /purchases/{id}/receipts` thêm `manufacturedOn` và `expiresOn` (YYYY-MM-DD), bắt buộc cho request mới; lưu tại `chi_tiet_lan_nhap.ngay_san_xuat/ngay_het_han` và hiển thị NSX/HSD trong lịch sử. NSX không sau hôm nay, HSD không trước NSX. Hàng hết hạn chỉ được ghi trả lỗi (quantity=0); khi xác nhận kiểm tra lại hạn dùng của hàng đạt. Dữ liệu cũ để null, không tự đoán ngày.
+- Đơn có phiếu DRAFT ẩn khỏi bảng đơn chờ nhận; backend khóa đơn và chặn tạo thêm phiếu nháp cho cùng đơn (409). Phiếu DRAFT luôn hiện ở bảng nhập dù ngoài khoảng lọc ngày. Sau xác nhận, đơn còn thiếu xuất hiện lại để nhận đợt tiếp; đơn nhận đủ chỉ còn lịch sử dưới bảng nhập.
+- Migration `20261104_receiving_product_dates` thêm cột ngày, ràng buộc cặp ngày và chỉ mục tìm phiếu nháp; không sửa các số tồn/công nợ đã có.
+- `PATCH /receipts/{id}/lines/{lineId}/dates` nhận `{manufacturedOn,expiresOn}` để ghi/sửa NSX/HSD ngay trên bảng của phiếu DRAFT, gồm phiếu cũ chưa có ngày. Cần quyền IMPORT_RECEIVE; khóa đơn/phiếu, chỉ sửa ngày và lưu nhật ký, từ chối sửa phiếu đã xác nhận/hủy. Giao diện chỉ bật xác nhận khi các dòng đã lưu đủ ngày.
+
 - Bộ lọc đơn đặt hàng cho chọn “Ngày giao dự kiến” (mặc định) hoặc “Ngày đặt đơn”. Khi lọc lịch giao, đơn chưa hẹn không có ngày đối chiếu nên được loại khỏi khoảng lọc; xóa hai mốc sẽ hiện tất cả. Lựa chọn này chỉ áp dụng bảng đơn; lần nhập và phiếu trả vẫn lọc theo ngày thực tế của chúng.
 
 - Đối chiếu lịch giao trên trang đặt hàng: đơn đã duyệt/đang giao/nhận một phần qua ngày hẹn có nhãn “Quá hạn giao N ngày”. Đơn nhận đủ so sánh ngày hẹn với ngày xác nhận cuối của các lần nhận CONFIRMED (dữ liệu cũ thiếu ngày xác nhận thì dùng ngày nhập); hiện nhận trễ/đúng hẹn/sớm và ngày nhận đủ. Không tính phiếu nháp/hủy, không tự suy đoán ngày nhận khi thiếu dữ liệu và không tính theo khoảng lọc. Số ngày tính theo lịch Việt Nam; vẫn cho phép nhận sớm/trễ và giữ nguyên ngày hẹn ban đầu.
@@ -168,3 +174,16 @@ Các ô nhập tiền dùng dấu chấm nhóm nghìn (`1.250.000`) và dấu ph
 
 Chỉ hỗ trợ hàng lỗi trả ngay khi kiểm nhận. `GET /supplier-returns` là lịch sử đọc từ lần nhận CONFIRMED có số lượng loại; không tạo phiếu riêng và không có API lập/xác nhận/hủy/hoàn tiền trả từ kho.
 Migration `20261104_remove_warehouse_returns` xóa ba bảng phieu_tra_ncc, chi_tiet_tra_ncc, hoan_tien_tra_ncc. Không hoàn tác tồn kho/công nợ đã ghi nhận và không xóa nhật ký biến động. Migration dừng nếu còn phiếu nháp cách ly hoặc tiền hoàn chưa đối soát. Báo cáo sản phẩm bỏ giá trị trả sau nhập và nhập ròng, giữ tiền nhập hàng đạt, doanh thu và lãi gộp.
+# Chi tiết tồn kho sản phẩm
+
+`GET /api/v1/staff/products/{id}/inventory-details` dành cho quản trị viên hoặc nhân viên có quyền `REPORT_STOCK`.
+Trả về `batches` (NSX/HSD và số lượng lẻ đã nhận của từng lô nhập CONFIRMED, bỏ các dòng bị trả toàn bộ)
+và `adjustments` (100 điều chỉnh mới nhất: trước/sau, chênh lệch, lý do, tên người sửa và thời gian).
+NSX/HSD có thể trống với dữ liệu cũ. Số lượng theo lô là lượng đã nhận, không phải tồn còn lại của lô;
+hệ thống hiện theo dõi tồn tổng sản phẩm, chưa phân bổ hàng bán theo lô.
+# Tạo đơn nhập hàng trực tiếp
+
+`POST /purchases` tạo đơn sẵn sàng nhận hàng, không cần thao tác duyệt riêng.
+Trạng thái lưu trong DB vẫn dùng `DA_DUYET` để tương thích trigger, hiển thị “Chờ nhận hàng”.
+Migration `20261104_direct_receiving` chuyển các đơn `CHO_DUYET` sang trạng thái này và cập nhật mặc định;
+không ghi người/ngày duyệt giả, không cộng tồn hay công nợ. Nhận hàng và xác nhận nhập kho vẫn là hai bước riêng.

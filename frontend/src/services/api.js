@@ -236,6 +236,8 @@ const mapUser = (row) => ({
 export const purchasingService = {
   returns: () => allPages('/supplier-returns'),
   receipts: () => allPages('/receipts'),
+  updateReceiptDates: (receipt, line, dates) =>
+    patch(`/receipts/${receipt}/lines/${line}/dates`, dates),
   orders: () => allPages('/purchases'),
   detail: (id) => get(`/purchases/${id}`),
   suppliers: () => allPages('/management/suppliers'),
@@ -265,6 +267,7 @@ export const purchasingService = {
   confirm: (id) => post(`/receipts/${id}/confirm`),
 };
 export const adminService = {
+  inventoryDetails: (id) => get(`/staff/products/${id}/inventory-details`),
   adjustStock: (product, values) => patch(`/management/products/${product.id}/stock`, values),
   async uploadImage(file) {
     const data = new FormData();

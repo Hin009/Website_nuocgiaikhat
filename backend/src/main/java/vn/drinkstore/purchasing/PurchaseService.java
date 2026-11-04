@@ -20,7 +20,7 @@ public class PurchaseService {
             if(db.number("select count(*) from nha_cung_cap_san_pham where nha_cung_cap_id=? and san_pham_id=?",supplier,product)==0)
                 throw ApiException.bad("Sản phẩm chưa được gán cho nhà cung cấp. Cập nhật sản phẩm trong quản lý nhà cung cấp trước khi lập đơn nhập.");
         }
-        long id=db.id("insert into don_dat_hang_ncc(ma_don_nhap,nha_cung_cap_id,nguoi_lap_id,ngay_giao_du_kien) values (?,?,?,?) returning id","DN-"+UUID.randomUUID(),supplier,access.employee(),r.expectedDate());
+        long id=db.id("insert into don_dat_hang_ncc(ma_don_nhap,nha_cung_cap_id,nguoi_lap_id,ngay_giao_du_kien,trang_thai) values (?,?,?,?,'DA_DUYET') returning id","DN-"+UUID.randomUUID(),supplier,access.employee(),r.expectedDate());
         for(var l:r.items()) {
             long packageId=importPackage(l);
             if(db.number("select count(*) from nha_cung_cap_san_pham sp join quy_cach_san_pham q on q.san_pham_id=sp.san_pham_id where sp.nha_cung_cap_id=? and q.id=?",supplier,packageId)==0) throw ApiException.bad("Quy cách không thuộc sản phẩm nhà cung cấp này");
@@ -66,7 +66,9 @@ public class PurchaseService {
     }
     @Transactional public Object receipt(long purchase,PurchaseController.Receive r) {
         var po=db.one("select * from don_dat_hang_ncc where id=? for update",purchase);
-        if(!Set.of("DA_DUYET","DANG_GIAO","DA_NHAN_MOT_PHAN").contains(po.get("trang_thai"))) throw ApiException.bad("Chỉ nhận hàng cho đơn đã duyệt và chưa nhận đủ");
+        if(!Set.of("DA_DUYET","DANG_GIAO","DA_NHAN_MOT_PHAN").contains(po.get("trang_thai"))) throw ApiException.bad("Chỉ nhận hàng cho đơn đang chờ nhận và chưa nhận đủ");
+        if(db.number("select count(*) from lan_nhap_hang where don_ncc_id=? and trang_thai='DRAFT'",purchase)>0)
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,"Đơn đã có phiếu nhận chờ xác nhận. Hoàn tất phiếu ở bảng nhập hàng trước khi nhận tiếp.");
         long id=db.id("insert into lan_nhap_hang(don_ncc_id,nguoi_nhan_id) values (?,?) returning id",purchase,access.employee());
         var seen=new HashSet<Long>();
         for(var line:r.items()) {
@@ -75,7 +77,7 @@ public class PurchaseService {
             db.one("select id from chi_tiet_don_ncc where id=? and don_ncc_id=?",line.purchaseLineId(),purchase);
             long remaining=db.number("select d.so_luong_dat-coalesce((select sum(c.so_luong_thuc_nhan::bigint+c.so_luong_loai) from chi_tiet_lan_nhap c join lan_nhap_hang r on r.id=c.lan_nhap_id where c.ct_don_ncc_id=d.id and r.trang_thai='CONFIRMED'),0) from chi_tiet_don_ncc d where d.id=?",line.purchaseLineId());
             if((long)line.quantity()+line.rejectedQuantity()>remaining) throw ApiException.bad("Tổng hàng đạt và hàng lỗi vượt số lượng còn phải giao.");
-            db.jdbc().update("insert into chi_tiet_lan_nhap(lan_nhap_id,don_ncc_id,ct_don_ncc_id,so_luong_thuc_nhan,gia_nhap_thuc_te,so_luong_loai,ly_do_loai) values (?,?,?,?,?,?,?)",id,purchase,line.purchaseLineId(),line.quantity(),line.actualCost(),line.rejectedQuantity(),line.rejectionReason());
+            db.jdbc().update("insert into chi_tiet_lan_nhap(lan_nhap_id,don_ncc_id,ct_don_ncc_id,so_luong_thuc_nhan,gia_nhap_thuc_te,so_luong_loai,ly_do_loai,ngay_san_xuat,ngay_het_han) values (?,?,?,?,?,?,?,?,?)",id,purchase,line.purchaseLineId(),line.quantity(),line.actualCost(),line.rejectedQuantity(),line.rejectionReason(),line.manufacturedOn(),line.expiresOn());
         }
         db.audit(access.account(),"RECEIPT_DRAFT","lan_nhap_hang",id); return receiptDetail(id);
     }
@@ -92,6 +94,17 @@ public class PurchaseService {
         var r=db.one("select * from lan_nhap_hang where id=?",id);
         r.put("items",receiptLines(id)); return r;
     }
+    @Transactional public Object updateReceiptDates(long receipt,long lineId,PurchaseController.ReceiptDates dates) {
+        long purchase=Db.n(db.one("select don_ncc_id from lan_nhap_hang where id=?",receipt),"don_ncc_id");
+        db.one("select id from don_dat_hang_ncc where id=? for update",purchase);
+        var row=db.one("select * from lan_nhap_hang where id=? for update",receipt);
+        if(!"DRAFT".equals(row.get("trang_thai"))) throw ApiException.bad("Chỉ sửa NSX/HSD của phiếu đang chờ xác nhận.");
+        var line=db.one("select * from chi_tiet_lan_nhap where id=? and lan_nhap_id=?",lineId,receipt);
+        ReceiptRules.validateDates(dates.manufacturedOn(),dates.expiresOn(),((Number)line.get("so_luong_thuc_nhan")).intValue());
+        db.jdbc().update("update chi_tiet_lan_nhap set ngay_san_xuat=?,ngay_het_han=? where id=? and lan_nhap_id=?",dates.manufacturedOn(),dates.expiresOn(),lineId,receipt);
+        db.audit(access.account(),"RECEIPT_DATES","chi_tiet_lan_nhap",lineId);
+        return receiptDetail(receipt);
+    }
     @Transactional public Object confirm(long receipt) {
         // Lock purchase before receipt, same order as creation; DB trigger handles over-receiving.
         long purchase=Db.n(db.one("select don_ncc_id from lan_nhap_hang where id=?",receipt),"don_ncc_id");
@@ -99,6 +112,8 @@ public class PurchaseService {
         var r=db.one("select * from lan_nhap_hang where id=? for update",receipt);
         if("CONFIRMED".equals(r.get("trang_thai"))) return receiptDetail(receipt);
         if(!"DRAFT".equals(r.get("trang_thai"))) throw ApiException.bad("Chi xac nhan lan nhap DRAFT");
+        for(var line:receiptLines(receipt))
+            ReceiptRules.validateDates(line.get("ngay_san_xuat")==null?null:java.time.LocalDate.parse(line.get("ngay_san_xuat").toString()),line.get("ngay_het_han")==null?null:java.time.LocalDate.parse(line.get("ngay_het_han").toString()),((Number)line.get("so_luong_thuc_nhan")).intValue());
         db.jdbc().update("update lan_nhap_hang set trang_thai='CONFIRMED' where id=?",receipt);
         db.audit(access.account(),"RECEIPT_CONFIRM","lan_nhap_hang",receipt); return receiptDetail(receipt);
     }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { purchasingDate } from '@/utils/purchasing-dates';
 import { Field } from '@/components/common/Shared';
 import { MoneyInput } from '@/components/common/MoneyInput';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,8 @@ export default function ReceiptAcceptanceForm({ order, receipts, packageName, on
             delivered: String(remainingToReceive(l, receipts)),
             rejected: '0',
             reason: '',
+            manufacturedOn: '',
+            expiresOn: '',
             cost: String(l.gia_nhap_du_kien),
           },
         ]),
@@ -85,6 +88,26 @@ export default function ReceiptAcceptanceForm({ order, receipts, packageName, on
                   onChange={(e) => update(l.id, 'reason', e.target.value)}
                 />
               </Field>
+              <div className="form-grid">
+                <Field label="Ngày sản xuất">
+                  <input
+                    type="date"
+                    value={draft.manufacturedOn}
+                    max={purchasingDate()}
+                    required={delivered > 0}
+                    onChange={(e) => update(l.id, 'manufacturedOn', e.target.value)}
+                  />
+                </Field>
+                <Field label="Ngày hết hạn">
+                  <input
+                    type="date"
+                    value={draft.expiresOn}
+                    min={draft.manufacturedOn || undefined}
+                    required={delivered > 0}
+                    onChange={(e) => update(l.id, 'expiresOn', e.target.value)}
+                  />
+                </Field>
+              </div>
               <Field label="Giá thực tế mỗi quy cách (đ)">
                 <MoneyInput
                   data-field-control

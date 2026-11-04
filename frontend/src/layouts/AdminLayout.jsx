@@ -46,7 +46,7 @@ const items = [
     apiOnly: true,
   },
   { to: '/admin/orders', label: 'Đơn hàng', icon: ShoppingBag },
-  { to: '/admin/stock-receipts', label: 'Đặt hàng & nhập hàng', icon: Truck, adminOnly: isMock },
+  { to: '/admin/stock-receipts', label: 'Tạo đơn nhập hàng', icon: Truck, adminOnly: isMock },
   { to: '/admin/customers', label: 'Khách hàng', icon: UsersRound },
   { to: '/admin/reports', label: 'Báo cáo & thống kê', icon: ChartNoAxesCombined },
 ];

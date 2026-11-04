@@ -1,8 +1,9 @@
 import { isLowStock } from '@/utils/inventory';
-import { useState, useEffect } from 'react';
+import ProductInventoryDetails from './ProductInventoryDetails';
+import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Archive, Package } from 'lucide-react';
+import { Plus, Search, Pencil, Archive, Package, ChevronDown } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { MoneyInput } from '@/components/common/MoneyInput';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -282,6 +283,8 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState(undefined);
   const [remove, setRemove] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const toggleInventory = (id) => setExpanded((previous) => (previous === id ? null : id));
   const action = useAction(
     (id) => adminService.remove('products', id),
     'Đã ngừng kinh doanh sản phẩm',
@@ -366,67 +369,102 @@ export default function ProductsPage() {
                       <th>Tồn kho</th>
                       <th>Trạng thái</th>
                       {editable && <th>Thao tác</th>}
+                      <th aria-label="Chi tiết sản phẩm" />
                     </tr>
                   </thead>
                   <tbody>
                     {data.slice((current - 1) * 7, current * 7).map((p) => (
-                      <tr key={p.id}>
-                        <td>
-                          <div className="table-product">
-                            <div className="mini-art" style={{ background: p.accent }}>
-                              <DrinkArt product={p} />
-                            </div>
-                            <div>
-                              <strong>{p.name}</strong>
-                              <small>
-                                {p.brand} · {p.volume}
-                              </small>
-                            </div>
-                          </div>
-                        </td>
-                        <td>{categories.data?.find((c) => c.id === p.categoryId)?.name || '—'}</td>
-                        <td>
-                          <strong>{money(p.price)}</strong>
-                        </td>
-                        <td>
-                          <StockCell
-                            key={`${p.id}:${p.stock}`}
-                            product={p}
-                            editable={editable}
-                            reload={query.refetch}
-                          />
-                          {isLowStock(p) && (
-                            <small className="stock-warning">Sắp hết hàng — cần nhập thêm</small>
-                          )}
-                        </td>
-                        <td>
-                          <span className={'pill ' + (p.active ? 'pill-green' : 'pill-gray')}>
-                            {p.active ? 'Đang bán' : 'Ngừng bán'}
-                          </span>
-                        </td>
-                        {editable && (
+                      <Fragment key={p.id}>
+                        <tr className={expanded === p.id ? 'product-row-expanded' : undefined}>
                           <td>
-                            <div className="row-actions">
-                              <button
-                                className="icon-button"
-                                aria-label={'Sửa ' + p.name}
-                                onClick={() => setEdit(p)}
-                              >
-                                <Pencil size={16} />
-                              </button>
-                              {p.active && (
+                            <div className="table-product">
+                              <div className="mini-art" style={{ background: p.accent }}>
+                                <DrinkArt product={p} />
+                              </div>
+                              <div>
                                 <button
-                                  className="icon-button"
-                                  aria-label={'Ngừng bán ' + p.name}
-                                  onClick={() => setRemove(p)}
+                                  type="button"
+                                  className="product-details-toggle"
+                                  title="Xem hoặc thu gọn chi tiết sản phẩm"
+                                  aria-expanded={expanded === p.id}
+                                  aria-controls={`product-inventory-${p.id}`}
+                                  onClick={() => toggleInventory(p.id)}
                                 >
-                                  <Archive size={16} />
+                                  <strong>{p.name}</strong>
                                 </button>
-                              )}
+                                <small>
+                                  {p.brand} · {p.volume}
+                                </small>
+                              </div>
                             </div>
                           </td>
+                          <td>
+                            {categories.data?.find((c) => c.id === p.categoryId)?.name || '—'}
+                          </td>
+                          <td>
+                            <strong>{money(p.price)}</strong>
+                          </td>
+                          <td>
+                            <StockCell
+                              key={`${p.id}:${p.stock}`}
+                              product={p}
+                              editable={editable}
+                              reload={query.refetch}
+                            />
+                            {isLowStock(p) && (
+                              <small className="stock-warning">Sắp hết hàng — cần nhập thêm</small>
+                            )}
+                          </td>
+                          <td>
+                            <span className={'pill ' + (p.active ? 'pill-green' : 'pill-gray')}>
+                              {p.active ? 'Đang bán' : 'Ngừng bán'}
+                            </span>
+                          </td>
+                          {editable && (
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  className="icon-button"
+                                  aria-label={'Sửa ' + p.name}
+                                  onClick={() => setEdit(p)}
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                {p.active && (
+                                  <button
+                                    className="icon-button"
+                                    aria-label={'Ngừng bán ' + p.name}
+                                    onClick={() => setRemove(p)}
+                                  >
+                                    <Archive size={16} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                          <td className="product-expand-cell">
+                            <button
+                              type="button"
+                              className="icon-button product-expand-button"
+                              aria-label={`Chi tiết ${p.name}`}
+                              aria-expanded={expanded === p.id}
+                              aria-controls={`product-inventory-${p.id}`}
+                              onClick={() => toggleInventory(p.id)}
+                            >
+                              <ChevronDown size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded === p.id && (
+                          <tr className="product-inventory-row">
+                            <td colSpan={editable ? 7 : 6}>
+                              <div id={`product-inventory-${p.id}`}>
+                                <ProductInventoryDetails product={p} />
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

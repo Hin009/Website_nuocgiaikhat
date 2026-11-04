@@ -76,7 +76,7 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
         id,
         ma_don_nhap: 'DN-' + id,
         nha_cung_cap_id: body.supplierId,
-        trang_thai: 'CHO_DUYET',
+        trang_thai: 'DA_DUYET',
         ngay_dat: new Date().toISOString(),
         ngay_giao_du_kien: body.expectedDate,
         items: [
@@ -115,10 +115,17 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
             so_luong_loai: item.rejectedQuantity,
             ly_do_loai: item.rejectionReason,
             gia_nhap_thuc_te: item.actualCost,
+            ngay_san_xuat: item.manufacturedOn,
+            ngay_het_han: item.expiresOn,
           },
         ],
       };
       receipts.push(data);
+    } else if (path === '/receipts/1/lines/1/dates') {
+      const values = req.postDataJSON();
+      receipts[0].items[0].ngay_san_xuat = values.manufacturedOn;
+      receipts[0].items[0].ngay_het_han = values.expiresOn;
+      data = receipts[0];
     } else if (path === '/receipts/1/confirm') {
       receipts[0].trang_thai = 'CONFIRMED';
       receipts[0].ngay_xac_nhan = new Date().toISOString();
@@ -217,9 +224,7 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   const dialog = page.getByRole('dialog');
   const delivery = purchasingDate(new Date(Date.now() + 7 * 86400000));
-  await expect(
-    page.getByRole('heading', { name: 'Đơn đặt hàng và nhập hàng', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tạo đơn nhập hàng', exact: true })).toBeVisible();
   const confirmSave = async (path) => {
     await Promise.all([
       page.waitForResponse(
@@ -232,7 +237,7 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await expect(dialog).toHaveCount(0);
   };
-  await page.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }).click();
+  await page.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }).click();
   const supplierSelect = dialog.getByLabel('Nhà cung cấp', { exact: true });
   const productSelect = dialog.getByLabel('Sản phẩm', { exact: true });
   await expect(productSelect).toBeDisabled();
@@ -240,7 +245,16 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await expect(productSelect).toBeEnabled();
   await expect(productSelect.locator('option')).toHaveText(['Chọn sản phẩm', 'Milo kiểm thử']);
   await productSelect.selectOption('1');
-  await dialog.getByLabel('Quy cách', { exact: true }).selectOption('new-THUNG');
+  await expect(dialog.getByLabel('Quy cách', { exact: true }).locator('option')).toHaveText([
+    'Chọn quy cách',
+    'Thùng',
+    'Lốc',
+    'Lẻ',
+  ]);
+  await dialog.getByLabel('Quy cách', { exact: true }).selectOption('LE');
+  await expect(dialog.getByLabel('Số lượng lẻ đặt nhập', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Số đơn vị lẻ trong 1 lốc', { exact: true })).toHaveCount(0);
+  await dialog.getByLabel('Quy cách', { exact: true }).selectOption('THUNG');
   await dialog.getByLabel('Số lượng thùng đặt nhập').fill('2');
   await dialog.getByLabel('Giá nhập mỗi quy cách (đ)').fill('100000');
   await supplierSelect.selectOption('2');
@@ -252,17 +266,17 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await supplierSelect.selectOption('3');
   await expect(dialog.getByText(/NCC chưa được gán sản phẩm/)).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }),
+    dialog.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }),
   ).toBeDisabled();
   await dialog.getByRole('button', { name: 'Đóng hộp thoại', exact: true }).click();
   for (const [packaging, factor, quantity, cost, label, total] of [
     ['THUNG', '48', '2', '240000', 'thùng', '96'],
     ['LOC', '6', '4', '30000', 'lốc', '24'],
   ]) {
-    await page.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }).click();
+    await page.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }).click();
     await dialog.getByLabel('Nhà cung cấp', { exact: true }).selectOption('1');
     await dialog.getByLabel('Sản phẩm', { exact: true }).selectOption('1');
-    await dialog.getByLabel('Quy cách', { exact: true }).selectOption('new-' + packaging);
+    await dialog.getByLabel('Quy cách', { exact: true }).selectOption(packaging);
     await expect(dialog.getByLabel('Ngày giao dự kiến')).toHaveAttribute('min', purchasingDate());
     await dialog.getByLabel('Ngày giao dự kiến').fill(delivery);
     await dialog.getByLabel('Số đơn vị lẻ trong 1 ' + label, { exact: true }).fill(factor);
@@ -271,8 +285,13 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
     await expect(dialog.getByRole('status')).toContainText('= ' + total + ' đơn vị lẻ');
     if (packaging === 'THUNG')
       await page.screenshot({ path: 'test-results/case-purchasing.png', fullPage: true });
-    await dialog.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }).click();
     await confirmSave('/purchases');
+    const createdRow = page.getByRole('row', { name: 'DN-' + orders.length, exact: false });
+    await expect(createdRow).toContainText('Chờ nhận hàng');
+    await expect(createdRow.getByRole('button', { name: 'Nhận hàng', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Duyệt đơn', exact: true })).toHaveCount(0);
+    expect(writes.some((w) => w.path.endsWith('/status'))).toBe(false);
     expect(writes.filter((w) => w.path === '/purchases').at(-1).body.expectedDate).toBe(delivery);
     await expect(
       page.getByRole('row', { name: 'DN-' + orders.length, exact: false }),
@@ -289,12 +308,17 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
       unitCost: Number(cost),
     });
   }
-  const orderRow = page.getByRole('row', { name: /DN-TEST/ });
+  const orderRow = page
+    .getByRole('region', { name: 'Đơn đặt hàng chờ nhận' })
+    .getByRole('row', { name: /DN-TEST/ });
+  const receivedRow = page.getByRole('row', { name: /#1.*DN-TEST/ });
   await expect(orderRow).toContainText('Quá hạn giao 2 ngày');
   await orderRow.getByRole('button', { name: 'Nhận hàng', exact: true }).click();
   await expect(dialog.getByLabel('Số lượng giao đợt này')).toHaveValue('99');
   await dialog.getByLabel('Số lượng hàng lỗi trả ngay NCC').fill('9');
   await dialog.getByLabel('Lý do trả hàng lỗi', { exact: true }).fill('Bể khi giao');
+  await dialog.getByLabel('Ngày sản xuất', { exact: true }).fill('2000-01-01');
+  await dialog.getByLabel('Ngày hết hạn', { exact: true }).fill('2099-01-01');
   await expect(dialog.getByRole('status')).toHaveText(
     'Nhập kho: 90 · Trả lỗi: 9 · Còn chờ nhận: 0 quy cách.',
   );
@@ -304,23 +328,37 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await confirmSave('/purchases/1/receipts');
   expect(writes.find((w) => w.path === '/purchases/1/receipts').body.items[0]).toEqual({
     purchaseLineId: 1,
+    manufacturedOn: '2000-01-01',
+    expiresOn: '2099-01-01',
     quantity: 90,
     rejectedQuantity: 9,
     rejectionReason: 'Bể khi giao',
     actualCost: 5000,
   });
+  await expect(orderRow).toHaveCount(0);
+  await expect(receivedRow).toContainText('NSX:');
+  await expect(receivedRow).toContainText('HSD:');
+  await page.getByLabel('Từ ngày', { exact: true }).fill(delivery);
+  await page.getByLabel('Đến ngày', { exact: true }).fill(delivery);
+  await expect(receivedRow).toBeVisible();
+  await page.getByRole('button', { name: 'Xóa bộ lọc ngày', exact: true }).click();
   await expect(
     page.getByText('Sẽ trả lỗi khi xác nhận: 9 — Bể khi giao', { exact: true }),
   ).toBeVisible();
+  await receivedRow.locator('summary').click();
+  await receivedRow.getByLabel('Ngày sản xuất', { exact: true }).fill('1999-01-01');
+  await receivedRow.getByRole('button', { name: 'Lưu NSX/HSD', exact: true }).click();
+  await expect(receivedRow).toContainText('1999');
+  expect(writes.find((w) => w.path === '/receipts/1/lines/1/dates').body).toEqual({
+    manufacturedOn: '1999-01-01',
+    expiresOn: '2099-01-01',
+  });
   await expect(page.getByText('TRA-NHAN-1', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Xác nhận nhận / trả hàng', exact: true }).click();
   await confirmSave('/receipts/1/confirm');
-  await expect(orderRow).toContainText('Đã nhận đủ');
-  await expect(orderRow).toContainText('Đã nhận trễ 2 ngày');
-  await expect(orderRow).toContainText('Nhận đủ:');
-  await expect(orderRow).not.toContainText('Quá hạn giao');
-  await expect(orderRow).toContainText('Chờ nhận: 0');
-  await expect(orderRow.getByRole('button', { name: 'Nhận hàng', exact: true })).toHaveCount(0);
+  await expect(orderRow).toHaveCount(0);
+  await expect(receivedRow).toContainText('Đã nhận trễ 2 ngày');
+  await expect(receivedRow).toContainText('Nhận đủ:');
   await expect(page.getByText('Đã nhận và trả hàng lỗi', { exact: true })).toBeVisible();
   await expect(page.getByText('Đã trả lỗi NCC: 9 — Bể khi giao', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Trả hàng lỗi', exact: true })).toHaveCount(0);
@@ -333,6 +371,8 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await expect(historyRow).toContainText('Đã trả khi kiểm nhận');
   await expect(historyRow.getByRole('button')).toHaveCount(0);
   await page.reload();
+  await expect(orderRow).toHaveCount(0);
+  await expect(receivedRow).toContainText('NSX:');
   await expect(historyRow).toHaveCount(1);
   await expect(historyRow).toContainText('Milo kiểm thử — Hộp lẻ × 9');
   await page.screenshot({ path: 'test-results/receiving-settled.png', fullPage: true });
@@ -351,8 +391,7 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await page.getByLabel('Lọc đơn đặt hàng theo').selectOption('ngay_dat');
   await page.getByLabel('Từ ngày', { exact: true }).fill('2026-01-02');
   await page.getByLabel('Đến ngày', { exact: true }).fill('2026-01-02');
-  await expect(orderRow).toHaveCount(1);
-  await expect(orderRow).toContainText('Đã nhận trễ 2 ngày');
+  await expect(orderRow).toHaveCount(0);
   await expect(page.getByRole('row', { name: /DN-2/ })).toHaveCount(0);
   await expect(historyRow).toHaveCount(0);
   await expect(page.getByText('Không có lần nhập hàng trong khoảng ngày đã chọn')).toBeVisible();
@@ -361,7 +400,7 @@ test('import packs/cases and settle rejected goods during receiving', async ({ p
   await expect(orderRow).toHaveCount(0);
   await expect(page.getByText('Không có đơn đặt hàng trong khoảng ngày đã chọn')).toBeVisible();
   await page.getByRole('button', { name: 'Xóa bộ lọc ngày', exact: true }).click();
-  await expect(orderRow).toHaveCount(1);
+  await expect(orderRow).toHaveCount(0);
   await expect(historyRow).toHaveCount(1);
   await page.goto('/admin/reports');
   const finance = page.locator('.product-profit-section');

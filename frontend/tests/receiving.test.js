@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { remainingToReceive, receiptItems } from '../src/utils/receiving';
+import { remainingToReceive, receiptItems, hasPendingReceipt } from '../src/utils/receiving';
 describe('receipt settlement at delivery', () => {
+  const dates = { manufacturedOn: '2000-01-01', expiresOn: '2099-01-01' };
   const line = { id: 1, so_luong_dat: 99 };
   const confirmed = [
     {
@@ -15,9 +16,12 @@ describe('receipt settlement at delivery', () => {
   });
   it('derives accepted quantity from delivered minus rejected', () => {
     expect(
-      receiptItems([line], { 1: { delivered: '99', rejected: '9', reason: 'Bể', cost: '5000' } }),
+      receiptItems([line], {
+        1: { ...dates, delivered: '99', rejected: '9', reason: 'Bể', cost: '5000' },
+      }),
     ).toEqual([
       {
+        ...dates,
         purchaseLineId: 1,
         quantity: 90,
         rejectedQuantity: 9,
@@ -27,7 +31,7 @@ describe('receipt settlement at delivery', () => {
     ]);
     expect(
       receiptItems([line], {
-        1: { delivered: '99', rejected: '99', reason: 'Hết hạn', cost: '5000' },
+        1: { ...dates, delivered: '99', rejected: '99', reason: 'Hết hạn', cost: '5000' },
       })[0].quantity,
     ).toBe(0);
   });
@@ -42,21 +46,38 @@ describe('receipt settlement at delivery', () => {
     expect(
       receiptItems(
         [line],
-        { 1: { delivered: '50', rejected: '0', reason: '', cost: '5000' } },
+        { 1: { ...dates, delivered: '50', rejected: '0', reason: '', cost: '5000' } },
         prior,
       )[0].quantity,
     ).toBe(50);
   });
   it('rejects over-delivery, fractional quantities, missing reasons and invalid costs', () => {
-    const valid = { delivered: '99', rejected: '9', reason: 'Bể', cost: '5000' };
+    const valid = { ...dates, delivered: '99', rejected: '9', reason: 'Bể', cost: '5000' };
     for (const invalid of [
-      { delivered: '100' },
+      { ...dates, delivered: '100' },
       { rejected: '100' },
-      { delivered: '1.5' },
+      { ...dates, delivered: '1.5' },
       { reason: '' },
       { cost: '' },
       { cost: '-1' },
     ])
       expect(() => receiptItems([line], { 1: { ...valid, ...invalid } })).toThrow();
+  });
+  it('tracks pending receipts even outside a date-filtered list', () => {
+    expect(hasPendingReceipt({ id: 1, receipts: [{ trang_thai: 'DRAFT' }] })).toBe(true);
+    expect(hasPendingReceipt({ id: 1 }, [{ don_ncc_id: 1, trang_thai: 'DRAFT' }])).toBe(true);
+    expect(hasPendingReceipt({ id: 1 }, [{ don_ncc_id: 2, trang_thai: 'DRAFT' }])).toBe(false);
+    expect(hasPendingReceipt({ id: 1 }, [{ don_ncc_id: 1, trang_thai: 'CONFIRMED' }])).toBe(false);
+  });
+  it('requires both dates and refuses expired accepted goods', () => {
+    const valid = { ...dates, delivered: '1', rejected: '0', reason: '', cost: '5000' };
+    expect(() => receiptItems([line], { 1: { ...valid, manufacturedOn: '' } })).toThrow();
+    expect(() => receiptItems([line], { 1: { ...valid, expiresOn: '1999-01-01' } })).toThrow();
+    expect(() => receiptItems([line], { 1: { ...valid, expiresOn: '2001-01-01' } })).toThrow();
+    expect(
+      receiptItems([line], {
+        1: { ...valid, rejected: '1', reason: 'Hết hạn', expiresOn: '2001-01-01' },
+      })[0].quantity,
+    ).toBe(0);
   });
 });

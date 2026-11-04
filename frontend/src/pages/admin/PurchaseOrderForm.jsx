@@ -24,11 +24,17 @@ export default function PurchaseOrderForm({ suppliers, products, onSubmit }) {
     [factor, setFactor] = useState(''),
     [quantity, setQuantity] = useState('');
   const product = availableProducts.find((p) => String(p.id) === productId);
-  const packaging = choice.startsWith('new-') ? choice.slice(4) : null;
-  const size = packaging
-    ? Number(factor)
-    : product?.packages.find((p) => String(p.packageId) === choice)?.size;
-  const unitName = packaging === 'LOC' ? 'lốc' : packaging === 'THUNG' ? 'thùng' : 'quy cách';
+  const retail = product?.packages.find((p) => Number(p.size) === 1);
+  const packaging = ['LOC', 'THUNG'].includes(choice) ? choice : null;
+  const size = packaging ? Number(factor) : choice === 'LE' ? 1 : null;
+  const unitName =
+    packaging === 'LOC'
+      ? 'lốc'
+      : packaging === 'THUNG'
+        ? 'thùng'
+        : choice === 'LE'
+          ? 'lẻ'
+          : 'quy cách';
   return (
     <form
       className="form-stack"
@@ -41,7 +47,9 @@ export default function PurchaseOrderForm({ suppliers, products, onSubmit }) {
           productId,
           quantity,
           cost: data.get('cost'),
-          ...(packaging ? { packaging, unitsPerPackage: Number(factor) } : { packageId: choice }),
+          ...(packaging
+            ? { packaging, unitsPerPackage: Number(factor) }
+            : { packageId: retail?.packageId }),
         });
       }}
     >
@@ -143,18 +151,21 @@ export default function PurchaseOrderForm({ suppliers, products, onSubmit }) {
           onChange={(e) => {
             setChoice(e.target.value);
             setFactor(
-              e.target.value === 'new-LOC' ? '6' : e.target.value === 'new-THUNG' ? '24' : '',
+              ['LOC', 'THUNG'].includes(e.target.value)
+                ? String(
+                    product?.packages.find((p) => p.unit === e.target.value)?.size ||
+                      (e.target.value === 'LOC' ? 6 : 24),
+                  )
+                : '',
             );
           }}
         >
           <option value="">Chọn quy cách</option>
-          {product?.packages.map((p) => (
-            <option key={p.packageId} value={p.packageId}>
-              {p.label} · {p.size} đơn vị lẻ
-            </option>
-          ))}
-          <option value="new-LOC">Lốc — khai báo số đơn vị lẻ</option>
-          <option value="new-THUNG">Thùng — khai báo số đơn vị lẻ</option>
+          <option value="THUNG">Thùng</option>
+          <option value="LOC">Lốc</option>
+          <option value="LE" disabled={!retail}>
+            Lẻ
+          </option>
         </select>
       </Field>
       {packaging && (
@@ -204,11 +215,11 @@ export default function PurchaseOrderForm({ suppliers, products, onSubmit }) {
         />
       </Field>
       <p className="muted-note">
-        Giá của nguyên một {unitName}, không phải giá của một đơn vị lẻ. Đơn mới chờ duyệt; chưa
-        cộng tồn hoặc công nợ.
+        Giá của nguyên một {unitName}, không phải giá của một đơn vị lẻ. Sau khi tạo có thể nhận
+        hàng ngay; chưa cộng tồn hoặc công nợ.
       </p>
       <Button type="submit" disabled={!product || !choice || assigned.isFetching}>
-        Lập đơn đặt hàng
+        Tạo đơn nhập hàng
       </Button>
     </form>
   );

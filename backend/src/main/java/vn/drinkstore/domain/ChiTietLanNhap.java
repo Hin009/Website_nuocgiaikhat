@@ -11,6 +11,8 @@ public record ChiTietLanNhap(
     Integer soLuongThucNhan,
     Integer soLuongLoai,
     String lyDoLoai,
+    java.time.LocalDate ngaySanXuat,
+    java.time.LocalDate ngayHetHan,
     Integer chenhLech,
     BigDecimal giaNhapThucTe
 ) {}

@@ -184,7 +184,7 @@ test('supplier management replaces creation in receipts and promotion editor sen
   await expect(page.getByRole('cell', { name: /Liên hệ đã sửa/ })).toBeVisible();
   await page.goto('/admin/stock-receipts');
   await expect(page.getByRole('button', { name: 'Thêm nhà cung cấp', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }).click();
+  await page.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }).click();
   await expect(
     dialog.getByLabel('Nhà cung cấp').locator('option', { hasText: 'Nhà cung cấp thử' }),
   ).toHaveCount(1);
@@ -193,7 +193,7 @@ test('supplier management replaces creation in receipts and promotion editor sen
   await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Khôi phục hợp tác', exact: true })).toBeVisible();
   await page.goto('/admin/stock-receipts');
-  await page.getByRole('button', { name: 'Lập đơn đặt hàng', exact: true }).click();
+  await page.getByRole('button', { name: 'Tạo đơn nhập hàng', exact: true }).click();
   await expect(
     dialog.getByLabel('Nhà cung cấp').locator('option', { hasText: 'Nhà cung cấp thử' }),
   ).toHaveCount(0);
