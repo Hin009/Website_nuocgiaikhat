@@ -30,7 +30,7 @@ import { roleLabels } from '@/utils/format';
 const items = [
   { to: '/admin', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/admin/products', label: 'Sản phẩm', icon: Package },
-  { to: '/admin/categories', label: 'Danh mục', icon: Shapes, adminOnly: !isMock },
+  { to: '/admin/categories', label: 'Loại sản phẩm ', icon: Shapes, adminOnly: !isMock },
   {
     to: '/admin/suppliers',
     label: 'Nhà cung cấp',

@@ -19,6 +19,11 @@ export const transitions = {
   REJECTED: [],
 };
 const numeric = (id) => Number(id);
+export const passwordResetService = {
+  request: (email) => post('/auth/password-reset/request', { email }),
+  verify: (challengeId, code) => post('/auth/password-reset/verify', { challengeId, code }),
+  complete: (challengeId, resetToken, newPassword) => post('/auth/password-reset/complete', { challengeId, resetToken, newPassword }),
+};
 export const catalogService = {
   checkoutOptions: () => get('/catalog/checkout-options'),
   async list() {
@@ -184,7 +189,16 @@ export const orderService = {
   },
   async create(user, values, cart) {
     if (!cart.length) throw new Error('Chưa chọn sản phẩm.');
-    let addressId = values.addressId;
+    // Reuse a saved address only when it matches the editable checkout fields.
+    const saved = user.addresses?.find(
+      (address) =>
+        address.ten_nguoi_nhan === values.receiver &&
+        address.so_dien_thoai === values.phone &&
+        address.dia_chi === values.address &&
+        address.tinh_thanh === values.province &&
+        (address.phuong_xa || '') === (values.ward || ''),
+    );
+    let addressId = saved?.id;
     if (!addressId) {
       const address = await post('/me/addresses', {
         recipient: values.receiver,
@@ -356,7 +370,6 @@ export const adminService = {
         categoryId: numeric(v.categoryId),
         volume: v.volume,
         description: v.description,
-        price: v.price,
         active: v.active,
         packageId: v.packageId ? numeric(v.packageId) : null,
         packaging: v.art === 'can' ? 'LON' : v.art === 'carton' ? 'HOP' : 'CHAI',

@@ -16,6 +16,8 @@ describe('PostgreSQL data displayed on the storefront', () => {
     ).toEqual([
       {
         productId: '1',
+        categoryId: null,
+        brandId: null,
         packageId: '2',
         unit: 'package-2',
         quantity: 3,

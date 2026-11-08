@@ -15,6 +15,7 @@ const ProfilePage = lazy(() =>
 );
 const InfoPage = lazy(() => import('@/pages/customer/InfoPage'));
 const AuthPage = lazy(() => import('@/pages/auth/AuthPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
 const AdminProfilePage = lazy(() => import('@/pages/admin/ProfilePage'));
 const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
 const ProductsPage = lazy(() => import('@/pages/admin/ProductsPage'));
@@ -105,6 +106,7 @@ export default function App() {
           <Route element={<AuthLayout />}>
             <Route path="login" element={<AuthPage key="customer" />} />
             <Route path="register" element={<AuthPage key="register" registerMode />} />
+            <Route path="forgot-password" element={<ForgotPasswordPage />} />
           </Route>
           <Route element={<ManagementRoute />}>
             <Route element={<RoleGuard roles={['STAFF']} />}>

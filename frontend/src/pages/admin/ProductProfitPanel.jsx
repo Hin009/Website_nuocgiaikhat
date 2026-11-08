@@ -19,7 +19,7 @@ export default function ProductProfitPanel({ from, to }) {
       <div className="panel-heading">
         <div>
           <h2>Tiền nhập, tiền bán và lãi theo sản phẩm</h2>
-          <p>Lãi gộp = Doanh thu sau giảm giá − Giá vốn của lượng đã bán</p>
+          <p>Lãi gộp = Doanh thu − Giá vốn</p>
         </div>
       </div>
       <p className="muted-note">
@@ -39,8 +39,8 @@ export default function ProductProfitPanel({ from, to }) {
         <div className="profit-totals">
           {[
             ['Tổng tiền nhập', 'import_amount'],
-            ['Doanh thu sau giảm giá', 'net_sales'],
-            ['Giá vốn đã bán', 'cost_of_goods'],
+            ['Doanh thu', 'net_sales'],
+            ['Giá vốn', 'cost_of_goods'],
             ['Lãi gộp', 'gross_profit'],
           ].map(([label, key]) => (
             <div className="metric-card" key={key}>
@@ -64,8 +64,8 @@ export default function ProductProfitPanel({ from, to }) {
                   <th>SL nhập</th>
                   <th>Tiền nhập</th>
                   <th>SL bán</th>
-                  <th>Doanh thu sau giảm giá</th>
-                  <th>Giá vốn đã bán</th>
+                  <th>Doanh thu</th>
+                  <th>Giá vốn</th>
                   <th>Lãi gộp / Tỷ suất</th>
                   <th>Tồn hiện tại</th>
                 </tr>

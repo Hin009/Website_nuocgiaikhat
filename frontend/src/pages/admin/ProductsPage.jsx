@@ -4,8 +4,7 @@ import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Pencil, Archive, Package, ChevronDown } from 'lucide-react';
-import { useForm, Controller } from 'react-hook-form';
-import { MoneyInput } from '@/components/common/MoneyInput';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '@/schemas';
 import { useAdmin, useAction } from '@/hooks/useData';
@@ -47,7 +46,6 @@ function ProductForm({ item, categories, onClose }) {
   }, 'Đã lưu sản phẩm');
   const {
     register,
-    control,
     handleSubmit,
     watch,
     formState: { errors },
@@ -62,7 +60,7 @@ function ProductForm({ item, categories, onClose }) {
           brand: '',
           categoryId: categories[0]?.id || '',
           volume: 'Lon 320ml',
-          price: 10000,
+          price: 0,
           stock: 0,
           active: true,
           description: '',
@@ -101,18 +99,17 @@ function ProductForm({ item, categories, onClose }) {
         <Field label="Quy cách" error={errors.volume}>
           <input {...register('volume')} />
         </Field>
-        <Controller
-          name="price"
-          control={control}
-          render={({ field }) => (
-            <Field label="Giá bán (đ)" error={errors.price}>
-              <MoneyInput data-field-control {...field} />
-            </Field>
-          )}
-        />
-        <Field label="Số lượng tồn kho" error={errors.stock}>
-          <input type="number" min="0" {...register('stock')} />
+        <Field label="Giá bán tự động">
+          <input readOnly value={money(item?.price || 0)} />
         </Field>
+        <Field label="Số lượng tồn kho" error={errors.stock}>
+          <input type="number" min="0" readOnly={!item} {...register('stock')} />
+        </Field>
+        <p className="muted-note span-two">
+          Giá vốn bình quân = (Tồn cũ × Giá vốn cũ + Tiền hàng đạt nhập mới) / Tổng số lượng sau
+          nhập. Giá bán = Giá vốn × 1,25, làm tròn lên bội số 500đ. Giá cập nhật khi xác nhận nhập
+          kho; sản phẩm mới cần nhận hàng để có giá vốn và tồn kho.
+        </p>
         {!isMock && (
           <p className="muted-note span-two">
             Số lượng tính theo đơn vị lẻ, không phải số thùng/lốc. Khi điều chỉnh cần ghi lý do; hệ

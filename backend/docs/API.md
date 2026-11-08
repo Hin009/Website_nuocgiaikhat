@@ -102,12 +102,18 @@ SQL mới có các bảng và hàm POS, liên hệ khách hàng, điều chỉnh
 
 Checkout nhận `paymentMethod` COD hoặc BANK_TRANSFER. Cả hai tạo thanh toán PENDING với số tiền thực tế của đơn. Chuyển khoản là quy trình xác nhận thủ công của cửa hàng, yêu cầu mã đối soát khi xác nhận qua API billing; không tự đánh dấu đã thanh toán khi tạo đơn.
 
+`GET /catalog/checkout-options` trả thêm `bankTransfer` gồm `bankId`, `bankName`, `accountNumber`, `accountName`. Cấu hình trong `.env`: `BANK_TRANSFER_BANK_ID` (mã ngân hàng VietQR hoặc BIN), `BANK_TRANSFER_BANK_NAME`, `BANK_TRANSFER_ACCOUNT_NUMBER`, `BANK_TRANSFER_ACCOUNT_NAME`; khởi động lại API để áp dụng. Giao diện tạo ảnh QR theo [VietQR Quick Link](https://www.vietqr.io/qr-dong), hiển thị số tài khoản và tên tài khoản bên dưới. Nếu chưa cấu hình đủ thì hiển thị thông báo chưa có thông tin tài khoản. QR trước đặt hàng chỉ chứa tài khoản nhận; sau khi đặt thành công, QR có thêm số tiền và nội dung là mã đơn.
+
+Checkout tự điền địa chỉ mặc định (hoặc địa chỉ đầu tiên), cho phép sửa trực tiếp các trường. Client dùng lại địa chỉ khớp thông tin đã nhập; khi sửa thông tin sẽ tạo địa chỉ mới không mặc định rồi dùng ID đó đặt đơn, giữ nguyên địa chỉ đã lưu trước đó.
+
+`GET /catalog/promotions` trả thêm `pham_vi_ap_dung` và `scopes` (các ID sản phẩm/danh mục/thương hiệu áp dụng). Checkout đối chiếu với các dòng giỏ hàng đang chọn để làm mờ và khóa voucher không có sản phẩm phù hợp hoặc chưa đạt giá trị tối thiểu. Hạn sử dụng hiển thị `HSD: DD.MM.YYYY` theo múi giờ Việt Nam. API tính giá và đặt đơn vẫn kiểm tra đầy đủ điều kiện áp dụng trước khi giảm tiền.
+
 
 ## Trang quản trị nhà cung cấp và mã khuyến mãi
 
 Các API dưới đây yêu cầu QUAN_TRI_VIEN, đồng thời SUPPLIER_MANAGE hoặc PROMOTION_MANAGE tương ứng:
 
-- `POST /management/supplier-editor`, `PUT /management/supplier-editor/{id}` nhận `{fullName,taxCode?,contactName?,phone?,email?,address?,status,supplierType,verificationStatus,verificationNotes?,verificationConfirmed}`. Status HOP_TAC/NGUNG_HOP_TAC. Trả dòng nhà cung cấp theo tên cột database. `PATCH /management/supplier-editor/{id}/status` nhận `{status}`, giữ nguyên các thông tin và lịch sử khác.
+- `POST /management/supplier-editor`, `PUT /management/supplier-editor/{id}` nhận `{fullName,taxCode?,contactName?,phone?,email?,address?,status,supplierType,productIds?}`. Status HOP_TAC/NGUNG_HOP_TAC. Không yêu cầu xác minh pháp lý. Trả dòng nhà cung cấp theo tên cột database. `PATCH /management/supplier-editor/{id}/status` nhận `{status}`, giữ nguyên các thông tin và lịch sử khác.
 - Danh sách nhà cung cấp vẫn dùng `GET /management/suppliers`. Đơn nhập mới chỉ nhận nhà cung cấp HOP_TAC.
 - `GET /management/promotion-editor`: phân trang, trả thêm `scope_ids` và `luot_da_dung` (APPLIED) trên mỗi dòng khuyến mãi.
 - `POST /management/promotion-editor`, `PUT /management/promotion-editor/{id}` nhận `{code,fullName,description?,discountType,value,maxDiscount?,minimumOrder,startsAt,endsAt,totalLimit?,customerLimit?,scope,scopeIds,status}`. DiscountType PERCENT/FIXED; status ACTIVE/INACTIVE. StartsAt/endsAt là ISO có offset; kết thúc phải sau bắt đầu. Value > 0, phần trăm không vượt 100; tối đa hai chữ số thập phân. Mã chuẩn hóa chữ hoa, gồm chữ/số/gạch ngang/gạch dưới.
@@ -118,10 +124,11 @@ Các API dưới đây yêu cầu QUAN_TRI_VIEN, đồng thời SUPPLIER_MANAGE 
 
 ### Hồ sơ pháp lý và điện thoại
 
-- `supplierType`: DOANH_NGHIEP / HO_KINH_DOANH / CA_NHAN. `verificationStatus`: CHUA_XAC_MINH / DA_XAC_MINH / CAN_KIEM_TRA_LAI, độc lập HOP_TAC/NGUNG_HOP_TAC.
-- Mã thuế nhập từ hồ sơ: doanh nghiệp 10 số hoặc mã đơn vị phụ thuộc 10 số-3 số; hộ/cá nhân nhận thêm số định danh 12 số. Mã 13 số chuẩn hóa dấu gạch ngang; kiểm tra trùng trong giao dịch khi lưu. Có thể để trống cho hồ sơ chưa xác minh.
+- Form mới chọn `supplierType`: DOANH_NGHIEP / HO_KINH_DOANH. CA_NHAN được giữ để tương thích hồ sơ cũ.
+- Mã số thuế có thể để trống; nếu nhập thì phải gồm đúng 10 chữ số ASCII, giữ nguyên số 0 đầu. Giao diện và API cùng kiểm tra định dạng. Ràng buộc không trùng mã trong database vẫn được giữ.
 - `POST /management/supplier-tax-check` nhận `{supplierId?,supplierType,taxCode}`, trả `{taxCode,duplicate,message}`: chỉ kiểm tra định dạng và trùng lặp, không xác minh pháp lý tự động.
-- Đánh dấu DA_XAC_MINH cần mã và `verificationConfirmed: true` sau đối chiếu thủ công trên [cổng thuế](https://tracuunnt.gdt.gov.vn/tcnnt/mstdn.jsp). Ghi tài khoản/thời điểm xác minh; đổi danh tính pháp lý qua generic API sẽ chuyển trạng thái đã xác minh sang CAN_KIEM_TRA_LAI. Giao diện hủy xác nhận cũ khi thay đổi tên/địa chỉ/loại/mã.
+- Form nhà cung cấp đã bỏ hồ sơ pháp lý, liên kết tra cứu, nút kiểm tra riêng, trạng thái và ghi chú xác minh. Các cột xác minh cũ được giữ trong database để bảo toàn dữ liệu lịch sử; supplier-editor không cần và không ghi nhận xác nhận pháp lý mới.
+- Địa chỉ nhà cung cấp chọn tỉnh/thành phố, phường/xã và nhập số nhà/tên đường. Giao diện ghép thành chuỗi `address` để lưu trong `dia_chi`; mở lại sẽ tách địa chỉ để điền các lựa chọn. Địa chỉ cũ chưa có tỉnh/phường được giữ trong ô số nhà/tên đường, không tự đoán vị trí. Đổi tỉnh sẽ xóa lựa chọn phường cũ.
 - Điện thoại toàn hệ thống: đúng 10 hoặc 11 chữ số ASCII, không nhận `+84`, khoảng trắng, dấu gạch hoặc chữ. Trường vốn không bắt buộc vẫn được để trống; điện thoại giao hàng bắt buộc. API kiểm tra cả đăng ký, hồ sơ khách/nhân viên, quản trị tài khoản, nhà cung cấp và địa chỉ tại checkout. Dữ liệu lịch sử không tự sửa.
 - API tự bổ sung cột pháp lý vào volume hiện có khi khởi động; SQL tổng hợp đã gồm cùng cấu trúc cho máy mới. Không xóa volume.
 
@@ -187,3 +194,31 @@ hệ thống hiện theo dõi tồn tổng sản phẩm, chưa phân bổ hàng 
 Trạng thái lưu trong DB vẫn dùng `DA_DUYET` để tương thích trigger, hiển thị “Chờ nhận hàng”.
 Migration `20261104_direct_receiving` chuyển các đơn `CHO_DUYET` sang trạng thái này và cập nhật mặc định;
 không ghi người/ngày duyệt giả, không cộng tồn hay công nợ. Nhận hàng và xác nhận nhập kho vẫn là hai bước riêng.
+# Giá vốn bình quân và giá bán tự động
+
+Khi phiếu nhận chuyển sang CONFIRMED, hệ thống cộng tiền hàng đạt và số đơn vị lẻ của toàn bộ
+các dòng cùng sản phẩm trong phiếu, tính một lần:
+`giá vốn mới = round((tồn cũ × giá vốn cũ + tiền nhập hàng đạt) / (tồn cũ + số lẻ nhập mới), 2)`.
+Sau đó cập nhật mọi quy cách: `giá vốn quy cách = giá vốn mới × hệ số`,
+`giá bán quy cách = ceil(giá vốn quy cách × 1.25 / 500) × 500`. Hàng lỗi không vào công thức.
+Ví dụ 50 × 8.000 + 100 × 9.000 cho giá vốn 8.666,67 và giá bán lẻ làm tròn 11.000.
+Các dòng cùng sản phẩm được gộp trước khi làm tròn; xác nhận lặp không tính lại.
+
+`product-editor` không nhận `price`; gửi giá sẽ bị từ chối. Các API `packages` không nhận
+`gia_ban` hay `gia_von`, kể cả quản trị viên. Quy cách mới lấy vốn hiện có của sản phẩm;
+sản phẩm mới có tồn 0 và nhận hàng để ghi vốn. Không tăng tồn thủ công khi chưa có giá vốn.
+Không tính lại giá của hàng hiện có tại thời điểm migration; áp dụng từ lần xác nhận nhập tiếp theo.
+Các đơn bán trước đó giữ đơn giá và giá vốn đã chụp. Không có chi phí mua hàng bổ sung trong công thức này.
+
+Giá bán được làm tròn lên bội 500đ, vốn vẫn giữ 2 chữ số thập phân. Migration `20261107_round_selling_prices_500` làm tròn các giá đã theo công thức tự động, không sửa giá vốn hay đơn hàng cũ. Ví dụ: 14.583,34 → 15.000; 72.916,66 → 73.000; 12.500 giữ nguyên.
+# Khôi phục mật khẩu khách hàng bằng OTP email
+
+Các endpoint công khai (POST):
+
+| Endpoint | JSON yêu cầu | Kết quả |
+| --- | --- | --- |
+| `/api/v1/auth/password-reset/request` | `{ "email": "customer@example.com" }` | `challengeId`, `expiresInSeconds`, `retryAfterSeconds`, thông báo chung |
+| `/api/v1/auth/password-reset/verify` | `{ "challengeId": "UUID", "code": "123456" }` | `resetToken`, `expiresInSeconds` |
+| `/api/v1/auth/password-reset/complete` | `{ "challengeId": "UUID", "resetToken": "...", "newPassword": "..." }` | Thông báo đổi thành công; thu hồi phiên đăng nhập cũ |
+
+OTP và quyền đặt mật khẩu hết hạn sau 5 phút, dùng một lần. OTP tối đa 5 lần sai, gửi lại sau 60 giây; có giới hạn theo email/IP. Không trả OTP trong API hoặc ghi mã vào log. Tài khoản nhân viên/quản trị không dùng luồng khách hàng này. Xem [cấu hình Gmail và quy tắc](GMAIL_OTP.md). Khi SMTP chưa cấu hình, endpoint yêu cầu OTP trả 503.

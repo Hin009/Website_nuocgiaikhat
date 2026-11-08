@@ -4,7 +4,7 @@ import { Brand } from './CustomerLayout';
 import { HeroArtwork } from '@/components/customer/DrinkArt';
 export default function AuthLayout({ management = false, children }) {
   return (
-    <div className="auth-layout">
+    <div className={`auth-layout${management ? '' : ' auth-layout-customer'}`}>
       <aside className="auth-visual">
         <Brand to={management ? '/admin' : '/'} />
         <div className="auth-pitch">
@@ -25,9 +25,11 @@ export default function AuthLayout({ management = false, children }) {
         {!management && <HeroArtwork />}
       </aside>
       <main id="main-content" className="auth-main">
-        <Link to="/" className="back-link">
-          <ArrowLeft size={16} /> Về trang chủ
-        </Link>
+        {!management && (
+          <Link to="/" className="back-link">
+            <ArrowLeft size={16} /> Về trang chủ
+          </Link>
+        )}
         <div className="auth-form-wrap">{children || <Outlet />}</div>
       </main>
     </div>

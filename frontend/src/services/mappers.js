@@ -46,6 +46,7 @@ export function mapProduct(row, packages = [], brands = [], stock) {
     active: row.trang_thai !== 'NGUNG_KINH_DOANH' && row.hien_thi !== false,
     purchasable: row.trang_thai === 'DANG_BAN',
     createdAt: row.ngay_tao,
+    nextExpiry: row.next_expiry || null,
     packageId: primary ? String(primary.id) : null,
     art: row.loai_bao_bi === 'LON' ? 'can' : row.loai_bao_bi === 'HOP' ? 'carton' : 'bottle',
     color: '#61846b',
@@ -112,6 +113,8 @@ export function mapOrder(row) {
 export const mapCart = (row) =>
   row.items.map((l) => ({
     productId: String(l.san_pham_id),
+    categoryId: l.loai_san_pham_id == null ? null : String(l.loai_san_pham_id),
+    brandId: l.thuong_hieu_id == null ? null : String(l.thuong_hieu_id),
     packageId: String(l.quy_cach_id),
     unit: `package-${l.quy_cach_id}`,
     quantity: Number(l.so_luong),

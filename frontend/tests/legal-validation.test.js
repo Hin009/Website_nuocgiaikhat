@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { supplierSchema, promotionSchema } from '../src/schemas/business';
 import { phoneSchema, optionalPhoneSchema } from '../src/schemas/phone';
+import { provinces } from '@/utils/address';
 
 const supplier = {
   fullName: 'Supplier',
@@ -15,35 +16,54 @@ const supplier = {
   verificationNotes: '',
   verificationConfirmed: false,
 };
-describe('supplier legal verification', () => {
-  it('accepts each legal identifier only for the appropriate supplier type', () => {
-    expect(supplierSchema.safeParse({ ...supplier, taxCode: '0123456789-001' }).success).toBe(true);
-    expect(supplierSchema.safeParse({ ...supplier, taxCode: '012345678901' }).success).toBe(false);
+describe('supplier tax code format', () => {
+  it('saves structured supplier addresses in the existing API field', () => {
+    const city = provinces[0],
+      ward = city.wards[0];
+    const values = {
+      ...supplier,
+      provinceCode: city.code,
+      wardCode: ward.code,
+      streetAddress: '24/1 Kha Vạn Cân',
+    };
+    const result = supplierSchema.parse(values);
+    expect(result.address).toBe(`24/1 Kha Vạn Cân, ${ward.name}, ${city.name}`);
+    expect(result).not.toHaveProperty('provinceCode');
     expect(
-      supplierSchema.safeParse({ ...supplier, supplierType: 'CA_NHAN', taxCode: '012345678901' })
-        .success,
-    ).toBe(true);
-    expect(supplierSchema.safeParse({ ...supplier, taxCode: '123' }).success).toBe(false);
+      supplierSchema.safeParse({ ...values, wardCode: provinces[1].wards[0].code }).success,
+    ).toBe(false);
+    expect(supplierSchema.safeParse({ ...values, provinceCode: '', wardCode: '' }).success).toBe(
+      false,
+    );
   });
-  it('requires a legal code and manual confirmation for verification', () => {
-    expect(
-      supplierSchema.safeParse({ ...supplier, verificationStatus: 'DA_XAC_MINH' }).success,
-    ).toBe(false);
-    expect(
-      supplierSchema.safeParse({
-        ...supplier,
-        verificationStatus: 'DA_XAC_MINH',
-        verificationConfirmed: true,
-      }).success,
-    ).toBe(true);
-    expect(
-      supplierSchema.safeParse({
-        ...supplier,
-        taxCode: '',
-        verificationStatus: 'DA_XAC_MINH',
-        verificationConfirmed: true,
-      }).success,
-    ).toBe(false);
+  it('preserves old free-text addresses and permits clearing an optional address', () => {
+    const legacy = {
+      ...supplier,
+      address: '24/1 Kha Vạn Cân',
+      streetAddress: '24/1 Kha Vạn Cân',
+      provinceCode: '',
+      wardCode: '',
+    };
+    expect(supplierSchema.parse(legacy).address).toBe(legacy.address);
+    expect(supplierSchema.parse({ ...legacy, streetAddress: '' }).address).toBe('');
+  });
+  it('accepts ten digits for businesses and households, retaining leading zeroes', () => {
+    for (const supplierType of ['DOANH_NGHIEP', 'HO_KINH_DOANH']) {
+      const result = supplierSchema.parse({ ...supplier, supplierType });
+      expect(result.taxCode).toBe('0123456789');
+      expect(result).not.toHaveProperty('verificationStatus');
+    }
+  });
+  it('rejects letters, missing digits and old 12/13 digit identifiers', () => {
+    for (const taxCode of [
+      '123',
+      '012345678',
+      '012345678901',
+      '0123456789-001',
+      '0123456789001',
+      '012345678a',
+    ])
+      expect(supplierSchema.safeParse({ ...supplier, taxCode }).success).toBe(false);
     expect(supplierSchema.safeParse({ ...supplier, taxCode: '' }).success).toBe(true);
   });
 });

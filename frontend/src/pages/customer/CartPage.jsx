@@ -28,6 +28,7 @@ import { isMock, catalogService } from '@/services';
 export function OrderSummary({
   subtotal,
   discountAmount = 0,
+  discountPercent,
   shippingDiscountAmount = 0,
   voucherCode = '',
   shippingFee,
@@ -54,7 +55,9 @@ export function OrderSummary({
       </div>
       {discountAmount > 0 && (
         <div className="summary-discount">
-          <span>Giảm giá ({voucherCode})</span>
+          <span>
+            Giảm giá{discountPercent > 0 ? ` ${discountPercent}%` : ''} ({voucherCode})
+          </span>
           <strong>-{money(discountAmount)}</strong>
         </div>
       )}

@@ -18,13 +18,13 @@ API: `http://localhost:8080/api/v1`; kiểm tra `GET /health`. pgAdmin kết n�
 
 ## Một file SQL hoàn chỉnh
 
-`database/beverage_store_13UC_HOAN_CHINH.sql` là bản xuất đầy đủ từ PostgreSQL Docker hiện tại, gồm cấu trúc, dữ liệu thực tế và bộ đếm ID. Bản đồng bộ gần nhất có 45 bảng, 492 dòng dữ liệu và 39 bộ đếm ID; số dòng từng bảng đã đối chiếu với Docker. Đã bao gồm các migration backend mới nhất và đã bỏ ba bảng trả hàng sau nhập kho. Compose chỉ nạp file này, không chạy extensions hoặc seed riêng.
+`database/beverage_store_13UC_HOAN_CHINH.sql` là bản xuất đầy đủ từ PostgreSQL Docker, gồm cấu trúc, dữ liệu thực tế và bộ đếm ID. Bản đồng bộ ngày 08/11/2026 lúc 15:35:06 (UTC+7) có 46 bảng, 709 dòng dữ liệu và 39 bộ đếm ID, được xuất từ cùng một snapshot nhất quán. Đã khôi phục thử trong PostgreSQL 16 riêng biệt và đối chiếu cấu trúc, số dòng cùng dấu kiểm dữ liệu của từng bảng và toàn bộ bộ đếm ID. Đã bao gồm các migration backend mới nhất và đã bỏ ba bảng trả hàng sau nhập kho. Compose chỉ nạp file này, không chạy extensions hoặc seed riêng.
 
 Chỉ chạy SQL vào database trống. Script dùng một giao dịch, tạo bảng và nạp dữ liệu trước khi tạo trigger/ràng buộc liên quan để giữ nguyên số lượng và lịch sử đã lưu. Không chạy lên database đang sử dụng. Docker chỉ tự nạp khi volume trống; database/volume hiện tại được giữ nguyên.
 
 Đây là snapshot riêng có dữ liệu khách hàng, hash mật khẩu và phiên xác thực; không push snapshot lên GitHub công khai. Người quản trị sau khôi phục dùng tài khoản/mật khẩu của database nguồn; bootstrap không ghi đè admin đã có.
 
-Ba SQL cũ, bản dump gốc, SQL đã kiểm tra, bản đối chiếu và ảnh sao lưu nằm trong `.tools/sql-export-20261104/` (Git bỏ qua). Bản SQL mới đã được khôi phục thử và đối chiếu dữ liệu ở toàn bộ 44 bảng, 39 bộ đếm ID, các ràng buộc, hàm và trigger.
+Bản SQL trước khi thay, dump Docker gốc và báo cáo kiểm tra lần đồng bộ này nằm trong `.tools/sql-export-20261108-153506/` (Git bỏ qua); báo cáo là `verification.json`. Container PostgreSQL kiểm tra đã được dọn sau khi hoàn tất. Các bản SQL và ảnh sao lưu cũ vẫn nằm trong `.tools/sql-export-20261104/`.
 
 SQL không chứa file ảnh nhị phân. `product_images.tar.gz` trong thư mục sao lưu là bản sao ảnh từ volume Docker. Khi chuyển máy, đưa file này sang máy mới, sau khi chạy Compose thực hiện tại `backend/`:
 

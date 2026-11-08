@@ -2,7 +2,7 @@ export const money = (value) =>
   new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value ?? 0);
 export const date = (value) =>
   new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(value));

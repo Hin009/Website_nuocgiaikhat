@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { optionalPhoneSchema } from './phone';
+import { provinces, formatProfileAddress } from '@/utils/address';
 
 export const supplierSchema = z
   .object({
@@ -8,11 +9,14 @@ export const supplierSchema = z
       .max(5000)
       .default([]),
     supplierType: z.enum(['DOANH_NGHIEP', 'HO_KINH_DOANH', 'CA_NHAN']),
-    verificationStatus: z.enum(['CHUA_XAC_MINH', 'DA_XAC_MINH', 'CAN_KIEM_TRA_LAI']),
-    verificationNotes: z.string().trim().max(2000),
-    verificationConfirmed: z.boolean(),
     fullName: z.string().trim().min(2, 'Nhập tên nhà cung cấp.').max(255),
-    taxCode: z.string().trim().max(30),
+    taxCode: z
+      .string()
+      .trim()
+      .refine(
+        (value) => !value || /^[0-9]{10}$/.test(value),
+        'Mã số thuế phải gồm đúng 10 chữ số.',
+      ),
     contactName: z.string().trim().max(150),
     phone: optionalPhoneSchema,
     email: z
@@ -21,36 +25,54 @@ export const supplierSchema = z
       .max(255)
       .refine((v) => !v || z.string().email().safeParse(v).success, 'Email không hợp lệ.'),
     address: z.string().trim().max(2000),
+    provinceCode: z.string().optional(),
+    wardCode: z.string().optional(),
+    streetAddress: z.string().trim().max(2000).optional(),
     status: z.enum(['HOP_TAC', 'NGUNG_HOP_TAC']),
   })
-  .superRefine((v, ctx) => {
-    const code = v.taxCode;
-    const tax = /^[0-9]{10}(?:-?[0-9]{3})?$/.test(code);
-    const personal = v.supplierType !== 'DOANH_NGHIEP' && /^[0-9]{12}$/.test(code);
-    if (code && !tax && !personal)
+  .superRefine((values, ctx) => {
+    if (
+      values.streetAddress === undefined &&
+      values.provinceCode === undefined &&
+      values.wardCode === undefined
+    )
+      return;
+    if (!values.provinceCode && !values.wardCode && !values.streetAddress) return;
+    // Preserve free-text legacy addresses until the user chooses a structured location.
+    if (
+      !values.provinceCode &&
+      !values.wardCode &&
+      values.streetAddress === values.address &&
+      values.address
+    )
+      return;
+    const province = provinces.find((item) => item.code === values.provinceCode);
+    if (!province)
       ctx.addIssue({
         code: 'custom',
-        path: ['taxCode'],
-        message:
-          v.supplierType === 'DOANH_NGHIEP'
-            ? 'Nhập mã số thuế 10 số hoặc 10 số-3 số.'
-            : 'Nhập số định danh 12 số hoặc mã số thuế 10/13 số theo hồ sơ.',
+        path: ['provinceCode'],
+        message: 'Vui lòng chọn tỉnh/thành phố.',
       });
-    if (v.verificationStatus === 'DA_XAC_MINH') {
-      if (!code)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['taxCode'],
-          message: 'Nhập mã số thuế / số định danh trước khi xác minh.',
-        });
-      if (!v.verificationConfirmed)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['verificationConfirmed'],
-          message: 'Xác nhận đã đối chiếu hồ sơ và thông tin tra cứu.',
-        });
-    }
-  });
+    if (!province?.wards.some((item) => item.code === values.wardCode))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['wardCode'],
+        message: 'Vui lòng chọn phường/xã thuộc tỉnh/thành phố đã chọn.',
+      });
+    if (!values.streetAddress || values.streetAddress.length < 5)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['streetAddress'],
+        message: 'Vui lòng nhập số nhà và tên đường.',
+      });
+  })
+  .transform(({ provinceCode, wardCode, streetAddress, ...values }) => ({
+    ...values,
+    address:
+      streetAddress === undefined && provinceCode === undefined && wardCode === undefined
+        ? values.address
+        : formatProfileAddress({ provinceCode, wardCode, streetAddress: streetAddress || '' }),
+  }));
 const optionalNumber = (integer = false) =>
   z.preprocess(
     (v) => (v === '' || v == null ? null : Number(v)),

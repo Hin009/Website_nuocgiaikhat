@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { normalize, money, date } from '@/utils/format';
+import { provinces, profileAddressDefaults } from '@/utils/address';
 
 const scopeLabels = {
   CATEGORY: 'Loại sản phẩm',
@@ -42,16 +43,9 @@ const supplierTypes = {
   HO_KINH_DOANH: 'Hộ kinh doanh',
   CA_NHAN: 'Cá nhân',
 };
-const verificationLabels = {
-  CHUA_XAC_MINH: 'Chưa xác minh',
-  DA_XAC_MINH: 'Đã xác minh',
-  CAN_KIEM_TRA_LAI: 'Cần kiểm tra lại',
-};
 function SupplierForm({ item, onClose }) {
   const products = useAdmin('products');
   const [productSearch, setProductSearch] = useState('');
-  const [taxCheck, setTaxCheck] = useState(null);
-  const [checkingTax, setCheckingTax] = useState(false);
   const {
     register,
     handleSubmit,
@@ -63,27 +57,19 @@ function SupplierForm({ item, onClose }) {
     defaultValues: {
       productIds: (item?.product_ids || []).map(String),
       supplierType: item?.loai_nha_cung_cap || 'DOANH_NGHIEP',
-      verificationStatus: item?.trang_thai_xac_minh || 'CHUA_XAC_MINH',
-      verificationNotes: item?.ghi_chu_xac_minh || '',
-      verificationConfirmed: false,
       fullName: item?.ten || '',
       taxCode: item?.ma_so_thue || '',
       contactName: item?.nguoi_lien_he || '',
       phone: item?.dien_thoai || '',
       email: item?.email || '',
       address: item?.dia_chi || '',
+      ...profileAddressDefaults({ address: item?.dia_chi || '' }),
       status: item?.trang_thai || 'HOP_TAC',
     },
   });
   const productIds = watch('productIds');
-  const verification = watch('verificationStatus');
-  const supplierType = watch('supplierType');
-  const invalidateVerification = () => {
-    setTaxCheck(null);
-    setValue('verificationConfirmed', false);
-    if (watch('verificationStatus') === 'DA_XAC_MINH')
-      setValue('verificationStatus', 'CAN_KIEM_TRA_LAI');
-  };
+  const provinceCode = watch('provinceCode');
+  const selectedProvince = provinces.find((province) => province.code === provinceCode);
   const action = useAction((v) => supplierService.save(item?.id, v), 'Đã lưu nhà cung cấp');
   const submit = async (v) => {
     try {
@@ -95,19 +81,8 @@ function SupplierForm({ item, onClose }) {
   };
   return (
     <form className="form-stack" noValidate onSubmit={handleSubmit(submit)}>
-      <ol className="supplier-workflow" aria-label="Quy trình hồ sơ nhà cung cấp">
-        <li>
-          <b>1</b>Thông tin liên hệ
-        </li>
-        <li>
-          <b>2</b>Hồ sơ pháp lý
-        </li>
-        <li>
-          <b>3</b>Kiểm tra & xác minh
-        </li>
-      </ol>
       <Field label="Tên nhà cung cấp" error={errors.fullName}>
-        <input {...register('fullName', { onChange: invalidateVerification })} />
+        <input {...register('fullName')} />
       </Field>
       <div className="form-grid">
         <Field label="Người liên hệ" error={errors.contactName}>
@@ -120,117 +95,69 @@ function SupplierForm({ item, onClose }) {
           <input type="email" {...register('email')} />
         </Field>
       </div>
-      <Field label="Địa chỉ" error={errors.address}>
-        <textarea rows={3} {...register('address', { onChange: invalidateVerification })} />
-      </Field>
-      <section className="supplier-legal" aria-label="Thông tin pháp lý và xác minh">
-        <h3>Hồ sơ pháp lý</h3>
-        <div className="form-grid">
-          <Field label="Loại nhà cung cấp" error={errors.supplierType}>
-            <select {...register('supplierType', { onChange: invalidateVerification })}>
-              {Object.entries(supplierTypes).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Mã số thuế / Số định danh" error={errors.taxCode}>
-            <input
-              {...register('taxCode', { onChange: invalidateVerification })}
-              inputMode="numeric"
-              placeholder={
-                supplierType === 'DOANH_NGHIEP'
-                  ? '10 số hoặc 10 số-3 số'
-                  : 'Số định danh 12 số / mã số thuế'
-              }
-            />
-          </Field>
-        </div>
-        <p className="muted-note">
-          Nhập theo hồ sơ pháp lý. Có thể để trống khi chưa có thông tin; hồ sơ chưa có mã không
-          được đánh dấu đã xác minh.
-        </p>
-        {supplierType !== 'DOANH_NGHIEP' && (
-          <p className="muted-note">
-            Số định danh cá nhân gồm 12 số. Mã số thuế 10/13 số vẫn có thể nhập theo hồ sơ thuộc
-            trường hợp sử dụng mã do cơ quan thuế cấp.
-          </p>
-        )}
-        <a
-          className="tax-lookup-link"
-          href="https://tracuunnt.gdt.gov.vn/tcnnt/mstdn.jsp"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Tra cứu trên Cổng thông tin người nộp thuế ↗
-        </a>
-        <div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={checkingTax}
-            onClick={async () => {
-              setCheckingTax(true);
-              try {
-                setTaxCheck(
-                  await supplierService.checkTax({
-                    supplierId: item?.id,
-                    supplierType: watch('supplierType'),
-                    taxCode: watch('taxCode'),
-                  }),
-                );
-              } catch (error) {
-                setTaxCheck({ duplicate: true, message: error.message });
-              } finally {
-                setCheckingTax(false);
-              }
-            }}
-          >
-            {checkingTax ? 'Đang kiểm tra…' : 'Kiểm tra định dạng và trùng mã'}
-          </Button>
-          {taxCheck && (
-            <p className={taxCheck.duplicate ? 'form-error' : 'muted-note'} role="status">
-              {taxCheck.message}
-            </p>
-          )}
-        </div>
-        <p className="muted-note">
-          Đối chiếu tên, mã số và địa chỉ với hồ sơ. Hệ thống kiểm tra định dạng và trùng mã khi
-          lưu; kết quả đó chưa xác minh danh tính pháp lý.
-        </p>
-        <Field label="Trạng thái xác minh" error={errors.verificationStatus}>
+      <div className="profile-address-selects">
+        <Field label="Tỉnh/Thành phố" error={errors.provinceCode}>
           <select
-            {...register('verificationStatus', {
-              onChange: () => setValue('verificationConfirmed', false),
+            autoComplete="address-level1"
+            {...register('provinceCode', {
+              onChange: () =>
+                setValue('wardCode', '', { shouldDirty: true, shouldValidate: false }),
             })}
           >
-            {Object.entries(verificationLabels).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
+            <option value="">Chọn tỉnh/thành phố</option>
+            {provinces.map((province) => (
+              <option key={province.code} value={province.code}>
+                {province.name}
               </option>
             ))}
           </select>
         </Field>
-        {verification === 'DA_XAC_MINH' && (
-          <Field label="Xác nhận đối chiếu" error={errors.verificationConfirmed}>
-            <label className="verification-confirm">
-              <input type="checkbox" {...register('verificationConfirmed')} />
-              <span>Tôi đã đối chiếu hồ sơ và thông tin trên cổng tra cứu.</span>
-            </label>
-          </Field>
-        )}
-        <Field label="Ghi chú xác minh" error={errors.verificationNotes}>
-          <textarea
-            rows={2}
-            {...register('verificationNotes')}
-            placeholder="Nguồn hồ sơ, kết quả đối chiếu hoặc nội dung cần kiểm tra lại…"
+        <Field label="Phường/Xã" error={errors.wardCode}>
+          <select
+            autoComplete="address-level2"
+            disabled={!selectedProvince}
+            {...register('wardCode')}
+          >
+            <option value="">
+              {selectedProvince ? 'Chọn phường/xã' : 'Chọn tỉnh/thành phố trước'}
+            </option>
+            {(selectedProvince?.wards || []).map((ward) => (
+              <option key={ward.code} value={ward.code}>
+                {ward.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <Field label="Số nhà, tên đường" error={errors.streetAddress}>
+        <input
+          autoComplete="address-line1"
+          placeholder="Ví dụ: 24/1 Kha Vạn Cân"
+          {...register('streetAddress')}
+        />
+      </Field>
+      <div className="form-grid">
+        <Field label="Loại nhà cung cấp" error={errors.supplierType}>
+          <select {...register('supplierType')}>
+            <option value="DOANH_NGHIEP">Doanh nghiệp</option>
+            <option value="HO_KINH_DOANH">Hộ kinh doanh</option>
+            {item?.loai_nha_cung_cap === 'CA_NHAN' && (
+              <option value="CA_NHAN">Cá nhân (hồ sơ cũ)</option>
+            )}
+          </select>
+        </Field>
+        <Field label="Mã số thuế" error={errors.taxCode}>
+          <input
+            {...register('taxCode')}
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="Nhập 10 chữ số"
           />
         </Field>
-        {item?.thoi_diem_xac_minh && (
-          <p className="muted-note">Lần xác minh được ghi nhận: {date(item.thoi_diem_xac_minh)}</p>
-        )}
-      </section>
+      </div>
+      <p className="muted-note">
+        Có thể để trống mã số thuế; nếu nhập, mã phải gồm đúng 10 chữ số.
+      </p>
       <fieldset className="promotion-targets">
         <legend>Sản phẩm được cung cấp</legend>
         <div className="target-toolbar">
@@ -622,13 +549,10 @@ function BusinessPage({ supplier }) {
                             <td>{row.dia_chi || '—'}</td>
                             <td>
                               <span
-                                className={`verification-badge verification-${row.trang_thai_xac_minh || 'CHUA_XAC_MINH'}`}
+                                className={`status-badge ${row.trang_thai === 'HOP_TAC' ? 'status-active' : ''}`}
                               >
-                                {verificationLabels[row.trang_thai_xac_minh] || 'Chưa xác minh'}
-                              </span>
-                              <small>
                                 {row.trang_thai === 'HOP_TAC' ? 'Đang hợp tác' : 'Ngừng hợp tác'}
-                              </small>
+                              </span>
                             </td>
                           </>
                         ) : (

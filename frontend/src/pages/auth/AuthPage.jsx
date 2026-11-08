@@ -141,6 +141,7 @@ export default function AuthPage({ registerMode = false, management = false }) {
             <input type="password" autoComplete="new-password" {...register('confirmPassword')} />
           </Field>
         )}
+        {!registerMode && !management && <div className="forgot-password-link"><Link to="/forgot-password">Quên mật khẩu?</Link></div>}
         {serverError && (
           <p className="form-error" role="alert">
             {serverError}

@@ -1,4 +1,5 @@
 import { canPurchase } from '@/utils/inventory';
+import { sortByExpiry } from '@/utils/expiry';
 import { useSearchParams } from 'react-router-dom';
 import { Search, SlidersHorizontal, X, ArrowUpRight } from 'lucide-react';
 import { useState } from 'react';
@@ -14,7 +15,8 @@ export default function CatalogPage() {
   const categories = useCategories();
   const q = params.get('q') || '';
   const category = params.get('category') || '';
-  const sort = params.get('sort') || 'popular';
+  const requestedSort = params.get('sort') || 'popular';
+  const sort = requestedSort === 'newest' ? 'expiry' : requestedSort;
   const sale = params.get('sale') === '1';
   const page = Math.max(1, Number(params.get('page')) || 1);
   const brand = params.get('brand') || '';
@@ -40,17 +42,20 @@ export default function CatalogPage() {
             ? p.price >= 10000 && p.price <= 20000
             : p.price > 20000)),
   );
-  filtered = [...filtered].sort((a, b) =>
-    sort === 'price_asc'
-      ? a.price - b.price
-      : sort === 'price_desc'
-        ? b.price - a.price
-        : sort === 'name'
-          ? a.name.localeCompare(b.name, 'vi')
-          : sort === 'newest'
-            ? b.createdAt.localeCompare(a.createdAt)
-            : 0,
-  );
+  filtered =
+    sort === 'expiry'
+      ? sortByExpiry(filtered)
+      : [...filtered].sort((a, b) =>
+          sort === 'price_asc'
+            ? a.price - b.price
+            : sort === 'price_desc'
+              ? b.price - a.price
+              : sort === 'name'
+                ? a.name.localeCompare(b.name, 'vi')
+                : sort === 'newest'
+                  ? b.createdAt.localeCompare(a.createdAt)
+                  : 0,
+        );
   const pages = Math.ceil(filtered.length / 9);
   const current = Math.min(page, pages || 1);
   const brands = [...new Set((products.data || []).map((p) => p.brand))];
@@ -191,7 +196,7 @@ export default function CatalogPage() {
               onChange={(e) => set('sort', e.target.value)}
             >
               <option value="popular">Gợi ý cho bạn</option>
-              <option value="newest">Mới nhất</option>
+              <option value="expiry">Mới Nhất</option>
               <option value="price_asc">Giá thấp đến cao</option>
               <option value="price_desc">Giá cao đến thấp</option>
               <option value="name">Tên A – Z</option>

@@ -1,13 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import {
-  ArrowUpRight,
-  ChevronDown,
-  Search,
-  ShoppingBag,
-  ArrowLeft,
-  PackageCheck,
-} from 'lucide-react';
+import { ChevronDown, Search, ShoppingBag, ArrowLeft, PackageCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, useAction } from '@/hooks/useData';
 import { orderService, transitions, isMock } from '@/services';
@@ -27,7 +20,6 @@ export function OrdersPage({ admin = false }) {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState(null);
   const toggleOrder = (id) => setExpandedId((previous) => (previous === id ? null : id));
-  const base = admin ? '/admin/orders' : '/account/orders';
   const orders = (query.data || []).filter(
     (o) =>
       (o.id + ' ' + o.receiver).toLowerCase().includes(q.toLowerCase()) &&
@@ -94,21 +86,15 @@ export function OrdersPage({ admin = false }) {
                       <Fragment key={o.id}>
                         <tr>
                           <td>
-                            {admin ? (
-                              <Link className="order-id" to={base + '/' + o.id}>
-                                #{o.id}
-                              </Link>
-                            ) : (
-                              <button
-                                type="button"
-                                className="order-id order-toggle"
-                                onClick={() => toggleOrder(o.id)}
-                                aria-expanded={expandedId === o.id}
-                                aria-controls={'order-details-' + o.id}
-                              >
-                                #{o.id}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className="order-id order-toggle"
+                              onClick={() => toggleOrder(o.id)}
+                              aria-expanded={expandedId === o.id}
+                              aria-controls={'order-details-' + o.id}
+                            >
+                              #{o.id}
+                            </button>
                             <small>{o.items.reduce((s, i) => s + i.quantity, 0)} sản phẩm</small>
                           </td>
                           {admin && (
@@ -125,37 +111,27 @@ export function OrdersPage({ admin = false }) {
                             <StatusBadge status={o.status} />
                           </td>
                           <td>
-                            {admin ? (
-                              <Link
-                                className="icon-button"
-                                to={base + '/' + o.id}
-                                aria-label={'Chi tiết đơn ' + o.id}
-                              >
-                                <ArrowUpRight size={18} />
-                              </Link>
-                            ) : (
-                              <button
-                                type="button"
-                                className="icon-button order-expand"
-                                aria-label={'Chi tiết đơn ' + o.id}
-                                aria-expanded={expandedId === o.id}
-                                aria-controls={'order-details-' + o.id}
-                                onClick={() => toggleOrder(o.id)}
-                              >
-                                <ChevronDown size={18} />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className="icon-button order-expand"
+                              aria-label={'Chi tiết đơn ' + o.id}
+                              aria-expanded={expandedId === o.id}
+                              aria-controls={'order-details-' + o.id}
+                              onClick={() => toggleOrder(o.id)}
+                            >
+                              <ChevronDown size={18} />
+                            </button>
                           </td>
                         </tr>
-                        {!admin && expandedId === o.id && (
+                        {expandedId === o.id && (
                           <tr className="order-expanded-row">
-                            <td colSpan={5}>
+                            <td colSpan={admin ? 6 : 5}>
                               <section
                                 id={'order-details-' + o.id}
                                 className="order-inline-details"
                                 aria-label={'Chi tiết đơn ' + o.id}
                               >
-                                <OrderDetails id={o.id} inline />
+                                <OrderDetails id={o.id} admin={admin} inline />
                               </section>
                             </td>
                           </tr>

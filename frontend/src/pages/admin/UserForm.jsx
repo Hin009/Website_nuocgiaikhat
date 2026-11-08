@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,6 +34,8 @@ export default function UserForm({ item, onClose }) {
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(userSchema),
@@ -41,11 +43,21 @@ export default function UserForm({ item, onClose }) {
       ? { ...item, password: '' }
       : { name: '', email: '', phone: '', role: 'STAFF', active: true, password: '' },
   });
+  const selectedRole = watch('role');
+  const canChangePassword =
+    !item ||
+    (item.role !== 'CUSTOMER' &&
+      !item.roles?.includes('KHACH_HANG') &&
+      selectedRole !== 'CUSTOMER');
+  useEffect(() => {
+    if (!canChangePassword) setValue('password', '', { shouldValidate: true });
+  }, [canChangePassword, setValue]);
   const action = useAction(async (values) => {
     if (item?.id === user.id && (!values.active || values.role !== 'ADMIN'))
       throw new Error('Không thể khóa hoặc hạ quyền tài khoản đang sử dụng.');
     if (!item && !values.password) throw new Error('Nhập mật khẩu cho tài khoản mới.');
-    const { password, ...payload } = values;
+    const { password: enteredPassword, ...payload } = values;
+    const password = canChangePassword ? enteredPassword : undefined;
     const passwordDigest = isMock && password ? await digest(password) : null;
     const saved = await adminService.save('users', {
       ...item,
@@ -102,12 +114,14 @@ export default function UserForm({ item, onClose }) {
             Đang hoạt động
           </label>
         </div>
-        <Field
-          label={item ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu'}
-          error={errors.password}
-        >
-          <input type="password" autoComplete="new-password" {...register('password')} />
-        </Field>
+        {canChangePassword && (
+          <Field
+            label={item ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu'}
+            error={errors.password}
+          >
+            <input type="password" autoComplete="new-password" {...register('password')} />
+          </Field>
+        )}
         <div className="dialog-actions">
           <Button type="button" variant="outline" onClick={onClose}>
             Hủy

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('admin creates and edits product images and stock', async ({ page, request }) => {
+test('admin creates and edits product images with automatic prices', async ({ page, request }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const name = `E2E image drink ${Date.now()}`;
@@ -12,8 +12,6 @@ test('admin creates and edits product images and stock', async ({ page, request 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Tên sản phẩm', { exact: true }).fill(name);
   await dialog.getByLabel('Thương hiệu', { exact: true }).fill('E2E brand');
-  await dialog.getByLabel('Số lượng tồn kho', { exact: true }).fill('7');
-  await dialog.getByLabel('Lý do điều chỉnh số lượng', { exact: true }).fill('Opening stock');
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
     'base64',
@@ -25,11 +23,9 @@ test('admin creates and edits product images and stock', async ({ page, request 
   await expect(dialog).toHaveCount(0, { timeout: 30000 });
   await page.getByLabel('Tìm sản phẩm quản lý').fill(name);
   await page.getByRole('button', { name: `Sửa ${name}`, exact: true }).click();
-  await expect(dialog.getByLabel('Số lượng tồn kho', { exact: true })).toHaveValue('7');
+  await expect(dialog.getByLabel('Số lượng tồn kho', { exact: true })).toHaveValue('0');
   const oldUrl = await dialog.getByLabel('Hoặc đường dẫn ảnh').inputValue();
   expect((await request.get(oldUrl)).ok()).toBeTruthy();
-  await dialog.getByLabel('Số lượng tồn kho', { exact: true }).fill('4');
-  await dialog.getByLabel('Lý do điều chỉnh số lượng', { exact: true }).fill('Stock count');
   await dialog
     .locator('input[type=file]')
     .setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: png });
@@ -39,7 +35,7 @@ test('admin creates and edits product images and stock', async ({ page, request 
     await request.get('/api/v1/catalog/products', { params: { q: name } })
   ).json();
   expect(listed.items).toHaveLength(1);
-  expect(listed.items[0].so_luong_co_ban).toBe(4);
+  expect(listed.items[0].so_luong_co_ban).toBe(0);
   const detail = await (await request.get(`/api/v1/catalog/products/${listed.items[0].id}`)).json();
   expect(detail.images[0].duong_dan).not.toBe(oldUrl);
   await page.goto(`/products/${listed.items[0].id}`);
@@ -128,8 +124,8 @@ test('real PostgreSQL catalog, customer checkout, and management pages', async (
   await expect(page.locator('.order-summary').getByText('Miễn phí', { exact: true })).toBeVisible();
   await page.getByLabel('Chọn phương thức thanh toán').selectOption('BANK_TRANSFER');
   await page.getByLabel('Địa chỉ nhận hàng').fill('123 API Test');
-  await page.getByLabel('Tỉnh/Thành phố').fill('Hồ Chí Minh');
-  await page.getByLabel('Phường/Xã').fill('Bến Thành');
+  await page.getByLabel('Tỉnh/Thành phố').selectOption('Thành phố Hồ Chí Minh');
+  await page.getByLabel('Phường/Xã').selectOption('Phường Bến Thành');
   await page.getByRole('button', { name: 'Đặt hàng', exact: true }).click();
   const placed = page.waitForResponse(
     (r) => r.url().endsWith('/api/v1/orders') && r.request().method() === 'POST',

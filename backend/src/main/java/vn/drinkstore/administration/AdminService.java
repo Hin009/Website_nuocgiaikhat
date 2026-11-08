@@ -43,10 +43,15 @@ public class AdminService {
     }
     @Transactional public void reset(long id,String password) {
         Passwords.validate(password);
-        db.one("select id from tai_khoan where id=?",id);
+        db.one("select id from tai_khoan where id=? for update",id);
+        rejectCustomerPasswordChange(id);
         db.jdbc().update("update tai_khoan set mat_khau_hash=? where id=?",passwords.encode(password),id);
         db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
         db.audit(access.account(),"PASSWORD_RESET","tai_khoan",id);
+    }
+    private void rejectCustomerPasswordChange(long id) {
+        if(db.number("select count(*) from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=? and r.ma_vai_tro='KHACH_HANG'",id)>0)
+            throw ApiException.bad("Không đặt mật khẩu mới cho khách hàng trong quản lý tài khoản.");
     }
     @Transactional public Object role(Long id,AdminController.Role r) {
         if(id==null) throw ApiException.bad("Schema defines three fixed role codes; update an existing role");
@@ -84,6 +89,10 @@ public class AdminService {
         boolean created=id==null;
         if(created) { if(r.password()==null || r.password().isBlank()) throw ApiException.bad("Cần mật khẩu cho tài khoản mới"); id=auth.createAccount(r.email(),r.password(),r.role()); }
         var account=db.one("select * from tai_khoan where id=? for update",id);
+        if(!created && r.password()!=null && !r.password().isBlank()) {
+            if("KHACH_HANG".equals(r.role())) throw ApiException.bad("Không đặt mật khẩu mới cho khách hàng trong quản lý tài khoản.");
+            rejectCustomerPasswordChange(id);
+        }
         if(!account.get("email").toString().equalsIgnoreCase(r.email())) throw ApiException.bad("Không đổi email của tài khoản đã tạo");
         var roles=db.jdbc().queryForList("select r.ma_vai_tro from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=?",String.class,id);
         String primary=roles.contains("QUAN_TRI_VIEN")?"QUAN_TRI_VIEN":roles.contains("NHAN_VIEN")?"NHAN_VIEN":"KHACH_HANG";

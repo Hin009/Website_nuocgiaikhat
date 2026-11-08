@@ -33,6 +33,7 @@ public class PurchaseService {
         if(line.packageId()!=null) return line.packageId();
         // Serialize package creation for this product without changing any used package's factor.
         db.one("select id from san_pham where id=? for update",line.productId());
+        db.one("select so_luong_co_ban from so_luong_san_pham where san_pham_id=? for update",line.productId());
         var existing=db.rows("select id from quy_cach_san_pham where san_pham_id=? and don_vi_tinh=? and he_so_quy_doi=? order by id limit 1",line.productId(),line.packaging(),line.unitsPerPackage());
         if(!existing.isEmpty()) return Db.n(existing.getFirst(),"id");
         var primary=db.one("select gia_ban/he_so_quy_doi as base_price,gia_von/he_so_quy_doi as base_cost from quy_cach_san_pham where san_pham_id=? order by he_so_quy_doi,id limit 1",line.productId());

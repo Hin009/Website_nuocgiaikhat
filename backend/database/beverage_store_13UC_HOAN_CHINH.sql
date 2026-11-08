@@ -1,6 +1,6 @@
--- Complete PostgreSQL 16 schema and data exported from the current Docker database.
+-- Complete PostgreSQL schema and data exported from Docker on 20261108-153506 (Asia/Bangkok).
 -- PRIVATE SNAPSHOT: includes account hashes, customer data and authentication history.
--- Restore into an EMPTY database only. Do not apply to a database already in use.
+-- Restore into an EMPTY database only.
 -- Product image FILES live in the separate product_images Docker volume.
 
 BEGIN;
@@ -8,7 +8,7 @@ BEGIN;
 -- PostgreSQL database dump
 --
 
-\restrict H4AlpGPRB3PEOonQYgi7CQ3UXLlHg0TLCP0I1k9qdgKcVEzDh15Igygi94NeKaG
+\restrict HqdEQRc2MRWeNIeRTOQz6p1YufoXSmH0G3awYF0gt3SpV7WvECqxVzND6BQfWlO
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -51,6 +51,15 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$;
+
+
+--
+-- Name: fn_automatic_sale_price(numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_automatic_sale_price(cost numeric) RETURNS numeric
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$ SELECT ceil(cost*1.25/500)*500 $$;
 
 
 --
@@ -225,6 +234,19 @@ END $$;
 
 
 --
+-- Name: fn_package_automatic_price(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_package_automatic_price() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ NEW.gia_ban:=public.fn_automatic_sale_price(NEW.gia_von);
+ RETURN NEW;
+END $$;
+
+
+--
 -- Name: fn_protect_order_lines(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -292,8 +314,9 @@ END $$;
 
 CREATE FUNCTION public.fn_receive_inventory() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE rec RECORD; order_state TEXT; accumulated BIGINT; order_complete BOOLEAN; old_qty BIGINT; old_cost NUMERIC; new_cost NUMERIC;
+DECLARE rec RECORD; order_state TEXT; accumulated BIGINT; order_complete BOOLEAN; old_qty BIGINT; old_cost NUMERIC; new_cost NUMERIC; incoming_units BIGINT; incoming_value NUMERIC; priced_products BIGINT[]:='{}';
 BEGIN
  IF OLD.trang_thai='CONFIRMED' AND NEW.trang_thai<>'CONFIRMED' THEN
    RAISE EXCEPTION 'Khong duoc huy xac nhan nhap';
@@ -320,10 +343,19 @@ BEGIN
    END IF;
    IF rec.so_luong_loai>0 AND coalesce(trim(rec.ly_do_loai),'')='' THEN RAISE EXCEPTION 'Can ly do tu choi hang loi'; END IF;
    IF rec.so_luong_thuc_nhan > 0 THEN
-     SELECT so_luong_co_ban INTO old_qty FROM so_luong_san_pham WHERE san_pham_id=rec.san_pham_id FOR UPDATE;
-     SELECT gia_von/he_so_quy_doi INTO old_cost FROM quy_cach_san_pham WHERE san_pham_id=rec.san_pham_id ORDER BY he_so_quy_doi,id LIMIT 1;
-     new_cost := (old_qty*old_cost+rec.so_luong_thuc_nhan*rec.gia_nhap_thuc_te)/(old_qty+rec.so_luong_thuc_nhan::bigint*rec.he_so_quy_doi);
-     UPDATE quy_cach_san_pham SET gia_von=round(new_cost*he_so_quy_doi,2) WHERE san_pham_id=rec.san_pham_id;
+     IF NOT (rec.san_pham_id=ANY(priced_products)) THEN
+       SELECT so_luong_co_ban INTO old_qty FROM so_luong_san_pham WHERE san_pham_id=rec.san_pham_id FOR UPDATE;
+       SELECT gia_von/he_so_quy_doi INTO old_cost FROM quy_cach_san_pham WHERE san_pham_id=rec.san_pham_id ORDER BY he_so_quy_doi,id LIMIT 1;
+       SELECT sum(c.so_luong_thuc_nhan::bigint*l.he_so_quy_doi),sum(c.so_luong_thuc_nhan*c.gia_nhap_thuc_te)
+         INTO incoming_units,incoming_value
+       FROM chi_tiet_lan_nhap c JOIN chi_tiet_don_ncc l ON l.id=c.ct_don_ncc_id
+       JOIN quy_cach_san_pham q ON q.id=l.quy_cach_id
+       WHERE c.lan_nhap_id=NEW.id AND q.san_pham_id=rec.san_pham_id AND c.so_luong_thuc_nhan>0;
+       new_cost:=public.fn_weighted_receipt_cost(old_qty,old_cost,incoming_units,incoming_value);
+       UPDATE quy_cach_san_pham SET gia_von=round(new_cost*he_so_quy_doi,2),
+         gia_ban=public.fn_automatic_sale_price(round(new_cost*he_so_quy_doi,2)) WHERE san_pham_id=rec.san_pham_id;
+       priced_products:=array_append(priced_products,rec.san_pham_id);
+     END IF;
      INSERT INTO bien_dong_so_luong(san_pham_id,loai,nguon_id,so_luong_thay_doi,so_luong_truoc,so_luong_sau)
      VALUES(rec.san_pham_id,'NHAP_HANG',rec.id,rec.so_luong_thuc_nhan::bigint*rec.he_so_quy_doi,0,0);
    END IF;
@@ -368,6 +400,17 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'Thanh toan vuot cong no'; END IF;
  RETURN NEW;
 END $$;
+
+
+--
+-- Name: fn_weighted_receipt_cost(bigint, numeric, bigint, numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_weighted_receipt_cost(old_qty bigint, old_cost numeric, incoming_units bigint, incoming_value numeric) RETURNS numeric
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+ SELECT round((old_qty*old_cost+incoming_value)/nullif(old_qty+incoming_units,0),2)
+$$;
 
 
 --
@@ -643,9 +686,12 @@ CREATE TABLE public.chi_tiet_lan_nhap (
     chenh_lech integer DEFAULT 0 NOT NULL,
     gia_nhap_thuc_te numeric(18,2) NOT NULL,
     ly_do_loai character varying(2000),
+    ngay_san_xuat date,
+    ngay_het_han date,
     CONSTRAINT chi_tiet_lan_nhap_gia_nhap_thuc_te_check CHECK ((gia_nhap_thuc_te >= (0)::numeric)),
     CONSTRAINT chi_tiet_lan_nhap_so_luong_loai_check CHECK ((so_luong_loai >= 0)),
-    CONSTRAINT chi_tiet_lan_nhap_so_luong_thuc_nhan_check CHECK ((so_luong_thuc_nhan >= 0))
+    CONSTRAINT chi_tiet_lan_nhap_so_luong_thuc_nhan_check CHECK ((so_luong_thuc_nhan >= 0)),
+    CONSTRAINT receipt_product_dates_check CHECK ((((ngay_san_xuat IS NULL) AND (ngay_het_han IS NULL)) OR ((ngay_san_xuat IS NOT NULL) AND (ngay_het_han IS NOT NULL) AND (ngay_het_han >= ngay_san_xuat))))
 );
 
 
@@ -803,7 +849,7 @@ CREATE TABLE public.don_dat_hang_ncc (
     nguoi_duyet_id bigint,
     ngay_dat timestamp with time zone DEFAULT now() NOT NULL,
     ngay_giao_du_kien date,
-    trang_thai character varying(30) DEFAULT 'CHO_DUYET'::character varying NOT NULL,
+    trang_thai character varying(30) DEFAULT 'DA_DUYET'::character varying NOT NULL,
     ly_do_tu_choi text,
     ghi_chu text,
     ngay_duyet timestamp with time zone,
@@ -1361,6 +1407,25 @@ ALTER TABLE public.nhat_ky_hoat_dong ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
 
 
 --
+-- Name: password_reset_challenge; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.password_reset_challenge (
+    id uuid NOT NULL,
+    tai_khoan_id bigint NOT NULL,
+    otp_hash character varying(100),
+    het_han timestamp with time zone NOT NULL,
+    so_lan_sai integer DEFAULT 0 NOT NULL,
+    reset_token_hash character varying(64),
+    reset_het_han timestamp with time zone,
+    da_dung boolean DEFAULT false NOT NULL,
+    gui_that_bai boolean DEFAULT false NOT NULL,
+    tao_luc timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT password_reset_challenge_so_lan_sai_check CHECK (((so_lan_sai >= 0) AND (so_lan_sai <= 5)))
+);
+
+
+--
 -- Name: pham_vi_khuyen_mai; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1841,17 +1906,22 @@ CREATE TABLE public.vai_tro_quyen (
 -- Data for Name: backend_schema_migration; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.backend_schema_migration (version, applied_at) VALUES
+INSERT INTO public.backend_schema_migration VALUES
 	('20261104_supplier_returns_cost', '2026-11-04 12:00:57.363459+07'),
 	('20261104_receiving_disposition', '2026-11-04 12:30:49.926829+07'),
-	('20261104_remove_warehouse_returns', '2026-11-04 14:26:44.024912+07');
+	('20261104_remove_warehouse_returns', '2026-11-04 14:26:44.024912+07'),
+	('20261104_receiving_product_dates', '2026-11-04 16:34:11.196274+07'),
+	('20261104_direct_receiving', '2026-11-04 17:39:34.263522+07'),
+	('20261107_automatic_sale_pricing', '2026-11-07 19:59:38.342052+07'),
+	('20261107_round_selling_prices_500', '2026-11-07 20:18:25.783827+07'),
+	('20261108_customer_password_reset', '2026-11-08 13:33:30.520089+07');
 
 
 --
 -- Data for Name: bien_dong_so_luong; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.bien_dong_so_luong (id, san_pham_id, loai, nguon_id, so_luong_thay_doi, so_luong_truoc, so_luong_sau, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.bien_dong_so_luong OVERRIDING SYSTEM VALUE VALUES
 	(1, 27, 'DIEU_CHINH', 1, 30, 0, 30, '2026-11-03 16:15:54.103561+07'),
 	(2, 26, 'DIEU_CHINH', 2, 20, 0, 20, '2026-11-03 16:17:34.908471+07'),
 	(3, 27, 'BAN_ONLINE', 1, -10, 30, 20, '2026-11-03 16:38:23.783332+07'),
@@ -1870,24 +1940,45 @@ INSERT INTO public.bien_dong_so_luong (id, san_pham_id, loai, nguon_id, so_luong
 	(16, 26, 'NHAP_HANG', 10, 120, 20, 140, '2026-11-15 14:09:48.91325+07'),
 	(17, 22, 'BAN_ONLINE', 3, -8, 36, 28, '2026-11-04 14:35:34.329885+07'),
 	(18, 22, 'HUY_DON', 3, 8, 28, 36, '2026-11-04 14:37:04.762617+07'),
-	(19, 26, 'DIEU_CHINH', 6, -90, 140, 50, '2026-11-04 14:38:17.917651+07');
+	(19, 26, 'DIEU_CHINH', 6, -90, 140, 50, '2026-11-04 14:38:17.917651+07'),
+	(20, 26, 'NHAP_HANG', 11, 48, 50, 98, '2026-11-04 16:47:55.792225+07'),
+	(21, 24, 'NHAP_HANG', 12, 120, 10, 130, '2026-11-04 16:50:17.101014+07'),
+	(22, 17, 'NHAP_HANG', 13, 24, 24, 48, '2026-11-04 17:21:56.50741+07'),
+	(50, 27, 'DIEU_CHINH', 39, -20, 20, 0, '2026-11-07 19:47:08.37355+07'),
+	(51, 26, 'DIEU_CHINH', 40, -98, 98, 0, '2026-11-07 19:47:15.778221+07'),
+	(52, 24, 'DIEU_CHINH', 41, -130, 130, 0, '2026-11-07 19:47:21.654046+07'),
+	(53, 22, 'DIEU_CHINH', 42, -36, 36, 0, '2026-11-07 19:47:28.526976+07'),
+	(54, 21, 'DIEU_CHINH', 43, -48, 48, 0, '2026-11-07 19:47:37.189569+07'),
+	(55, 20, 'DIEU_CHINH', 44, -20, 20, 0, '2026-11-07 19:47:45.690126+07'),
+	(56, 17, 'DIEU_CHINH', 45, -48, 48, 0, '2026-11-07 19:47:52.184601+07'),
+	(57, 25, 'DIEU_CHINH', 46, -10, 10, 0, '2026-11-07 19:48:11.970284+07'),
+	(58, 20, 'NHAP_HANG', 44, 60, 0, 60, '2026-11-07 20:03:17.895325+07'),
+	(59, 24, 'NHAP_HANG', 45, 60, 0, 60, '2026-11-07 20:04:20.515294+07'),
+	(60, 26, 'NHAP_HANG', 47, 120, 0, 120, '2026-11-07 20:06:21.282405+07'),
+	(61, 17, 'NHAP_HANG', 46, 240, 0, 240, '2026-11-07 20:06:23.640955+07'),
+	(62, 24, 'NHAP_HANG', 48, 120, 60, 180, '2026-11-07 20:22:03.712417+07'),
+	(63, 24, 'BAN_ONLINE', 36, -5, 180, 175, '2026-11-07 20:23:57.794667+07'),
+	(64, 24, 'BAN_ONLINE', 37, -3, 175, 172, '2026-11-08 15:15:46.004724+07'),
+	(65, 22, 'NHAP_HANG', 49, 144, 0, 144, '2026-11-08 15:23:49.336349+07');
 
 
 --
 -- Data for Name: chi_tiet_don_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.chi_tiet_don_hang (id, don_hang_id, quy_cach_id, ten_san_pham, ten_quy_cach, so_luong, he_so_quy_doi, don_gia, gia_von_don_vi) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 1, 8000.00, 0.00),
-	(2, 2, 6, 'Red Bull 250ml', 'Lon lẻ', 10, 1, 13000.00, 10000.00),
-	(3, 3, 26, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 1, 14000.00, 10000.00);
+INSERT INTO public.chi_tiet_don_hang OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 1, 8000.00, 0.00, DEFAULT),
+	(2, 2, 6, 'Red Bull 250ml', 'Lon lẻ', 10, 1, 13000.00, 10000.00, DEFAULT),
+	(3, 3, 26, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 1, 14000.00, 10000.00, DEFAULT),
+	(36, 36, 20, 'Vfresh nước cam 1 lít', 'Hộp lẻ', 5, 1, 31000.00, 24444.44, DEFAULT),
+	(37, 37, 20, 'Vfresh nước cam 1 lít', 'Hộp lẻ', 3, 1, 31000.00, 24444.44, DEFAULT);
 
 
 --
 -- Data for Name: chi_tiet_don_ncc; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.chi_tiet_don_ncc (id, don_ncc_id, quy_cach_id, so_luong_dat, he_so_quy_doi, gia_nhap_du_kien) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.chi_tiet_don_ncc OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 17, 98, 1, 10000.00),
 	(2, 2, 17, 100, 1, 10000.00),
 	(3, 3, 7, 99, 1, 5000.00),
@@ -1897,47 +1988,69 @@ INSERT INTO public.chi_tiet_don_ncc (id, don_ncc_id, quy_cach_id, so_luong_dat, 
 	(7, 7, 34, 5, 24, 250000.00),
 	(8, 8, 35, 5, 24, 300000.00),
 	(9, 9, 36, 5, 6, 25000.00),
-	(10, 10, 37, 5, 24, 240000.00);
+	(10, 10, 37, 5, 24, 240000.00),
+	(11, 11, 37, 2, 24, 200000.00),
+	(12, 12, 35, 5, 24, 250000.00),
+	(13, 13, 31, 1, 24, 200000.00),
+	(14, 14, 38, 10, 6, 100000.00),
+	(15, 15, 32, 10, 6, 140000.00),
+	(44, 44, 37, 5, 24, 280000.00),
+	(45, 45, 31, 10, 24, 240000.00),
+	(46, 46, 35, 5, 24, 180000.00),
+	(47, 47, 71, 6, 24, 250000.00);
 
 
 --
 -- Data for Name: chi_tiet_gio_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.chi_tiet_gio_hang OVERRIDING SYSTEM VALUE VALUES
+	(53, 141, 26, 10, 13500.00);
 
 
 --
 -- Data for Name: chi_tiet_hoa_don; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.chi_tiet_hoa_don (id, hoa_don_id, chi_tiet_don_hang_id, ten_san_pham, ten_quy_cach, so_luong, don_gia) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 1, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 8000.00),
-	(2, 2, 2, 'Red Bull 250ml', 'Lon lẻ', 10, 13000.00),
-	(3, 3, 3, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 14000.00);
+INSERT INTO public.chi_tiet_hoa_don OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 8000.00, DEFAULT),
+	(2, 2, 2, 'Red Bull 250ml', 'Lon lẻ', 10, 13000.00, DEFAULT),
+	(3, 3, 3, 'Pocari Sweat 350ml', 'Chai lẻ', 8, 14000.00, DEFAULT),
+	(36, 36, 36, 'Vfresh nước cam 1 lít', 'Hộp lẻ', 5, 31000.00, DEFAULT),
+	(37, 37, 37, 'Vfresh nước cam 1 lít', 'Hộp lẻ', 3, 31000.00, DEFAULT);
 
 
 --
 -- Data for Name: chi_tiet_lan_nhap; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.chi_tiet_lan_nhap (id, lan_nhap_id, don_ncc_id, ct_don_ncc_id, so_luong_thuc_nhan, so_luong_loai, chenh_lech, gia_nhap_thuc_te, ly_do_loai) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 1, 1, 98, 0, 0, 10000.00, NULL),
-	(2, 2, 2, 2, 100, 0, 0, 10000.00, ''),
-	(3, 3, 3, 3, 90, 9, 0, 5000.00, 'lỗi'),
-	(4, 4, 4, 4, 1, 0, 0, 250000.00, ''),
-	(5, 5, 5, 5, 5, 5, 0, 60000.00, 'Bể'),
-	(6, 6, 6, 6, 6, 4, 0, 60000.00, 'hư'),
-	(7, 7, 7, 7, 0, 5, 0, 250000.00, 'bể'),
-	(8, 8, 8, 8, 5, 0, 0, 300000.00, ''),
-	(9, 9, 9, 9, 0, 5, 0, 25000.00, 'Hư'),
-	(10, 10, 10, 10, 5, 0, 0, 240000.00, '');
+INSERT INTO public.chi_tiet_lan_nhap OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 1, 98, 0, 0, 10000.00, NULL, NULL, NULL),
+	(2, 2, 2, 2, 100, 0, 0, 10000.00, '', NULL, NULL),
+	(3, 3, 3, 3, 90, 9, 0, 5000.00, 'lỗi', NULL, NULL),
+	(4, 4, 4, 4, 1, 0, 0, 250000.00, '', NULL, NULL),
+	(5, 5, 5, 5, 5, 5, 0, 60000.00, 'Bể', NULL, NULL),
+	(6, 6, 6, 6, 6, 4, 0, 60000.00, 'hư', NULL, NULL),
+	(7, 7, 7, 7, 0, 5, 0, 250000.00, 'bể', NULL, NULL),
+	(8, 8, 8, 8, 5, 0, 0, 300000.00, '', NULL, NULL),
+	(9, 9, 9, 9, 0, 5, 0, 25000.00, 'Hư', NULL, NULL),
+	(10, 10, 10, 10, 5, 0, 0, 240000.00, '', NULL, NULL),
+	(11, 11, 11, 11, 2, 0, 0, 200000.00, 'bể', '2026-11-04', '2026-11-29'),
+	(12, 12, 12, 12, 5, 0, 0, 250000.00, '', '2026-10-31', '2027-10-30'),
+	(13, 13, 13, 13, 1, 0, 0, 200000.00, '', '2026-11-04', '2027-11-04'),
+	(44, 44, 15, 15, 10, 0, 0, 200000.00, '', '2026-11-01', '2027-11-01'),
+	(45, 45, 14, 14, 10, 0, 0, 350000.00, '', '2026-11-07', '2027-11-07'),
+	(46, 46, 45, 45, 10, 0, 0, 240000.00, '', '2026-11-05', '2027-05-09'),
+	(47, 47, 44, 44, 5, 0, 0, 280000.00, '', '2026-11-07', '2027-12-07'),
+	(48, 48, 46, 46, 5, 0, 0, 180000.00, '', '2026-11-05', '2027-11-05'),
+	(49, 49, 47, 47, 6, 0, 0, 250000.00, '', '2026-03-01', '2027-03-01');
 
 
 --
 -- Data for Name: cong_no_ncc; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.cong_no_ncc (id, lan_nhap_id, so_tien_phai_tra, so_tien_con_no, han_thanh_toan, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.cong_no_ncc OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 980000.00, 980000.00, NULL, 'CHUA_TRA'),
 	(2, 2, 950000.00, 950000.00, NULL, 'CHUA_TRA'),
 	(3, 3, 450000.00, 450000.00, NULL, 'CHUA_TRA'),
@@ -1947,7 +2060,16 @@ INSERT INTO public.cong_no_ncc (id, lan_nhap_id, so_tien_phai_tra, so_tien_con_n
 	(7, 7, 0.00, 0.00, NULL, 'DA_TRA'),
 	(8, 8, 1500000.00, 1500000.00, NULL, 'CHUA_TRA'),
 	(9, 9, 0.00, 0.00, NULL, 'DA_TRA'),
-	(10, 10, 1200000.00, 1200000.00, NULL, 'CHUA_TRA');
+	(10, 10, 1200000.00, 1200000.00, NULL, 'CHUA_TRA'),
+	(11, 11, 400000.00, 400000.00, NULL, 'CHUA_TRA'),
+	(12, 12, 1250000.00, 1250000.00, NULL, 'CHUA_TRA'),
+	(13, 13, 200000.00, 200000.00, NULL, 'CHUA_TRA'),
+	(44, 44, 2000000.00, 2000000.00, NULL, 'CHUA_TRA'),
+	(45, 45, 3500000.00, 3500000.00, NULL, 'CHUA_TRA'),
+	(46, 47, 1400000.00, 1400000.00, NULL, 'CHUA_TRA'),
+	(47, 46, 2400000.00, 2400000.00, NULL, 'CHUA_TRA'),
+	(48, 48, 900000.00, 900000.00, NULL, 'CHUA_TRA'),
+	(49, 49, 1500000.00, 1500000.00, NULL, 'CHUA_TRA');
 
 
 --
@@ -1960,28 +2082,37 @@ INSERT INTO public.cong_no_ncc (id, lan_nhap_id, so_tien_phai_tra, so_tien_con_n
 -- Data for Name: dia_chi_giao_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.dia_chi_giao_hang (id, khach_hang_id, ten_nguoi_nhan, so_dien_thoai, dia_chi, phuong_xa, quan_huyen, tinh_thanh, mac_dinh) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 'SonY', '0123456789', '24/1 Kha Vạn Cân', 'Phường Tam Thắng', NULL, 'Thành phố Hồ Chí Minh', true);
+INSERT INTO public.dia_chi_giao_hang OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 'SonY', '0123456789', '24/1 Kha Vạn Cân', 'Phường Tam Thắng', NULL, 'Thành phố Hồ Chí Minh', true),
+	(2, 6, 'hưng Ngô', '0786566862', '335 Hậu Giang', 'Phường Bình Tây', NULL, 'Thành phố Hồ Chí Minh', true);
 
 
 --
 -- Data for Name: dieu_chinh_so_luong; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.dieu_chinh_so_luong (id, san_pham_id, quy_cach_id, nguoi_dieu_chinh_id, so_luong_truoc, so_luong_sau, ly_do, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
-	(1, 27, 9, 2, 0, 30, 'nhập hàng', '2026-11-03 16:15:54.103561+07'),
-	(2, 26, 8, 2, 0, 20, 'nhập hàng', '2026-11-03 16:17:34.908471+07'),
-	(3, 21, 17, 2, 193, 48, 'Hư', '2026-11-04 12:59:11.791323+07'),
-	(4, 24, 20, 2, 120, 10, 'Hư', '2026-11-15 14:08:01.077523+07'),
-	(5, 25, 7, 2, 90, 10, 'Hư', '2026-11-15 14:08:09.629563+07'),
-	(6, 26, 8, 2, 140, 50, 'Hư', '2026-11-04 14:38:17.917651+07');
+INSERT INTO public.dieu_chinh_so_luong OVERRIDING SYSTEM VALUE VALUES
+	(1, 27, 9, 2, 0, 30, DEFAULT, 'nhập hàng', '2026-11-03 16:15:54.103561+07'),
+	(2, 26, 8, 2, 0, 20, DEFAULT, 'nhập hàng', '2026-11-03 16:17:34.908471+07'),
+	(3, 21, 17, 2, 193, 48, DEFAULT, 'Hư', '2026-11-04 12:59:11.791323+07'),
+	(4, 24, 20, 2, 120, 10, DEFAULT, 'Hư', '2026-11-15 14:08:01.077523+07'),
+	(5, 25, 7, 2, 90, 10, DEFAULT, 'Hư', '2026-11-15 14:08:09.629563+07'),
+	(6, 26, 8, 2, 140, 50, DEFAULT, 'Hư', '2026-11-04 14:38:17.917651+07'),
+	(39, 27, 9, 2, 20, 0, DEFAULT, 'HƯ', '2026-11-07 19:47:08.37355+07'),
+	(40, 26, 8, 2, 98, 0, DEFAULT, 'HƯ', '2026-11-07 19:47:15.778221+07'),
+	(41, 24, 20, 2, 130, 0, DEFAULT, 'HƯ', '2026-11-07 19:47:21.654046+07'),
+	(42, 22, 26, 2, 36, 0, DEFAULT, 'HƯ', '2026-11-07 19:47:28.526976+07'),
+	(43, 21, 17, 2, 48, 0, DEFAULT, 'hư', '2026-11-07 19:47:37.189569+07'),
+	(44, 20, 6, 2, 20, 0, DEFAULT, 'hư', '2026-11-07 19:47:45.690126+07'),
+	(45, 17, 11, 2, 48, 0, DEFAULT, 'hư', '2026-11-07 19:47:52.184601+07'),
+	(46, 25, 7, 2, 10, 0, DEFAULT, 'hư', '2026-11-07 19:48:11.970284+07');
 
 
 --
 -- Data for Name: don_dat_hang_ncc; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.don_dat_hang_ncc (id, ma_don_nhap, nha_cung_cap_id, nguoi_lap_id, nguoi_duyet_id, ngay_dat, ngay_giao_du_kien, trang_thai, ly_do_tu_choi, ghi_chu, ngay_duyet) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.don_dat_hang_ncc OVERRIDING SYSTEM VALUE VALUES
 	(1, 'DN-ecae6c25-7ca9-435f-bccd-80f5c455fae6', 1, 2, 2, '2026-11-04 10:58:45.457189+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 10:59:07.421739+07'),
 	(2, 'DN-e18691d0-8ec6-48f8-b3b3-7dbe47fbb18e', 1, 2, 2, '2026-11-04 10:59:44.233531+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 11:33:58.936078+07'),
 	(3, 'DN-11337488-3885-4f7e-8ea3-01a9dad24208', 1, 2, 2, '2026-11-04 12:13:34.789937+07', NULL, 'DA_NHAN_DU', NULL, NULL, '2026-11-04 12:13:36.855034+07'),
@@ -1991,17 +2122,28 @@ INSERT INTO public.don_dat_hang_ncc (id, ma_don_nhap, nha_cung_cap_id, nguoi_lap
 	(7, 'DN-186df4ea-c3b7-4179-8038-cdfe0789d491', 1, 2, 2, '2026-11-04 13:43:56.957398+07', '2026-11-14', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:44:16.373392+07'),
 	(8, 'DN-0efa3e03-c2a1-48c9-b57c-b5121035212f', 2, 2, 2, '2026-11-04 13:54:57.810125+07', '2026-11-15', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 13:55:08.848794+07'),
 	(9, 'DN-360db5b7-4833-4a05-87af-9e3da018617d', 2, 2, 2, '2026-11-15 14:05:54.594634+07', '2026-11-20', 'DA_NHAN_DU', NULL, NULL, '2026-11-15 14:06:07.752294+07'),
-	(10, 'DN-567a53ea-ac4b-42a1-905c-bd6a463c6acb', 2, 2, 2, '2026-11-15 14:09:13.89244+07', '2026-11-17', 'DA_NHAN_DU', NULL, NULL, '2026-11-15 14:09:34.614701+07');
+	(10, 'DN-567a53ea-ac4b-42a1-905c-bd6a463c6acb', 2, 2, 2, '2026-11-15 14:09:13.89244+07', '2026-11-17', 'DA_NHAN_DU', NULL, NULL, '2026-11-15 14:09:34.614701+07'),
+	(11, 'DN-1e05136b-5177-4f7f-868a-8cf3cf02da83', 2, 2, 2, '2026-11-04 16:18:20.873601+07', '2026-11-05', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 16:18:30.274333+07'),
+	(12, 'DN-c9dd99b6-b390-4661-91a9-5730eb2e87ba', 2, 2, 2, '2026-11-04 16:48:33.864302+07', '2026-11-05', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 16:48:39.612381+07'),
+	(13, 'DN-5a2191fe-da73-4010-a1e3-72c938289c04', 1, 2, 2, '2026-11-04 17:20:14.801639+07', '2026-11-04', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 17:20:32.142359+07'),
+	(15, 'DN-570647c9-3917-4a86-9c7f-fa9ddf15efdf', 1, 2, 2, '2026-11-04 17:29:32.283776+07', '2026-11-14', 'DA_NHAN_DU', NULL, NULL, '2026-11-04 17:29:37.163446+07'),
+	(14, 'DN-7cbe1b41-4a0e-4571-8c80-38f09a759151', 2, 2, NULL, '2026-11-04 17:29:08.79452+07', '2026-11-06', 'DA_NHAN_DU', NULL, NULL, NULL),
+	(44, 'DN-c1b2dda5-3f0c-4d98-94a2-e2de1df682f5', 2, 2, NULL, '2026-11-07 20:04:56.693895+07', '2026-11-10', 'DA_NHAN_DU', NULL, NULL, NULL),
+	(45, 'DN-3e726dc1-482c-4596-831b-db5cea549d85', 1, 2, NULL, '2026-11-07 20:05:33.072203+07', '2026-11-09', 'DA_NHAN_DU', NULL, NULL, NULL),
+	(46, 'DN-fcf95eb5-cf81-48ff-88b1-272ce18fdf05', 2, 2, NULL, '2026-11-07 20:21:21.527205+07', '2026-11-08', 'DA_NHAN_DU', NULL, NULL, NULL),
+	(47, 'DN-72daed3f-6602-46bd-80a4-b2858d2408f1', 2, 2, NULL, '2026-11-08 15:23:04.721186+07', '2026-11-09', 'DA_NHAN_DU', NULL, NULL, NULL);
 
 
 --
 -- Data for Name: don_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.don_hang (id, ma_don, kenh_ban, khach_hang_id, nhan_vien_xu_ly_id, ngay_dat, ngay_hoan_tat, trang_thai, phi_van_chuyen, giam_gia, tong_tien, ghi_chu, ten_nguoi_nhan, sdt_nguoi_nhan, dia_chi_nhan, thoi_gian_nhan_du_kien, da_tru_so_luong, ngay_cap_nhat, khuyen_mai_id) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.don_hang OVERRIDING SYSTEM VALUE VALUES
 	(1, 'DH-6c1a7221-fc52-436f-8308-5ac6fbe4a865', 'ONLINE', 1, 2, '2026-11-03 16:37:52.820068+07', NULL, 'DA_GIAO', 0.00, 0.00, 80000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-03 16:38:29.510031+07', NULL),
 	(2, 'DH-0813adbd-aaa0-44dd-8317-57abbe8d3b7d', 'ONLINE', 1, 3, '2026-11-04 13:03:18.413361+07', NULL, 'DA_GIAO', 0.00, 0.00, 130000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-04 13:05:10.352992+07', NULL),
-	(3, 'DH-ad03213a-3dfb-4d0f-bb40-d3c26a4b34dd', 'ONLINE', 1, 3, '2026-11-04 14:34:38.732069+07', NULL, 'DA_HUY', 0.00, 11200.00, 100800.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-04 14:37:04.762617+07', 1);
+	(3, 'DH-ad03213a-3dfb-4d0f-bb40-d3c26a4b34dd', 'ONLINE', 1, 3, '2026-11-04 14:34:38.732069+07', NULL, 'DA_HUY', 0.00, 11200.00, 100800.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-04 14:37:04.762617+07', 1),
+	(36, 'DH-a4e572de-dfa9-4d7a-b4e0-ff37106904b5', 'ONLINE', 1, 2, '2026-11-07 20:23:40.626183+07', NULL, 'DA_GIAO', 0.00, 0.00, 155000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-07 20:24:03.891591+07', NULL),
+	(37, 'DH-952a4d25-3d9c-460c-b667-4745274d50dd', 'ONLINE', 6, 2, '2026-11-08 15:15:30.126268+07', NULL, 'DA_GIAO', 0.00, 18600.00, 74400.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-08 15:15:50.298675+07', 34);
 
 
 --
@@ -2014,8 +2156,9 @@ INSERT INTO public.don_hang (id, ma_don, kenh_ban, khach_hang_id, nhan_vien_xu_l
 -- Data for Name: gio_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.gio_hang (id, khach_hang_id, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, '2026-11-04 14:34:08.2256+07');
+INSERT INTO public.gio_hang OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, '2026-11-07 20:23:36.079704+07'),
+	(141, 6, '2026-11-08 15:27:00.035876+07');
 
 
 --
@@ -2028,10 +2171,12 @@ INSERT INTO public.gio_hang (id, khach_hang_id, ngay_cap_nhat) OVERRIDING SYSTEM
 -- Data for Name: hoa_don; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.hoa_don (id, don_hang_id, nguoi_lap_id, ma_hoa_don, ngay_lap, kenh_ban, tong_thanh_toan, phi_van_chuyen, giam_gia, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.hoa_don OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 2, 'HD-1', '2026-11-03 16:38:23.783332+07', 'ONLINE', 80000.00, 0.00, 0.00, 'ISSUED'),
 	(2, 2, 3, 'HD-2', '2026-11-04 13:04:11.849425+07', 'ONLINE', 130000.00, 0.00, 0.00, 'ISSUED'),
-	(3, 3, 3, 'HD-3', '2026-11-04 14:35:34.329885+07', 'ONLINE', 100800.00, 0.00, 11200.00, 'CANCELLED');
+	(3, 3, 3, 'HD-3', '2026-11-04 14:35:34.329885+07', 'ONLINE', 100800.00, 0.00, 11200.00, 'CANCELLED'),
+	(36, 36, 2, 'HD-36', '2026-11-07 20:23:57.794667+07', 'ONLINE', 155000.00, 0.00, 0.00, 'ISSUED'),
+	(37, 37, 2, 'HD-37', '2026-11-08 15:15:46.004724+07', 'ONLINE', 74400.00, 0.00, 18600.00, 'ISSUED');
 
 
 --
@@ -2044,23 +2189,25 @@ INSERT INTO public.hoa_don (id, don_hang_id, nguoi_lap_id, ma_hoa_don, ngay_lap,
 -- Data for Name: khach_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.khach_hang (id, tai_khoan_id, ho_ten, dien_thoai, anh_dai_dien, ngay_tao) OVERRIDING SYSTEM VALUE VALUES
-	(1, 3, 'SonY', '1234567890', NULL, '2026-11-03 15:25:38.232189+07');
+INSERT INTO public.khach_hang OVERRIDING SYSTEM VALUE VALUES
+	(1, 3, 'SonY', '1234567890', NULL, '2026-11-03 15:25:38.232189+07'),
+	(6, 5, 'hưng Ngô', '0786566862', NULL, '2026-11-08 13:36:04.528191+07');
 
 
 --
 -- Data for Name: khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.khuyen_mai (id, ma_code, ten, mo_ta, loai_giam, gia_tri_giam, giam_toi_da, don_toi_thieu, bat_dau, ket_thuc, gioi_han_su_dung, gioi_han_moi_khach, pham_vi_ap_dung, trang_thai) OVERRIDING SYSTEM VALUE VALUES
-	(1, 'EASPORT', 'Giảm giá mạnh', NULL, 'PERCENT', 10.00, 50000.00, 0.00, '2026-11-04 14:32:25+07', '2026-11-05 14:32:25+07', 2, 1, 'CATEGORY', 'ACTIVE');
+INSERT INTO public.khuyen_mai OVERRIDING SYSTEM VALUE VALUES
+	(34, 'WATERBUS10', 'Giảm giá mạnh', NULL, 'PERCENT', 20.00, 50000.00, 0.00, '2026-11-08 15:02:23+07', '2026-11-10 15:00:00+07', 100, 5, 'CATEGORY', 'ACTIVE'),
+	(1, 'EASPORT', 'Giảm giá mạnh', NULL, 'PERCENT', 10.00, 50000.00, 0.00, '2026-11-04 14:32:25+07', '2026-11-10 14:32:25+07', 2, 1, 'CATEGORY', 'ACTIVE');
 
 
 --
 -- Data for Name: lan_nhap_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.lan_nhap_hang (id, don_ncc_id, nguoi_nhan_id, ngay_nhap, trang_thai, ngay_xac_nhan, ghi_chu) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.lan_nhap_hang OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 2, '2026-11-04 10:59:30.831078+07', 'CONFIRMED', '2026-11-04 10:59:33.262019+07', NULL),
 	(2, 2, 2, '2026-11-04 12:12:17.013658+07', 'CONFIRMED', '2026-11-04 12:12:20.214256+07', NULL),
 	(3, 3, 2, '2026-11-04 12:14:00.716347+07', 'CONFIRMED', '2026-11-04 12:14:43.161711+07', NULL),
@@ -2070,14 +2217,23 @@ INSERT INTO public.lan_nhap_hang (id, don_ncc_id, nguoi_nhan_id, ngay_nhap, tran
 	(7, 7, 2, '2026-11-04 13:53:59.862233+07', 'CONFIRMED', '2026-11-04 13:54:10.677797+07', NULL),
 	(8, 8, 2, '2026-11-15 14:04:19.083592+07', 'CONFIRMED', '2026-11-15 14:04:27.396664+07', NULL),
 	(9, 9, 2, '2026-11-15 14:07:24.035317+07', 'CONFIRMED', '2026-11-15 14:07:28.16431+07', NULL),
-	(10, 10, 2, '2026-11-15 14:09:40.50754+07', 'CONFIRMED', '2026-11-15 14:09:48.91325+07', NULL);
+	(10, 10, 2, '2026-11-15 14:09:40.50754+07', 'CONFIRMED', '2026-11-15 14:09:48.91325+07', NULL),
+	(11, 11, 2, '2026-11-04 16:18:56.527476+07', 'CONFIRMED', '2026-11-04 16:47:55.792225+07', NULL),
+	(12, 12, 2, '2026-11-04 16:49:48.743673+07', 'CONFIRMED', '2026-11-04 16:50:17.101014+07', NULL),
+	(13, 13, 3, '2026-11-04 17:21:10.930847+07', 'CONFIRMED', '2026-11-04 17:21:56.50741+07', NULL),
+	(44, 15, 2, '2026-11-07 20:03:12.879314+07', 'CONFIRMED', '2026-11-07 20:03:17.895325+07', NULL),
+	(45, 14, 2, '2026-11-07 20:04:16.814618+07', 'CONFIRMED', '2026-11-07 20:04:20.515294+07', NULL),
+	(47, 44, 2, '2026-11-07 20:06:17.046454+07', 'CONFIRMED', '2026-11-07 20:06:21.282405+07', NULL),
+	(46, 45, 2, '2026-11-07 20:05:57.794819+07', 'CONFIRMED', '2026-11-07 20:06:23.640955+07', NULL),
+	(48, 46, 2, '2026-11-07 20:21:58.958308+07', 'CONFIRMED', '2026-11-07 20:22:03.712417+07', NULL),
+	(49, 47, 2, '2026-11-08 15:23:44.149261+07', 'CONFIRMED', '2026-11-08 15:23:49.336349+07', NULL);
 
 
 --
 -- Data for Name: lich_su_hoa_don; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.lich_su_hoa_don (id, hoa_don_id, tai_khoan_thuc_hien_id, trang_thai_cu, trang_thai_moi, ly_do, thoi_gian) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.lich_su_hoa_don OVERRIDING SYSTEM VALUE VALUES
 	(1, 3, NULL, 'ISSUED', 'CANCELLED', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-04 14:37:04.762617+07');
 
 
@@ -2085,7 +2241,7 @@ INSERT INTO public.lich_su_hoa_don (id, hoa_don_id, tai_khoan_thuc_hien_id, tran
 -- Data for Name: lich_su_trang_thai_don; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.lich_su_trang_thai_don (id, don_hang_id, tai_khoan_thuc_hien_id, trang_thai_cu, trang_thai_moi, ghi_chu, thoi_gian) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.lich_su_trang_thai_don OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-03 16:38:23.783332+07'),
 	(2, 1, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-03 16:38:26.349807+07'),
 	(3, 1, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-03 16:38:29.510031+07'),
@@ -2093,7 +2249,13 @@ INSERT INTO public.lich_su_trang_thai_don (id, don_hang_id, tai_khoan_thuc_hien_
 	(5, 2, 4, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-04 13:04:26.28501+07'),
 	(6, 2, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-04 13:05:10.352992+07'),
 	(7, 3, 4, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-04 14:35:34.329885+07'),
-	(8, 3, 4, 'DANG_CHUAN_BI', 'DA_HUY', 'Không thích bán nữa ', '2026-11-04 14:37:04.762617+07');
+	(8, 3, 4, 'DANG_CHUAN_BI', 'DA_HUY', 'Không thích bán nữa ', '2026-11-04 14:37:04.762617+07'),
+	(40, 36, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-07 20:23:57.794667+07'),
+	(41, 36, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-07 20:24:00.962555+07'),
+	(42, 36, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-07 20:24:03.891591+07'),
+	(43, 37, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-08 15:15:46.004724+07'),
+	(44, 37, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-08 15:15:48.551074+07'),
+	(45, 37, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-08 15:15:50.298675+07');
 
 
 --
@@ -2106,7 +2268,7 @@ INSERT INTO public.lich_su_trang_thai_don (id, don_hang_id, tai_khoan_thuc_hien_
 -- Data for Name: loai_san_pham; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.loai_san_pham (id, ten, mo_ta, hinh_anh, hien_thi) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.loai_san_pham OVERRIDING SYSTEM VALUE VALUES
 	(1, 'Nước ngọt có ga', 'Nước giải khát có ga', NULL, true),
 	(2, 'Nước suối', 'Nước tinh khiết', NULL, true),
 	(3, 'Trà đóng chai', 'Trà pha sẵn', NULL, true),
@@ -2120,16 +2282,16 @@ INSERT INTO public.loai_san_pham (id, ten, mo_ta, hinh_anh, hien_thi) OVERRIDING
 -- Data for Name: nha_cung_cap; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.nha_cung_cap (id, ten, ma_so_thue, nguoi_lien_he, dien_thoai, email, dia_chi, trang_thai, ngay_tao, loai_nha_cung_cap, trang_thai_xac_minh, ghi_chu_xac_minh, nguoi_xac_minh_id, thoi_diem_xac_minh) OVERRIDING SYSTEM VALUE VALUES
-	(1, 'Boobiboo', '1234567890', 'Mister_Dat', '1234567890', 'Mr.Dat@gmail.com', '24/1 Kha Vạn Cân', 'HOP_TAC', '2026-11-04 10:57:21.919355+07', 'DOANH_NGHIEP', 'DA_XAC_MINH', NULL, 2, '2026-11-04 12:59:43.580452+07'),
-	(2, 'Coca-cola', '1234567777', 'Skywind', '0910209811', 'Coca@gmail.com', NULL, 'HOP_TAC', '2026-11-04 13:10:07.968792+07', 'DOANH_NGHIEP', 'DA_XAC_MINH', NULL, 2, '2026-11-04 13:10:07.968792+07');
+INSERT INTO public.nha_cung_cap OVERRIDING SYSTEM VALUE VALUES
+	(2, 'Coca-cola', '1234567777', 'Skywind', '0910209811', 'Coca@gmail.com', NULL, 'HOP_TAC', '2026-11-04 13:10:07.968792+07', 'DOANH_NGHIEP', 'DA_XAC_MINH', NULL, 2, '2026-11-04 13:10:07.968792+07'),
+	(1, 'Boobiboo', '1234567890', 'Mister_Dat', '1234567890', 'Mr.Dat@gmail.com', '24/1 Kha Vạn Cân', 'HOP_TAC', '2026-11-04 10:57:21.919355+07', 'DOANH_NGHIEP', 'CAN_KIEM_TRA_LAI', NULL, NULL, NULL);
 
 
 --
 -- Data for Name: nha_cung_cap_san_pham; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.nha_cung_cap_san_pham (nha_cung_cap_id, san_pham_id, gia_nhap_tham_khao) VALUES
+INSERT INTO public.nha_cung_cap_san_pham VALUES
 	(1, 23, NULL),
 	(1, 20, NULL),
 	(1, 17, NULL),
@@ -2142,7 +2304,7 @@ INSERT INTO public.nha_cung_cap_san_pham (nha_cung_cap_id, san_pham_id, gia_nhap
 -- Data for Name: nhan_vien; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.nhan_vien (id, tai_khoan_id, ma_nhan_vien, ho_ten, ngay_sinh, gioi_tinh, dien_thoai, email_lien_he, dia_chi, chuc_vu, ngay_vao_lam, trang_thai) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.nhan_vien OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 'NV-1', 'Quản trị viên', NULL, NULL, NULL, NULL, NULL, 'ADMIN', '2026-11-03', 'ACTIVE'),
 	(3, 4, 'NV-4', 'Quân AB', NULL, NULL, '0792040241', NULL, NULL, NULL, NULL, 'ACTIVE'),
 	(4, 3, 'NV-3', 'SonY', NULL, NULL, '0123456789', NULL, NULL, NULL, NULL, 'ACTIVE'),
@@ -2153,7 +2315,7 @@ INSERT INTO public.nhan_vien (id, tai_khoan_id, ma_nhan_vien, ho_ten, ngay_sinh,
 -- Data for Name: nhat_ky_hoat_dong; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, doi_tuong_id, du_lieu_thay_doi, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-03 13:15:58.629248+07'),
 	(2, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-03 15:23:53.063427+07'),
 	(3, 1, 'ACCOUNT_CREATE', 'tai_khoan', 2, NULL, '2026-11-03 15:24:45.072766+07'),
@@ -2254,7 +2416,7 @@ INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, do
 	(98, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 7, NULL, '2026-11-04 13:43:56.957398+07'),
 	(99, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 7, NULL, '2026-11-04 13:44:16.373392+07'),
 	(100, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 7, NULL, '2026-11-04 13:53:59.862233+07');
-INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, doi_tuong_id, du_lieu_thay_doi, thoi_diem) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
 	(101, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 7, NULL, '2026-11-04 13:54:10.677797+07'),
 	(102, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 35, NULL, '2026-11-04 13:54:57.810125+07'),
 	(103, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 8, NULL, '2026-11-04 13:54:57.810125+07'),
@@ -2284,24 +2446,125 @@ INSERT INTO public.nhat_ky_hoat_dong (id, tai_khoan_id, hanh_dong, doi_tuong, do
 	(127, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 14:36:06.46461+07'),
 	(128, 4, 'ORDER_DA_HUY', 'don_hang', 3, NULL, '2026-11-04 14:37:04.762617+07'),
 	(129, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 6, NULL, '2026-11-04 14:38:17.917651+07'),
-	(130, 2, 'STAFF_PROFILE', 'nhan_vien', 2, NULL, '2026-11-04 14:49:00.451955+07');
+	(130, 2, 'STAFF_PROFILE', 'nhan_vien', 2, NULL, '2026-11-04 14:49:00.451955+07'),
+	(131, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 16:02:34.904803+07'),
+	(132, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-04 16:06:24.292369+07'),
+	(133, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 16:16:20.216214+07'),
+	(134, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 11, NULL, '2026-11-04 16:18:20.873601+07'),
+	(135, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 11, NULL, '2026-11-04 16:18:30.274333+07'),
+	(136, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 11, NULL, '2026-11-04 16:18:56.527476+07'),
+	(137, 2, 'RECEIPT_DATES', 'chi_tiet_lan_nhap', 11, NULL, '2026-11-04 16:47:35.587197+07'),
+	(138, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 11, NULL, '2026-11-04 16:47:55.792225+07'),
+	(139, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 12, NULL, '2026-11-04 16:48:33.864302+07'),
+	(140, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 12, NULL, '2026-11-04 16:48:39.612381+07'),
+	(141, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 12, NULL, '2026-11-04 16:49:48.743673+07'),
+	(142, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 12, NULL, '2026-11-04 16:50:17.101014+07'),
+	(143, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 16:57:24.927009+07'),
+	(144, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 16:57:36.813736+07'),
+	(145, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 16:58:33.382964+07'),
+	(146, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-04 17:01:06.848412+07'),
+	(147, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-04 17:03:45.786161+07'),
+	(148, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 13, NULL, '2026-11-04 17:20:14.801639+07'),
+	(149, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 13, NULL, '2026-11-04 17:20:32.142359+07'),
+	(150, 4, 'RECEIPT_DRAFT', 'lan_nhap_hang', 13, NULL, '2026-11-04 17:21:10.930847+07'),
+	(151, 4, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 13, NULL, '2026-11-04 17:21:56.50741+07'),
+	(152, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 38, NULL, '2026-11-04 17:29:08.79452+07'),
+	(153, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 14, NULL, '2026-11-04 17:29:08.79452+07'),
+	(154, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 15, NULL, '2026-11-04 17:29:32.283776+07'),
+	(155, 2, 'PURCHASE_DA_DUYET', 'don_dat_hang_ncc', 15, NULL, '2026-11-04 17:29:37.163446+07'),
+	(186, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-07 19:12:27.624876+07'),
+	(187, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-07 19:45:29.981298+07'),
+	(188, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 1, NULL, '2026-11-07 19:45:29.981298+07'),
+	(189, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-07 19:45:42.209431+07'),
+	(190, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 1, NULL, '2026-11-07 19:45:42.209431+07'),
+	(191, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 39, NULL, '2026-11-07 19:47:08.37355+07'),
+	(192, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 40, NULL, '2026-11-07 19:47:15.778221+07'),
+	(193, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 41, NULL, '2026-11-07 19:47:21.654046+07'),
+	(194, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 42, NULL, '2026-11-07 19:47:28.526976+07'),
+	(195, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 43, NULL, '2026-11-07 19:47:37.189569+07'),
+	(196, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 44, NULL, '2026-11-07 19:47:45.690126+07'),
+	(197, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 45, NULL, '2026-11-07 19:47:52.184601+07'),
+	(198, 2, 'STOCK_ADJUST', 'dieu_chinh_so_luong', 46, NULL, '2026-11-07 19:48:11.970284+07'),
+	(199, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 44, NULL, '2026-11-07 20:03:12.879314+07'),
+	(200, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 44, NULL, '2026-11-07 20:03:17.895325+07'),
+	(201, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 45, NULL, '2026-11-07 20:04:16.814618+07'),
+	(202, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 45, NULL, '2026-11-07 20:04:20.515294+07'),
+	(203, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 44, NULL, '2026-11-07 20:04:56.693895+07'),
+	(204, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 45, NULL, '2026-11-07 20:05:33.072203+07'),
+	(205, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 46, NULL, '2026-11-07 20:05:57.794819+07'),
+	(206, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 47, NULL, '2026-11-07 20:06:17.046454+07'),
+	(207, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 47, NULL, '2026-11-07 20:06:21.282405+07'),
+	(208, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 46, NULL, '2026-11-07 20:06:23.640955+07'),
+	(209, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 46, NULL, '2026-11-07 20:21:21.527205+07'),
+	(210, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 48, NULL, '2026-11-07 20:21:58.958308+07'),
+	(211, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 48, NULL, '2026-11-07 20:22:03.712417+07'),
+	(212, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-07 20:23:35.136678+07'),
+	(213, 3, 'CHECKOUT', 'don_hang', 36, NULL, '2026-11-07 20:23:40.626183+07'),
+	(214, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 36, NULL, '2026-11-07 20:23:57.794667+07'),
+	(215, 2, 'ORDER_DANG_GIAO', 'don_hang', 36, NULL, '2026-11-07 20:24:00.962555+07'),
+	(216, 2, 'ORDER_DA_GIAO', 'don_hang', 36, NULL, '2026-11-07 20:24:03.891591+07'),
+	(217, 3, 'LOGIN', 'tai_khoan', 3, NULL, '2026-11-08 13:05:26.842716+07'),
+	(218, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-08 13:06:19.797015+07'),
+	(219, 5, 'REGISTER', 'tai_khoan', 5, NULL, '2026-11-08 13:36:04.528191+07'),
+	(220, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-08 13:36:05.039286+07'),
+	(221, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-08 13:58:29.685332+07'),
+	(222, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-08 14:07:48.442756+07'),
+	(223, 5, 'PASSWORD_RESET_OTP', 'tai_khoan', 5, NULL, '2026-11-08 14:17:40.508557+07'),
+	(224, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-08 14:18:10.667802+07'),
+	(225, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-08 14:18:27.061316+07'),
+	(226, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-08 14:21:37.42176+07'),
+	(227, 2, 'UPDATE', 'nha_cung_cap', 1, NULL, '2026-11-08 14:31:09.413202+07'),
+	(228, 2, 'UPDATE_SUPPLIER_PRODUCTS', 'nha_cung_cap', 1, NULL, '2026-11-08 14:31:09.413202+07'),
+	(229, 2, 'CREATE', 'khuyen_mai', 34, NULL, '2026-11-08 15:03:19.26275+07'),
+	(230, 2, 'UPDATE', 'khuyen_mai', 1, NULL, '2026-11-08 15:03:45.086902+07');
+INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
+	(231, 2, 'UPDATE', 'khuyen_mai', 1, NULL, '2026-11-08 15:04:04.149984+07'),
+	(232, 5, 'CHECKOUT', 'don_hang', 37, NULL, '2026-11-08 15:15:30.126268+07'),
+	(233, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 37, NULL, '2026-11-08 15:15:46.004724+07'),
+	(234, 2, 'ORDER_DANG_GIAO', 'don_hang', 37, NULL, '2026-11-08 15:15:48.551074+07'),
+	(235, 2, 'ORDER_DA_GIAO', 'don_hang', 37, NULL, '2026-11-08 15:15:50.298675+07'),
+	(236, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-08 15:21:01.214918+07'),
+	(237, 2, 'IMPORT_PACKAGE_CREATE', 'quy_cach_san_pham', 71, NULL, '2026-11-08 15:23:04.721186+07'),
+	(238, 2, 'PURCHASE_CREATE', 'don_dat_hang_ncc', 47, NULL, '2026-11-08 15:23:04.721186+07'),
+	(239, 2, 'RECEIPT_DRAFT', 'lan_nhap_hang', 49, NULL, '2026-11-08 15:23:44.149261+07'),
+	(240, 2, 'RECEIPT_CONFIRM', 'lan_nhap_hang', 49, NULL, '2026-11-08 15:23:49.336349+07'),
+	(241, 4, 'LOGIN', 'tai_khoan', 4, NULL, '2026-11-08 15:25:46.554382+07'),
+	(242, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-08 15:28:24.988022+07');
+
+
+--
+-- Data for Name: password_reset_challenge; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.password_reset_challenge VALUES
+	('73e37192-2814-4ed8-9470-7112ddee92e4', 5, NULL, '2026-11-08 14:10:16.603355+07', 0, NULL, NULL, true, true, '2026-11-08 14:05:16.603355+07'),
+	('1952c34f-de94-42cc-bf7b-d2ec81c6a45e', 5, NULL, '2026-11-08 14:11:50.133957+07', 0, NULL, NULL, true, true, '2026-11-08 14:06:50.133957+07'),
+	('c976587b-5cc1-443b-bd3f-a5b122be2fe3', 5, NULL, '2026-11-08 14:18:00.724709+07', 0, NULL, NULL, true, true, '2026-11-08 14:13:00.724709+07'),
+	('09721f70-2c85-4d65-8ae6-3a9c40c8301a', 5, NULL, '2026-11-08 14:21:27.259834+07', 0, NULL, NULL, true, false, '2026-11-08 14:16:27.259834+07');
 
 
 --
 -- Data for Name: pham_vi_khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.pham_vi_khuyen_mai (id, khuyen_mai_id, san_pham_id, loai_san_pham_id, thuong_hieu_id) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, NULL, 10, NULL),
-	(2, 1, NULL, 8, NULL),
-	(3, 1, NULL, 7, NULL);
+INSERT INTO public.pham_vi_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
+	(34, 34, NULL, 10, NULL),
+	(35, 34, NULL, 9, NULL),
+	(36, 34, NULL, 8, NULL),
+	(37, 34, NULL, 7, NULL),
+	(38, 34, NULL, 3, NULL),
+	(39, 34, NULL, 2, NULL),
+	(40, 34, NULL, 1, NULL),
+	(44, 1, NULL, 10, NULL),
+	(45, 1, NULL, 8, NULL),
+	(46, 1, NULL, 7, NULL);
 
 
 --
 -- Data for Name: phien_xac_thuc; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.phien_xac_thuc (id, tai_khoan_id, token_hash, het_han, da_thu_hoi, ngay_tao) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.phien_xac_thuc OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, '6167d736b6d17cc669d1072b42f3c79d43b24677b650681445856b902e025309', '2026-11-03 21:15:59.011174+07', true, '2026-11-03 13:15:58.629248+07'),
 	(2, 1, '03ca8c2bf444b990dab5045e081e693f63e3056fe2dfa155aa59d78cfb8b78df', '2026-11-03 23:23:53.391026+07', true, '2026-11-03 15:23:53.063427+07'),
 	(26, 4, 'fa82d9bdc80a0c86a47d08319f47fa4765deab1f55abe88a2841f10bd493550d', '2026-11-04 22:19:52.575499+07', true, '2026-11-04 14:19:52.228479+07'),
@@ -2312,8 +2575,7 @@ INSERT INTO public.phien_xac_thuc (id, tai_khoan_id, token_hash, het_han, da_thu
 	(9, 4, '5b78973097fa90613987f5019dddc66d70195201c78b1786e5c5d1bcef9556f8', '2026-11-03 23:34:32.354979+07', true, '2026-11-03 15:34:31.972223+07'),
 	(27, 4, 'd60066a6322b7813d6f8441092dce21d15ced1b213ee387d29492400bc379449', '2026-11-04 22:28:57.0393+07', true, '2026-11-04 14:28:56.635521+07'),
 	(28, 2, 'a1e89eff7e79b8a1979c79ea6caa6aecb1154c27705264df6775a6d205383a8c', '2026-11-04 22:29:49.782755+07', true, '2026-11-04 14:29:49.451727+07'),
-	(29, 4, 'f0e12dfda5e13b099532a98d4b4cf1fd4c013875c13ce979defb0bfd2ea21146', '2026-11-04 22:35:22.246273+07', false, '2026-11-04 14:35:21.951468+07'),
-	(30, 2, '5ad374e468341d1b37aae7147314db05f6254e92cdab16c398fcb38d435e786b', '2026-11-04 22:36:06.800234+07', false, '2026-11-04 14:36:06.46461+07'),
+	(30, 2, '5ad374e468341d1b37aae7147314db05f6254e92cdab16c398fcb38d435e786b', '2026-11-04 22:36:06.800234+07', true, '2026-11-04 14:36:06.46461+07'),
 	(3, 3, '074eb33ae4f0639f4efdff2e2b7dac8efb737c388d1dfcdba7cc53b8e9cae0a7', '2026-11-03 23:26:58.319005+07', true, '2026-11-03 15:26:57.972299+07'),
 	(4, 3, '9643564d76961228ea4e7316bee0b131656c370ae9bdd65a9d681750a306192c', '2026-11-03 23:27:06.107111+07', true, '2026-11-03 15:27:05.711546+07'),
 	(10, 2, '9d9d73ceea1bf80b331bb5c0fd8b254ba94a868f41e8e180207f02345ed18509', '2026-11-03 23:42:49.742288+07', true, '2026-11-03 15:42:48.875423+07'),
@@ -2331,14 +2593,36 @@ INSERT INTO public.phien_xac_thuc (id, tai_khoan_id, token_hash, het_han, da_thu
 	(21, 2, 'fbb95406df674d380bcaf8c4e7f479aef4312903ed3f58c09fc1fa87eea73fa4', '2026-11-04 18:31:44.452433+07', true, '2026-11-04 10:31:44.162218+07'),
 	(23, 4, '25dd336e600eb073fc59ab6d016994a4eca7d50b7adeaeec687c2f4e4c9f3824', '2026-11-04 21:03:45.211475+07', true, '2026-11-04 13:03:44.833403+07'),
 	(24, 2, 'ee96ecbe6ff2c6f86170d186d75696ab055744fac760f94ba84eb2d6ce23cdc9', '2026-11-04 21:05:05.256177+07', false, '2026-11-04 13:05:04.978915+07'),
-	(25, 2, '4183a80ffdf26191e8b5c7324729c420faa4ed29b90e3513690221e0ad89406c', '2026-11-15 22:03:39.581231+07', true, '2026-11-15 14:03:39.037519+07');
+	(25, 2, '4183a80ffdf26191e8b5c7324729c420faa4ed29b90e3513690221e0ad89406c', '2026-11-15 22:03:39.581231+07', true, '2026-11-15 14:03:39.037519+07'),
+	(29, 4, 'f0e12dfda5e13b099532a98d4b4cf1fd4c013875c13ce979defb0bfd2ea21146', '2026-11-04 22:35:22.246273+07', true, '2026-11-04 14:35:21.951468+07'),
+	(31, 2, '98624957ece775c31b8fd7f76ac953646aed0a2e60a71f4dc415714c348a972b', '2026-11-05 00:02:35.213789+07', false, '2026-11-04 16:02:34.904803+07'),
+	(32, 3, 'ee0b58aef6f598eebe454bb7352312891690c2ebf7a984afc61ace1c3f4271d2', '2026-11-05 00:06:24.607271+07', true, '2026-11-04 16:06:24.292369+07'),
+	(33, 2, 'd64dc18f82dc620e1de5545c3e2490430d71d6df674eaa6e0254476d6782ea43', '2026-11-05 00:16:20.543496+07', false, '2026-11-04 16:16:20.216214+07'),
+	(34, 4, '4d6990a340d7c4707ede65b45e32daa1b95099eb79d3255d9e124e0110a5e2ca', '2026-11-05 00:57:27.442013+07', false, '2026-11-04 16:57:24.927009+07'),
+	(35, 4, '486f7b87bc57873a58ca0928bd6061e31dc28905856fe482b094cd110d5dad17', '2026-11-05 00:57:38.097097+07', false, '2026-11-04 16:57:36.813736+07'),
+	(36, 4, '31b41570d2d581a89ca7424c6d6950b7352163bdfef4f15a16e92ff6706ad1c3', '2026-11-05 00:58:33.815755+07', false, '2026-11-04 16:58:33.382964+07'),
+	(37, 4, 'e469cc965b598abe646f0c64e9538ff51c72bdbffa390f7f8d7341814877f740', '2026-11-05 01:01:07.45073+07', false, '2026-11-04 17:01:06.848412+07'),
+	(38, 2, '7e3d5da91d910560cfbe7fea1bbb6dc092717643cdb4b9e4a60e154cd89ad6aa', '2026-11-05 01:03:46.109798+07', false, '2026-11-04 17:03:45.786161+07'),
+	(59, 2, 'd2abc8ddaf2fdb22c959243cabc7d22b36bea11468ae8c5b06cc055638065670', '2026-11-08 03:12:28.388186+07', false, '2026-11-07 19:12:27.624876+07'),
+	(60, 3, '5660c14a5d8a50696728116dbe9d2690d389294b8c5af17f7c1898f6a24497c5', '2026-11-08 04:23:35.571725+07', false, '2026-11-07 20:23:35.136678+07'),
+	(61, 3, '81b69e35b3acd75739582e34894075f2abfcff5e0fef12c00f8ec7a3fd00d07c', '2026-11-08 21:05:27.3484+07', true, '2026-11-08 13:05:26.842716+07'),
+	(68, 5, '89fd81bed631c4373c5a890f8762d99a9c82671fa9621d1106f76451d269b5b6', '2026-11-08 22:21:37.753482+07', false, '2026-11-08 14:21:37.42176+07'),
+	(62, 2, '4e244674034bacfe4402ae652a3c3966fc1f2bd70268efaef8dbe22be2bc18bf', '2026-11-08 21:06:20.080329+07', true, '2026-11-08 13:06:19.797015+07'),
+	(65, 2, '390aa87c955831e42cdb0c8bda1a89ef3070b04b64ecab0c453cda4660e43772', '2026-11-08 22:07:48.816292+07', true, '2026-11-08 14:07:48.442756+07'),
+	(63, 5, 'e23f6570593ea7eeb703f5c188caadfd53b060cb884abed71c2a5721347cfea0', '2026-11-08 21:36:05.401497+07', true, '2026-11-08 13:36:05.039286+07'),
+	(64, 5, 'a2e144047f5d155748088f96472d6bd67bffc3788d3cca6d80ae1f676fed486e', '2026-11-08 21:58:30.724522+07', true, '2026-11-08 13:58:29.685332+07'),
+	(66, 2, '8ea695071e4451895a238c5c8734f8a8e243a5a4a3ec8bd9413f7019c598e7dc', '2026-11-08 22:18:10.948034+07', true, '2026-11-08 14:18:10.667802+07'),
+	(67, 5, '1e1e9e1dc291350a8c379e099c3670dd376c31bcf353c4609b86c2f1e22257f6', '2026-11-08 22:18:27.36246+07', true, '2026-11-08 14:18:27.061316+07'),
+	(69, 2, '22a8acfba8a57c26341c7842372cebd8bb3e1ec2478cb587d77253fa0a420973', '2026-11-08 23:21:02.004198+07', true, '2026-11-08 15:21:01.214918+07'),
+	(70, 4, 'a4b8f697b981098eefc10df170b970b8ee8ce68712a9d415021ab2e4734effd4', '2026-11-08 23:25:46.975873+07', true, '2026-11-08 15:25:46.554382+07'),
+	(71, 2, 'c7fc57bb7a4a8a2f3ffbe3a61495b7ec63e410fa0efbbae87d5ec0e08d18be01', '2026-11-08 23:28:25.293836+07', false, '2026-11-08 15:28:24.988022+07');
 
 
 --
 -- Data for Name: quy_cach_san_pham; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.quy_cach_san_pham (id, san_pham_id, ten_quy_cach, don_vi_tinh, he_so_quy_doi, gia_ban, gia_von, dang_ban) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.quy_cach_san_pham OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 'Lon lẻ', 'LON', 1, 12000.00, 8000.00, true),
 	(2, 1, 'Lốc 6 lon', 'LOC', 6, 69000.00, 48000.00, true),
 	(3, 1, 'Thùng 24 lon', 'THUNG', 24, 270000.00, 192000.00, true),
@@ -2362,27 +2646,29 @@ INSERT INTO public.quy_cach_san_pham (id, san_pham_id, ten_quy_cach, don_vi_tinh
 	(29, 9, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
 	(30, 7, 'Lon lẻ', 'LON', 1, 10000.00, 0.00, true),
 	(9, 27, 'Hộp lẻ', 'HOP', 1, 8000.00, 0.00, true),
+	(26, 22, 'Chai lẻ', 'CHAI', 1, 13500.00, 10416.67, true),
+	(33, 22, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 78500.00, 62500.02, false),
 	(7, 25, 'Hộp lẻ', 'HOP', 1, 9000.00, 5000.00, true),
 	(17, 21, 'Lon lẻ', 'LON', 1, 12000.00, 5050.51, true),
-	(11, 17, 'Chai lẻ', 'CHAI', 1, 12000.00, 10416.67, true),
-	(31, 17, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 288000.00, 250000.00, false),
-	(6, 20, 'Lon lẻ', 'LON', 1, 13000.00, 10000.00, true),
-	(32, 20, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 78000.00, 60000.00, false),
-	(26, 22, 'Chai lẻ', 'CHAI', 1, 14000.00, 10000.00, true),
-	(33, 22, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 84000.00, 60000.00, false),
+	(71, 22, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 313000.00, 250000.08, false),
 	(34, 23, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 288000.00, 0.00, false),
-	(20, 24, 'Hộp lẻ', 'HOP', 1, 45000.00, 12500.00, true),
-	(35, 24, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 1080000.00, 300000.00, false),
-	(8, 26, 'Hộp lẻ', 'HOP', 1, 9000.00, 8571.43, true),
-	(36, 26, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 54000.00, 51428.57, false),
-	(37, 26, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 216000.00, 205714.29, false);
+	(11, 17, 'Chai lẻ', 'CHAI', 1, 12500.00, 10000.00, true),
+	(31, 17, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 300000.00, 240000.00, false),
+	(6, 20, 'Lon lẻ', 'LON', 1, 42000.00, 33333.33, true),
+	(32, 20, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 250000.00, 199999.98, false),
+	(8, 26, 'Hộp lẻ', 'HOP', 1, 15000.00, 11666.67, true),
+	(36, 26, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 88000.00, 70000.02, false),
+	(37, 26, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 350500.00, 280000.08, false),
+	(20, 24, 'Hộp lẻ', 'HOP', 1, 31000.00, 24444.44, true),
+	(38, 24, 'Lốc 6 đơn vị (nhập)', 'LOC', 6, 183500.00, 146666.64, false),
+	(35, 24, 'Thùng 24 đơn vị (nhập)', 'THUNG', 24, 733500.00, 586666.56, false);
 
 
 --
 -- Data for Name: quyen; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.quyen (id, ma_quyen, ten_quyen, ma_chuc_nang, hanh_dong, mo_ta) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.quyen OVERRIDING SYSTEM VALUE VALUES
 	(1, 'PRODUCT_READ', 'Tra cứu sản phẩm', 'BR1', 'READ', NULL),
 	(2, 'PRODUCT_MANAGE', 'Quản lý danh mục sản phẩm', 'BR1', 'MANAGE', NULL),
 	(3, 'PRODUCT_ADJUST', 'Điều chỉnh số lượng', 'BR1', 'ADJUST', NULL),
@@ -2419,7 +2705,7 @@ INSERT INTO public.quyen (id, ma_quyen, ten_quyen, ma_chuc_nang, hanh_dong, mo_t
 -- Data for Name: san_pham; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.san_pham (id, loai_san_pham_id, thuong_hieu_id, sku, ten, mo_ta, thanh_phan, dinh_duong, xuat_xu, dung_tich, loai_bao_bi, huong_vi, so_ngay_han_dung, huong_dan_bao_quan, trang_thai, hien_thi, ngay_tao, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.san_pham OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 1, 'SP001', 'Nước ngọt vị cam 330ml', NULL, NULL, NULL, NULL, '330ml', 'LON', NULL, NULL, NULL, 'DANG_BAN', true, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
 	(2, 2, 2, 'SP002', 'Nước suối 500ml', '', NULL, NULL, NULL, '500ml', 'CHAI', NULL, NULL, NULL, 'DANG_BAN', true, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
 	(3, 1, 9, 'CAT-SCHWEPPES-SODA-330', 'Schweppes Soda 330ml', 'Nước soda Schweppes đóng lon; có thể dùng trực tiếp hoặc pha đồ uống.', NULL, NULL, NULL, '330ml', 'LON', 'Soda', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
@@ -2459,7 +2745,7 @@ INSERT INTO public.san_pham (id, loai_san_pham_id, thuong_hieu_id, sku, ten, mo_
 -- Data for Name: so_luong_san_pham; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.so_luong_san_pham (san_pham_id, so_luong_co_ban, nguong_canh_bao, ngay_cap_nhat) VALUES
+INSERT INTO public.so_luong_san_pham VALUES
 	(1, 0, 10, '2026-11-03 13:15:07.268189+07'),
 	(2, 0, 10, '2026-11-03 13:15:07.268189+07'),
 	(3, 0, 10, '2026-11-03 16:15:08.356368+07'),
@@ -2479,31 +2765,33 @@ INSERT INTO public.so_luong_san_pham (san_pham_id, so_luong_co_ban, nguong_canh_
 	(18, 0, 10, '2026-11-03 16:15:08.356368+07'),
 	(19, 0, 10, '2026-11-03 16:15:08.356368+07'),
 	(23, 0, 10, '2026-11-03 16:15:08.356368+07'),
-	(27, 20, 10, '2026-11-03 16:38:23.783332+07'),
-	(21, 48, 10, '2026-11-04 12:59:11.791323+07'),
-	(17, 24, 10, '2026-11-04 13:00:35.391049+07'),
-	(20, 20, 10, '2026-11-04 13:04:11.849425+07'),
-	(24, 10, 10, '2026-11-15 14:08:01.077523+07'),
-	(25, 10, 10, '2026-11-15 14:08:09.629563+07'),
-	(22, 36, 10, '2026-11-04 14:37:04.762617+07'),
-	(26, 50, 10, '2026-11-04 14:38:17.917651+07');
+	(27, 0, 10, '2026-11-07 19:47:08.37355+07'),
+	(21, 0, 10, '2026-11-07 19:47:37.189569+07'),
+	(25, 0, 10, '2026-11-07 19:48:11.970284+07'),
+	(20, 60, 10, '2026-11-07 20:03:17.895325+07'),
+	(26, 120, 10, '2026-11-07 20:06:21.282405+07'),
+	(17, 240, 10, '2026-11-07 20:06:23.640955+07'),
+	(24, 172, 10, '2026-11-08 15:15:46.004724+07'),
+	(22, 144, 10, '2026-11-08 15:23:49.336349+07');
 
 
 --
 -- Data for Name: su_dung_khuyen_mai; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.su_dung_khuyen_mai (id, khuyen_mai_id, khach_hang_id, don_hang_id, so_tien_giam, trang_thai, ngay_su_dung) OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 1, 3, 11200.00, 'REVERSED', '2026-11-04 14:35:34.329885+07');
+INSERT INTO public.su_dung_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
+	(1, 1, 1, 3, 11200.00, 'REVERSED', '2026-11-04 14:35:34.329885+07'),
+	(34, 34, 6, 37, 18600.00, 'APPLIED', '2026-11-08 15:15:46.004724+07');
 
 
 --
 -- Data for Name: tai_khoan; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.tai_khoan (id, email, mat_khau_hash, trang_thai, email_da_xac_thuc, so_lan_dang_nhap_sai, khoa_den, ngay_tao, ngay_cap_nhat) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.tai_khoan OVERRIDING SYSTEM VALUE VALUES
 	(1, 'admin@example.com', '$2a$12$MfubYvycFKC0ZqAel2pGE.iRndUT.0pzAoaASMGrF/GlCMYSfPr2e', 'ACTIVE', false, 0, NULL, '2026-11-03 13:15:31.236235+07', '2026-11-03 13:15:31.236235+07'),
 	(3, 'khach@waterbus.demo', '$2a$12$2S9Y9IfCzQLO2j2aWseEEuzCzfaKV5jTQP3V72ziXlyReqybw9CFy', 'ACTIVE', false, 0, NULL, '2026-11-03 15:25:38.232189+07', '2026-11-03 15:25:38.232189+07'),
+	(5, 'ngogiahung.hcm@gmail.com', '$2a$12$GNzYebmY6Zdwm2pGaI/a8.ZcPbxmD1CBqghry6FrX18bHLEj4l1YS', 'ACTIVE', false, 0, NULL, '2026-11-08 13:36:04.528191+07', '2026-11-08 13:36:04.528191+07'),
 	(4, 'quanab@gmail.com', '$2a$12$lCmOhKd9shm64LhJ4Xhe5.qBZFKpwR4muYURmfwwcHpN2xBCcy1wC', 'ACTIVE', false, 0, NULL, '2026-11-03 15:33:33.131211+07', '2026-11-03 15:33:33.131211+07'),
 	(2, 'admin1@gmail.com', '$2a$12$fHKdnzX9UlbpNkVWQta84.ay2gcRG2yixliG7Tco62hPQvVD/kfNe', 'ACTIVE', false, 0, NULL, '2026-11-03 15:24:45.072766+07', '2026-11-03 15:24:45.072766+07');
 
@@ -2512,21 +2800,24 @@ INSERT INTO public.tai_khoan (id, email, mat_khau_hash, trang_thai, email_da_xac
 -- Data for Name: tai_khoan_vai_tro; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.tai_khoan_vai_tro (tai_khoan_id, vai_tro_id) VALUES
+INSERT INTO public.tai_khoan_vai_tro VALUES
 	(1, 3),
 	(2, 3),
 	(4, 2),
-	(3, 1);
+	(3, 1),
+	(5, 1);
 
 
 --
 -- Data for Name: thanh_toan; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.thanh_toan (id, don_hang_id, phuong_thuc, ma_giao_dich, idempotency_key, so_tien, trang_thai, thoi_gian, thong_tin_cong) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.thanh_toan OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, 'COD', NULL, NULL, 80000.00, 'PENDING', '2026-11-03 16:37:52.820068+07', NULL),
 	(2, 2, 'COD', NULL, NULL, 130000.00, 'PENDING', '2026-11-04 13:03:18.413361+07', NULL),
-	(3, 3, 'COD', NULL, NULL, 100800.00, 'PENDING', '2026-11-04 14:34:38.732069+07', NULL);
+	(3, 3, 'COD', NULL, NULL, 100800.00, 'PENDING', '2026-11-04 14:34:38.732069+07', NULL),
+	(36, 36, 'COD', NULL, NULL, 155000.00, 'PENDING', '2026-11-07 20:23:40.626183+07', NULL),
+	(37, 37, 'COD', NULL, NULL, 74400.00, 'PENDING', '2026-11-08 15:15:30.126268+07', NULL);
 
 
 --
@@ -2539,7 +2830,7 @@ INSERT INTO public.thanh_toan (id, don_hang_id, phuong_thuc, ma_giao_dich, idemp
 -- Data for Name: thuong_hieu; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.thuong_hieu (id, ten, logo, mo_ta, hien_thi) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.thuong_hieu OVERRIDING SYSTEM VALUE VALUES
 	(1, 'Thương hiệu A', NULL, NULL, true),
 	(2, 'Thương hiệu B', NULL, NULL, true),
 	(3, 'Coca-Cola', NULL, 'Thương hiệu nước giải khát Coca-Cola.', true),
@@ -2576,7 +2867,7 @@ INSERT INTO public.thuong_hieu (id, ten, logo, mo_ta, hien_thi) OVERRIDING SYSTE
 -- Data for Name: vai_tro; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.vai_tro (id, ma_vai_tro, ten_vai_tro, mo_ta) OVERRIDING SYSTEM VALUE VALUES
+INSERT INTO public.vai_tro OVERRIDING SYSTEM VALUE VALUES
 	(1, 'KHACH_HANG', 'Khách hàng', 'Mua hàng qua Website'),
 	(2, 'NHAN_VIEN', 'Nhân viên', 'Bán tại quầy, xử lý đơn và nhập hàng theo đơn NCC đã duyệt'),
 	(3, 'QUAN_TRI_VIEN', 'Quản trị viên', 'Có tất cả quyền nhân viên và nghiệp vụ quản trị');
@@ -2586,7 +2877,7 @@ INSERT INTO public.vai_tro (id, ma_vai_tro, ten_vai_tro, mo_ta) OVERRIDING SYSTE
 -- Data for Name: vai_tro_quyen; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.vai_tro_quyen (vai_tro_id, quyen_id) VALUES
+INSERT INTO public.vai_tro_quyen VALUES
 	(1, 1),
 	(2, 1),
 	(3, 1),
@@ -2640,49 +2931,49 @@ INSERT INTO public.vai_tro_quyen (vai_tro_id, quyen_id) VALUES
 -- Name: bien_dong_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.bien_dong_so_luong_id_seq', 19, true);
+SELECT pg_catalog.setval('public.bien_dong_so_luong_id_seq', 65, true);
 
 
 --
 -- Name: chi_tiet_don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_don_hang_id_seq', 3, true);
+SELECT pg_catalog.setval('public.chi_tiet_don_hang_id_seq', 37, true);
 
 
 --
 -- Name: chi_tiet_don_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_don_ncc_id_seq', 10, true);
+SELECT pg_catalog.setval('public.chi_tiet_don_ncc_id_seq', 47, true);
 
 
 --
 -- Name: chi_tiet_gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_gio_hang_id_seq', 19, true);
+SELECT pg_catalog.setval('public.chi_tiet_gio_hang_id_seq', 56, true);
 
 
 --
 -- Name: chi_tiet_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_hoa_don_id_seq', 3, true);
+SELECT pg_catalog.setval('public.chi_tiet_hoa_don_id_seq', 37, true);
 
 
 --
 -- Name: chi_tiet_lan_nhap_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_lan_nhap_id_seq', 10, true);
+SELECT pg_catalog.setval('public.chi_tiet_lan_nhap_id_seq', 49, true);
 
 
 --
 -- Name: cong_no_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.cong_no_ncc_id_seq', 10, true);
+SELECT pg_catalog.setval('public.cong_no_ncc_id_seq', 49, true);
 
 
 --
@@ -2696,28 +2987,28 @@ SELECT pg_catalog.setval('public.danh_gia_san_pham_id_seq', 1, false);
 -- Name: dia_chi_giao_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.dia_chi_giao_hang_id_seq', 1, true);
+SELECT pg_catalog.setval('public.dia_chi_giao_hang_id_seq', 2, true);
 
 
 --
 -- Name: dieu_chinh_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.dieu_chinh_so_luong_id_seq', 6, true);
+SELECT pg_catalog.setval('public.dieu_chinh_so_luong_id_seq', 46, true);
 
 
 --
 -- Name: don_dat_hang_ncc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.don_dat_hang_ncc_id_seq', 10, true);
+SELECT pg_catalog.setval('public.don_dat_hang_ncc_id_seq', 47, true);
 
 
 --
 -- Name: don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.don_hang_id_seq', 3, true);
+SELECT pg_catalog.setval('public.don_hang_id_seq', 37, true);
 
 
 --
@@ -2731,7 +3022,7 @@ SELECT pg_catalog.setval('public.giay_to_ncc_id_seq', 1, false);
 -- Name: gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.gio_hang_id_seq', 96, true);
+SELECT pg_catalog.setval('public.gio_hang_id_seq', 215, true);
 
 
 --
@@ -2745,7 +3036,7 @@ SELECT pg_catalog.setval('public.hinh_anh_san_pham_id_seq', 1, false);
 -- Name: hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.hoa_don_id_seq', 3, true);
+SELECT pg_catalog.setval('public.hoa_don_id_seq', 37, true);
 
 
 --
@@ -2759,35 +3050,35 @@ SELECT pg_catalog.setval('public.hoan_tien_id_seq', 1, false);
 -- Name: khach_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.khach_hang_id_seq', 5, true);
+SELECT pg_catalog.setval('public.khach_hang_id_seq', 6, true);
 
 
 --
 -- Name: khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.khuyen_mai_id_seq', 1, true);
+SELECT pg_catalog.setval('public.khuyen_mai_id_seq', 34, true);
 
 
 --
 -- Name: lan_nhap_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.lan_nhap_hang_id_seq', 10, true);
+SELECT pg_catalog.setval('public.lan_nhap_hang_id_seq', 49, true);
 
 
 --
 -- Name: lich_su_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.lich_su_hoa_don_id_seq', 1, true);
+SELECT pg_catalog.setval('public.lich_su_hoa_don_id_seq', 33, true);
 
 
 --
 -- Name: lich_su_trang_thai_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.lich_su_trang_thai_don_id_seq', 8, true);
+SELECT pg_catalog.setval('public.lich_su_trang_thai_don_id_seq', 45, true);
 
 
 --
@@ -2822,28 +3113,28 @@ SELECT pg_catalog.setval('public.nhan_vien_id_seq', 4, true);
 -- Name: nhat_ky_hoat_dong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.nhat_ky_hoat_dong_id_seq', 130, true);
+SELECT pg_catalog.setval('public.nhat_ky_hoat_dong_id_seq', 242, true);
 
 
 --
 -- Name: pham_vi_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.pham_vi_khuyen_mai_id_seq', 3, true);
+SELECT pg_catalog.setval('public.pham_vi_khuyen_mai_id_seq', 46, true);
 
 
 --
 -- Name: phien_xac_thuc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.phien_xac_thuc_id_seq', 30, true);
+SELECT pg_catalog.setval('public.phien_xac_thuc_id_seq', 71, true);
 
 
 --
 -- Name: quy_cach_san_pham_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.quy_cach_san_pham_id_seq', 37, true);
+SELECT pg_catalog.setval('public.quy_cach_san_pham_id_seq', 71, true);
 
 
 --
@@ -2864,21 +3155,21 @@ SELECT pg_catalog.setval('public.san_pham_id_seq', 27, true);
 -- Name: su_dung_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.su_dung_khuyen_mai_id_seq', 1, true);
+SELECT pg_catalog.setval('public.su_dung_khuyen_mai_id_seq', 34, true);
 
 
 --
 -- Name: tai_khoan_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.tai_khoan_id_seq', 4, true);
+SELECT pg_catalog.setval('public.tai_khoan_id_seq', 5, true);
 
 
 --
 -- Name: thanh_toan_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.thanh_toan_id_seq', 3, true);
+SELECT pg_catalog.setval('public.thanh_toan_id_seq', 37, true);
 
 
 --
@@ -3310,6 +3601,14 @@ ALTER TABLE ONLY public.nhat_ky_hoat_dong
 
 
 --
+-- Name: password_reset_challenge password_reset_challenge_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_challenge
+    ADD CONSTRAINT password_reset_challenge_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3548,6 +3847,20 @@ CREATE INDEX idx_don_hang_khach ON public.don_hang USING btree (khach_hang_id, n
 
 
 --
+-- Name: idx_receipt_pending_purchase; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_receipt_pending_purchase ON public.lan_nhap_hang USING btree (don_ncc_id) WHERE ((trang_thai)::text = 'DRAFT'::text);
+
+
+--
+-- Name: idx_reset_account_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reset_account_created ON public.password_reset_challenge USING btree (tai_khoan_id, tao_luc DESC);
+
+
+--
 -- Name: uq_anh_chinh; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3650,6 +3963,13 @@ CREATE TRIGGER trg_order_history AFTER UPDATE OF trang_thai ON public.don_hang F
 --
 
 CREATE TRIGGER trg_order_inventory BEFORE INSERT OR UPDATE OF trang_thai ON public.don_hang FOR EACH ROW EXECUTE FUNCTION public.fn_order_inventory();
+
+
+--
+-- Name: quy_cach_san_pham trg_package_automatic_price; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_package_automatic_price BEFORE INSERT OR UPDATE OF gia_von, gia_ban ON public.quy_cach_san_pham FOR EACH ROW EXECUTE FUNCTION public.fn_package_automatic_price();
 
 
 --
@@ -4062,6 +4382,14 @@ ALTER TABLE ONLY public.nhat_ky_hoat_dong
 
 
 --
+-- Name: password_reset_challenge password_reset_challenge_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_challenge
+    ADD CONSTRAINT password_reset_challenge_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id) ON DELETE CASCADE;
+
+
+--
 -- Name: pham_vi_khuyen_mai pham_vi_khuyen_mai_khuyen_mai_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4241,23 +4569,6 @@ ALTER TABLE ONLY public.vai_tro_quyen
 -- PostgreSQL database dump complete
 --
 
-\unrestrict H4AlpGPRB3PEOonQYgi7CQ3UXLlHg0TLCP0I1k9qdgKcVEzDh15Igygi94NeKaG
-
-ALTER TABLE public.chi_tiet_lan_nhap ADD COLUMN IF NOT EXISTS ngay_san_xuat date;
-ALTER TABLE public.chi_tiet_lan_nhap ADD COLUMN IF NOT EXISTS ngay_het_han date;
-DO $$ BEGIN
- IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.chi_tiet_lan_nhap'::regclass AND conname='receipt_product_dates_check') THEN
-  ALTER TABLE public.chi_tiet_lan_nhap ADD CONSTRAINT receipt_product_dates_check CHECK (
-   (ngay_san_xuat IS NULL AND ngay_het_han IS NULL) OR
-   (ngay_san_xuat IS NOT NULL AND ngay_het_han IS NOT NULL AND ngay_het_han>=ngay_san_xuat));
- END IF;
-END $$;
-CREATE INDEX IF NOT EXISTS idx_receipt_pending_purchase ON public.lan_nhap_hang(don_ncc_id) WHERE trang_thai='DRAFT';
-INSERT INTO public.backend_schema_migration(version) VALUES ('20261104_receiving_product_dates') ON CONFLICT DO NOTHING;
-
--- Direct receiving: no separate approval step; no stock/debt changes here.
-ALTER TABLE public.don_dat_hang_ncc ALTER COLUMN trang_thai SET DEFAULT 'DA_DUYET';
-UPDATE public.don_dat_hang_ncc SET trang_thai='DA_DUYET' WHERE trang_thai='CHO_DUYET';
-INSERT INTO public.backend_schema_migration(version) VALUES ('20261104_direct_receiving') ON CONFLICT DO NOTHING;
+\unrestrict HqdEQRc2MRWeNIeRTOQz6p1YufoXSmH0G3awYF0gt3SpV7WvECqxVzND6BQfWlO
 
 COMMIT;

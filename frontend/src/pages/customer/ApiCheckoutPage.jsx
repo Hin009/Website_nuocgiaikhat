@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { cartService, catalogService, orderService } from '@/services/api';
@@ -14,19 +14,22 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { OrderSummary } from './CartPage';
 import { money, paymentMethodLabels } from '@/utils/format';
+import BankTransferDetails from '@/components/customer/BankTransferDetails';
+import ApiCheckoutVouchers from '@/components/customer/ApiCheckoutVouchers';
+import { provinces } from '@/utils/address';
 const schema = z.object({
   paymentMethod: z.enum(['COD', 'BANK_TRANSFER']),
-  addressId: z.string(),
   receiver: z.string().trim().min(1, 'Nhập tên người nhận.').max(150),
   phone: phoneSchema,
   address: z.string().trim().min(1, 'Nhập địa chỉ.').max(1000),
   province: z.string().trim().min(1, 'Nhập tỉnh/thành phố.').max(150),
-  ward: z.string().max(150),
+  ward: z.string().trim().min(1, 'Chọn phường/xã.').max(150),
   note: z.string().max(2000),
 });
 export default function ApiCheckoutPage() {
   const { user } = useAuth();
   const cart = useCart();
+  const client = useQueryClient();
   const [coupon, setCoupon] = useState('');
   const [confirmation, setConfirmation] = useState(null);
   const [order, setOrder] = useState(null);
@@ -34,13 +37,12 @@ export default function ApiCheckoutPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
-      addressId: address ? String(address.id) : '',
       receiver: address?.ten_nguoi_nhan || user.name,
       phone: address?.so_dien_thoai || user.phone,
       address: address?.dia_chi || '',
@@ -50,8 +52,16 @@ export default function ApiCheckoutPage() {
       paymentMethod: 'COD',
     },
   });
-  const addressId = watch('addressId');
   const paymentMethod = watch('paymentMethod');
+  const provinceName = watch('province');
+  const wardName = watch('ward');
+  const selectedProvince = provinces.find((province) => province.name === provinceName);
+  const savedProvinceFallback = provinceName === address?.tinh_thanh && !selectedProvince;
+  const savedWardFallback =
+    provinceName === address?.tinh_thanh &&
+    wardName === address?.phuong_xa &&
+    wardName &&
+    !selectedProvince?.wards.some((ward) => ward.name === wardName);
   const options = useQuery({
     queryKey: ['checkout-options'],
     queryFn: catalogService.checkoutOptions,
@@ -72,6 +82,17 @@ export default function ApiCheckoutPage() {
     staleTime: 0,
   });
   const promotions = useQuery({ queryKey: ['promotions'], queryFn: catalogService.promotions });
+  const appliedPromotion = promotions.data?.find((promotion) => promotion.ma_code === coupon);
+  const discountPercent =
+    appliedPromotion?.loai_giam === 'PERCENT' ? Number(appliedPromotion.gia_tri_giam) : undefined;
+  const applyCoupon = async (code) => {
+    const pricing = await cartService.quote(
+      selected.map((line) => line.packageId),
+      code,
+    );
+    client.setQueryData(['checkout-quote', user.id, selectionKey, code], pricing);
+    setCoupon(code);
+  };
   const action = useAction(
     (values) => orderService.create(user, { ...values, voucherCode: coupon }, selected),
     'Đã tạo đơn hàng',
@@ -95,9 +116,11 @@ export default function ApiCheckoutPage() {
         </p>
         <p>{paymentMethodLabels[order.paymentMethod]}</p>
         {order.paymentMethod === 'BANK_TRANSFER' && (
-          <p>
-            Cửa hàng sẽ liên hệ để cung cấp thông tin chuyển khoản và xác nhận sau khi nhận tiền.
-          </p>
+          <BankTransferDetails
+            bank={options.data?.bankTransfer}
+            amount={order.total}
+            reference={order.code}
+          />
         )}
         <Button asChild>
           <Link to={`/account/orders/${order.id}`}>Xem đơn hàng</Link>
@@ -124,62 +147,63 @@ export default function ApiCheckoutPage() {
       </div>
     );
   return (
-    <div className="container checkout-page">
+    <div className="container checkout-page checkout-compact">
       <PageHeading
         title="Xác nhận đặt hàng"
         description="Kiểm tra thông tin nhận hàng và số tiền trước khi đặt."
       />
       <form className="cart-layout" noValidate onSubmit={handleSubmit(setConfirmation)}>
         <div className="checkout-form">
-          <section className="form-card form-stack">
+          <section className="form-card checkout-recipient">
             <h3>Thông tin nhận hàng</h3>
-            {!!user.addresses?.length && (
-              <Field label="Địa chỉ đã lưu">
+            <div className="checkout-recipient-grid">
+              <Field label="Người nhận" error={errors.receiver}>
+                <input autoComplete="name" {...register('receiver')} />
+              </Field>
+              <Field label="Số điện thoại" error={errors.phone}>
+                <input type="tel" inputMode="numeric" autoComplete="tel" {...register('phone')} />
+              </Field>
+              <Field className="span-two" label="Địa chỉ nhận hàng" error={errors.address}>
+                <textarea rows={2} autoComplete="street-address" {...register('address')} />
+              </Field>
+              <Field label="Tỉnh/Thành phố" error={errors.province}>
                 <select
-                  {...register('addressId', {
-                    onChange: (e) => {
-                      const saved = user.addresses.find((a) => String(a.id) === e.target.value);
-                      setValue('receiver', saved?.ten_nguoi_nhan || user.name);
-                      setValue('phone', saved?.so_dien_thoai || user.phone);
-                      setValue('address', saved?.dia_chi || '');
-                      setValue('province', saved?.tinh_thanh || '');
-                      setValue('ward', saved?.phuong_xa || '');
-                    },
+                  autoComplete="address-level1"
+                  {...register('province', {
+                    onChange: () =>
+                      setValue('ward', '', { shouldDirty: true, shouldValidate: false }),
                   })}
                 >
-                  <option value="">Dùng địa chỉ mới</option>
-                  {user.addresses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {[a.dia_chi, a.tinh_thanh].filter(Boolean).join(', ')}
+                  <option value="">Chọn tỉnh/thành phố</option>
+                  {savedProvinceFallback && <option value={provinceName}>{provinceName}</option>}
+                  {provinces.map((province) => (
+                    <option key={province.code} value={province.name}>
+                      {province.name}
                     </option>
                   ))}
                 </select>
               </Field>
-            )}
-            <Field label="Người nhận" error={errors.receiver}>
-              <input {...register('receiver')} readOnly={!!addressId} />
-            </Field>
-            <Field label="Số điện thoại" error={errors.phone}>
-              <input
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel"
-                {...register('phone')}
-                readOnly={!!addressId}
-              />
-            </Field>
-            <Field label="Địa chỉ nhận hàng" error={errors.address}>
-              <textarea {...register('address')} readOnly={!!addressId} />
-            </Field>
-            <Field label="Tỉnh/Thành phố" error={errors.province}>
-              <input {...register('province')} readOnly={!!addressId} />
-            </Field>
-            <Field label="Phường/Xã" error={errors.ward}>
-              <input {...register('ward')} readOnly={!!addressId} />
-            </Field>
-            <Field label="Ghi chú" error={errors.note}>
-              <textarea {...register('note')} />
-            </Field>
+              <Field label="Phường/Xã" error={errors.ward}>
+                <select
+                  autoComplete="address-level2"
+                  disabled={!provinceName}
+                  {...register('ward')}
+                >
+                  <option value="">
+                    {provinceName ? 'Chọn phường/xã' : 'Chọn tỉnh/thành phố trước'}
+                  </option>
+                  {savedWardFallback && <option value={wardName}>{wardName}</option>}
+                  {(selectedProvince?.wards || []).map((ward) => (
+                    <option key={ward.code} value={ward.name}>
+                      {ward.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field className="span-two" label="Ghi chú" error={errors.note}>
+                <textarea rows={2} {...register('note')} />
+              </Field>
+            </div>
           </section>
           <section className="form-card">
             <h3>Phương thức thanh toán</h3>
@@ -204,35 +228,22 @@ export default function ApiCheckoutPage() {
                       ?.description
                   }
                 </p>
+                {paymentMethod === 'BANK_TRANSFER' && (
+                  <BankTransferDetails bank={options.data.bankTransfer} />
+                )}
               </>
             )}
           </section>
-          <section className="form-card">
-            <h3>Mã giảm giá</h3>
-            {promotions.isError ? (
-              <ErrorState error={promotions.error} retry={promotions.refetch} />
-            ) : (
-              <select
-                aria-label="Mã giảm giá"
-                value={coupon}
-                onChange={(e) => setCoupon(e.target.value)}
-              >
-                <option value="">Không sử dụng mã</option>
-                {promotions.data
-                  ?.filter((p) => p.ma_code)
-                  .map((p) => (
-                    <option key={p.id} value={p.ma_code}>
-                      {p.ma_code} — {p.ten}
-                    </option>
-                  ))}
-              </select>
-            )}
-            <p className="muted-note">
-              Điều kiện áp dụng được kiểm tra khi tính tổng và xác nhận đơn.
-            </p>
-          </section>
         </div>
-        <div>
+        <div className="checkout-summary-column">
+          <ApiCheckoutVouchers
+            promotions={promotions}
+            items={selected}
+            subtotal={quote.data?.subtotal}
+            code={coupon}
+            discount={quote.data?.discount || 0}
+            onApply={applyCoupon}
+          />
           {quote.isPending ? (
             <Loading />
           ) : quote.isError ? (
@@ -245,6 +256,7 @@ export default function ApiCheckoutPage() {
               subtotal={quote.data.subtotal}
               shippingFee={quote.data.shippingFee}
               discountAmount={quote.data.discount}
+              discountPercent={discountPercent}
               voucherCode={coupon}
               total={quote.data.total}
             >

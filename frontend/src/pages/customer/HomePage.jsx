@@ -1,7 +1,7 @@
+import HomeCarousel from '@/components/customer/HomeCarousel';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  ArrowUpRight,
   Sparkles,
   Citrus,
   Coffee,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SectionHeading, QueryState } from '@/components/common/Shared';
-import { HeroArtwork, DrinkArt } from '@/components/customer/DrinkArt';
+import { DrinkArt } from '@/components/customer/DrinkArt';
 import { ProductCard } from '@/components/customer/ProductCard';
 import { useProducts, useCategories } from '@/hooks/useData';
 import { isMock } from '@/services';
@@ -32,40 +32,7 @@ export default function HomePage() {
   return (
     <>
       <div className="container home-content">
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="hero-eyebrow">
-              <span /> TRẠM TIẾP NƯỚC CỦA BẠN
-            </span>
-            <h1>
-              Một ngụm tươi mới.
-              <br />
-              Cả ngày <em>hứng khởi.</em>
-            </h1>
-            <p>
-              Từ vị quen thân thuộc đến những lựa chọn mới mẻ.
-              <br className="desktop-break" /> Tìm thức uống yêu thích, để WaterBus lo phần còn lại.
-            </p>
-            <Button asChild size="lg">
-              <Link to="/products">
-                Khám phá ngay <ArrowUpRight size={19} />
-              </Link>
-            </Button>
-            <div className="hero-proof">
-              <div className="avatar-stack">
-                <span>AN</span>
-                <span>MY</span>
-                <span>HN</span>
-                <span>+</span>
-              </div>
-              <div>
-                <strong>Đồ uống ngon, ngày thêm vui</strong>
-                <small>Khám phá bộ sưu tập dành cho bạn</small>
-              </div>
-            </div>
-          </div>
-          <HeroArtwork />
-        </section>
+        <HomeCarousel />
         <div className="home-demo">
           <span>Chọn vị bạn thích. Bắt đầu một ngày thật khác.</span>
         </div>
@@ -157,7 +124,7 @@ export default function HomePage() {
           <SectionHeading
             eyebrow="THỬ MỘT CHÚT KHÁC BIỆT"
             title="Mới lên kệ, chờ bạn thử"
-            to="/products?sort=newest"
+            to="/products"
           />
           <QueryState query={products} cards>
             <div className="product-grid">

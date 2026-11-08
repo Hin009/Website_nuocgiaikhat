@@ -1,4 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+const provinces = JSON.parse(
+  readFileSync(new URL('../src/data/vietnam-addresses.json', import.meta.url), 'utf8'),
+);
 
 test('supplier management replaces creation in receipts and promotion editor sends valid scope data', async ({
   page,
@@ -157,29 +161,40 @@ test('supplier management replaces creation in receipts and promotion editor sen
   expect(writes).toHaveLength(0);
   await dialog.getByLabel('Số điện thoại', { exact: true }).fill('0900000000');
   await dialog.getByLabel('Loại nhà cung cấp').selectOption('HO_KINH_DOANH');
-  await dialog.getByLabel('Mã số thuế / Số định danh').fill('012345678901');
-  await dialog.getByRole('button', { name: 'Kiểm tra định dạng và trùng mã', exact: true }).click();
-  await expect(dialog.getByRole('status')).toHaveText('Đúng định dạng, không trùng mã.');
-  await expect(dialog.getByRole('link', { name: /Tra cứu trên Cổng/ })).toHaveAttribute(
-    'href',
-    'https://tracuunnt.gdt.gov.vn/tcnnt/mstdn.jsp',
-  );
+  await expect(dialog.getByLabel('Trạng thái xác minh', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: /Tra cứu trên Cổng/ })).toHaveCount(0);
+  await expect(
+    dialog.getByRole('button', { name: 'Kiểm tra định dạng và trùng mã', exact: true }),
+  ).toHaveCount(0);
+  await expect(dialog.getByLabel('Loại nhà cung cấp').locator('option')).toHaveCount(2);
+  await dialog.getByLabel('Mã số thuế', { exact: true }).fill('012345678');
+  await dialog.getByRole('button', { name: 'Lưu nhà cung cấp', exact: true }).click();
+  await expect(dialog.getByText('Mã số thuế phải gồm đúng 10 chữ số.')).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await dialog.getByLabel('Mã số thuế', { exact: true }).fill('0123456789');
   await dialog.getByLabel('Email', { exact: true }).fill('supplier@test.invalid');
-  await dialog.getByLabel('Địa chỉ', { exact: true }).fill('123 Đường thử');
+  const city = provinces[0],
+    ward = city.wards[0];
+  await expect(dialog.getByLabel('Phường/Xã')).toBeDisabled();
+  await dialog.getByLabel('Tỉnh/Thành phố').selectOption(city.code);
+  await dialog.getByLabel('Phường/Xã').selectOption(ward.code);
+  await dialog.getByLabel('Số nhà, tên đường').fill('123 Đường thử');
   await dialog.getByRole('button', { name: 'Lưu nhà cung cấp', exact: true }).click();
   await expect(dialog).toHaveCount(0);
+  expect(writes[0].body.address).toBe(`123 Đường thử, ${ward.name}, ${city.name}`);
+  expect(writes[0].body).not.toHaveProperty('provinceCode');
   await page.getByRole('button', { name: 'Sửa Nhà cung cấp thử', exact: true }).click();
+  await expect(dialog.getByLabel('Tỉnh/Thành phố')).toHaveValue(city.code);
+  await expect(dialog.getByLabel('Phường/Xã')).toHaveValue(ward.code);
+  await expect(dialog.getByLabel('Số nhà, tên đường')).toHaveValue('123 Đường thử');
+  await dialog.getByLabel('Tỉnh/Thành phố').selectOption(provinces[1].code);
+  await expect(dialog.getByLabel('Phường/Xã')).toHaveValue('');
+  await dialog.getByLabel('Tỉnh/Thành phố').selectOption(city.code);
+  await dialog.getByLabel('Phường/Xã').selectOption(ward.code);
   await expect(dialog.getByRole('checkbox', { name: /Nước ngọt kiểm thử/ })).toBeChecked();
   await dialog.getByLabel('Người liên hệ').fill('Liên hệ đã sửa');
-  await dialog.getByLabel('Trạng thái xác minh', { exact: true }).selectOption('DA_XAC_MINH');
-  await dialog.getByRole('button', { name: 'Lưu nhà cung cấp', exact: true }).click();
-  await expect(dialog.getByText('Xác nhận đã đối chiếu hồ sơ và thông tin tra cứu.')).toBeVisible();
-  await dialog.getByLabel('Xác nhận đối chiếu', { exact: true }).check();
-  await dialog.getByLabel('Mã số thuế / Số định danh').fill('012345678902');
-  await expect(dialog.getByLabel('Trạng thái xác minh', { exact: true })).toHaveValue(
-    'CAN_KIEM_TRA_LAI',
-  );
-  await page.screenshot({ path: 'test-results/supplier-legal.png', fullPage: true });
+  await dialog.getByLabel('Mã số thuế', { exact: true }).fill('0123456788');
+  await page.screenshot({ path: 'test-results/supplier-simple.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Lưu nhà cung cấp', exact: true }).click();
   await expect(page.getByRole('cell', { name: /Liên hệ đã sửa/ })).toBeVisible();
   await page.goto('/admin/stock-receipts');

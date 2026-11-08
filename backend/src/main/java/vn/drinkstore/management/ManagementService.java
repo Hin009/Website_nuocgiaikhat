@@ -15,7 +15,7 @@ public class ManagementService {
     }
     private static final Map<String,Resource> RESOURCES=Map.ofEntries(
         Map.entry("products",spec("san_pham","sku,loai_san_pham_id,thuong_hieu_id,ten,mo_ta,thanh_phan,dinh_duong,xuat_xu,dung_tich,loai_bao_bi,huong_vi,so_ngay_han_dung,huong_dan_bao_quan,trang_thai,hien_thi","sku,loai_san_pham_id,thuong_hieu_id,ten")),
-        Map.entry("packages",spec("quy_cach_san_pham","san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,gia_von,dang_ban","san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban")),
+        Map.entry("packages",spec("quy_cach_san_pham","san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,gia_von,dang_ban","san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi")),
         Map.entry("supplier-documents",spec("giay_to_ncc","nha_cung_cap_id,loai_giay,so_giay,ngay_cap,ngay_het_han,tep_dinh_kem","nha_cung_cap_id,loai_giay,so_giay")),
         Map.entry("images",spec("hinh_anh_san_pham","san_pham_id,duong_dan,anh_chinh,thu_tu","san_pham_id,duong_dan")),
         Map.entry("categories",spec("loai_san_pham","ten,mo_ta,hinh_anh,hien_thi","ten")),
@@ -38,6 +38,8 @@ public class ManagementService {
         return "?";
     }
     @Transactional public Object save(String name,Long id,Map<String,Object> body) {
+        if(name.equals("packages") && (body.containsKey("gia_ban") || body.containsKey("gia_von")))
+            throw ApiException.bad("Giá vốn và giá bán được tính tự động khi xác nhận nhập kho; không sửa trực tiếp.");
         return saveInternal(name,id,body,false);
     }
     private Object saveInternal(String name,Long id,Map<String,Object> body,boolean verificationConfirmed) {
@@ -51,7 +53,16 @@ public class ManagementService {
         }
         if(id!=null) db.one("select id from "+r.table()+" where id=? for update",id);
         if(name.equals("packages") && id!=null && (body.containsKey("san_pham_id") || body.containsKey("he_so_quy_doi"))) {
-            if(db.number("select (select count(*) from chi_tiet_don_hang where quy_cach_id=?) + (select count(*) from chi_tiet_don_ncc where quy_cach_id=?)",id,id)>0) throw ApiException.bad("Create a new package after it has been used in orders");
+            throw ApiException.bad("Tạo quy cách mới khi thay sản phẩm hoặc hệ số quy đổi; không thay giá vốn của quy cách cũ.");
+        }
+        if(name.equals("packages") && id==null) {
+            body=new LinkedHashMap<>(body);
+            db.one("select so_luong_co_ban from so_luong_san_pham where san_pham_id=? for update",body.get("san_pham_id"));
+            var primary=db.rows("select gia_von/he_so_quy_doi as base_cost from quy_cach_san_pham where san_pham_id=? order by he_so_quy_doi,id limit 1",body.get("san_pham_id"));
+            var base=primary.isEmpty()?java.math.BigDecimal.ZERO:Db.money(primary.getFirst(),"base_cost");
+            var cost=base.multiply(new java.math.BigDecimal(body.get("he_so_quy_doi").toString())).setScale(2,java.math.RoundingMode.HALF_UP);
+            body.put("gia_von",cost);
+            body.put("gia_ban",SellingPrices.fromCost(cost));
         }
 
         if(name.equals("suppliers")) {
@@ -121,6 +132,8 @@ public class ManagementService {
     }
     @Transactional public Object productEditor(Long id,ManagementController.ProductEditor r) {
         if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
+        if(r.price()!=null) throw ApiException.bad("Giá bán tự động bằng giá vốn bình quân × 1,25; không nhập giá bán trong quản lý sản phẩm.");
+        if(id==null && r.stock()!=null && r.stock()>0) throw ApiException.bad("Sản phẩm mới bắt đầu tồn kho bằng 0; tạo phiếu nhận hàng để ghi nhận giá vốn và số lượng.");
         db.one("select id from loai_san_pham where id=?",r.categoryId());
         // Take the inventory lock first, matching order/receipt triggers. Reject stale stock edits.
         if(id!=null && r.stock()!=null) {
@@ -143,16 +156,9 @@ public class ManagementService {
         if(id==null) fields.put("sku","WB-"+UUID.randomUUID());
         @SuppressWarnings("unchecked") var product=(Map<String,Object>)save("products",id,fields);
         long productId=Db.n(product,"id");
-        if(id==null) {
-            save("packages",null,Map.of("san_pham_id",productId,"ten_quy_cach",r.packaging()+" lẻ","don_vi_tinh",r.packaging(),"he_so_quy_doi",1,"gia_ban",r.price()));
-        } else {
-            if(r.packageId()==null) {
-                save("packages",null,Map.of("san_pham_id",productId,"ten_quy_cach",r.packaging()+" lẻ","don_vi_tinh",r.packaging(),"he_so_quy_doi",1,"gia_ban",r.price()));
-            } else {
-                db.one("select id from quy_cach_san_pham where id=? and san_pham_id=?",r.packageId(),productId);
-                save("packages",r.packageId(),Map.of("gia_ban",r.price()));
-            }
-        }
+        if(id!=null && r.packageId()!=null) db.one("select id from quy_cach_san_pham where id=? and san_pham_id=?",r.packageId(),productId);
+        if(id==null || db.number("select count(*) from quy_cach_san_pham where san_pham_id=? and he_so_quy_doi=1",productId)==0)
+            save("packages",null,Map.of("san_pham_id",productId,"ten_quy_cach",r.packaging()+" lẻ","don_vi_tinh",r.packaging(),"he_so_quy_doi",1));
         if(r.imageUrl()!=null && !r.imageUrl().isBlank()) {
             var images=db.rows("select id from hinh_anh_san_pham where san_pham_id=? order by anh_chinh desc,thu_tu,id limit 1",productId);
             db.jdbc().update("update hinh_anh_san_pham set anh_chinh=false where san_pham_id=? and anh_chinh",productId);
@@ -176,6 +182,8 @@ public class ManagementService {
     }
     private void recordStockAdjustment(long product,long current,long stock,String reason) {
         if(current==stock) return;
+        if(stock>current && db.number("select count(*) from quy_cach_san_pham where san_pham_id=? and gia_von>0",product)==0)
+            throw ApiException.bad("Sản phẩm chưa có giá vốn; nhận hàng để ghi nhận giá vốn trước khi tăng tồn kho.");
         if(reason==null || reason.isBlank()) throw ApiException.bad("Nhập lý do điều chỉnh số lượng");
         long pack=db.id("select id from quy_cach_san_pham where san_pham_id=? order by he_so_quy_doi,id limit 1",product);
         long adjustment=db.id("insert into dieu_chinh_so_luong(san_pham_id,quy_cach_id,nguoi_dieu_chinh_id,so_luong_truoc,so_luong_sau,ly_do) values (?,?,?,?,?,?) returning id",product,pack,access.employee(),current,stock,reason.trim());
@@ -210,14 +218,10 @@ public class ManagementService {
         var fields=new LinkedHashMap<String,Object>();
         fields.put("ten",r.fullName().trim()); fields.put("ma_so_thue",optional(r.taxCode())); fields.put("nguoi_lien_he",optional(r.contactName()));
         fields.put("dien_thoai",optional(r.phone())); fields.put("email",optional(r.email())); fields.put("dia_chi",optional(r.address())); fields.put("trang_thai",r.status());
-        fields.put("loai_nha_cung_cap",r.supplierType()); fields.put("trang_thai_xac_minh",r.verificationStatus()); fields.put("ghi_chu_xac_minh",optional(r.verificationNotes()));
-        if("DA_XAC_MINH".equals(r.verificationStatus()) && !r.verificationConfirmed()) throw ApiException.bad("Xác nhận đã đối chiếu hồ sơ và thông tin trên cổng tra cứu.");
-        var result=saveInternal("suppliers",id,fields,r.verificationConfirmed());
+        fields.put("loai_nha_cung_cap",r.supplierType());
+        var result=saveInternal("suppliers",id,fields,false);
         @SuppressWarnings("unchecked") var row=(Map<String,Object>)result;
         long saved=Db.n(row,"id");
-        if("DA_XAC_MINH".equals(row.get("trang_thai_xac_minh")))
-            db.jdbc().update("update nha_cung_cap set nguoi_xac_minh_id=?,thoi_diem_xac_minh=now() where id=?",access.account(),saved);
-        else db.jdbc().update("update nha_cung_cap set nguoi_xac_minh_id=null,thoi_diem_xac_minh=null where id=?",saved);
         // Omitted productIds preserves assignments for older clients; [] explicitly clears them.
         if(r.productIds()!=null) replaceSupplierProducts(saved,r.productIds());
         var response=db.one("select * from nha_cung_cap where id=?",saved);

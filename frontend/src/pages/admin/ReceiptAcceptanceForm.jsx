@@ -131,7 +131,8 @@ export default function ReceiptAcceptanceForm({ order, receipts, packageName, on
       )}
       <p className="muted-note">
         Phiếu nháp chưa thay đổi kho. Khi bấm xác nhận, chỉ hàng đạt được nhập kho; hàng lỗi được
-        ghi nhận trả NCC và tính vào số lượng đã xử lý của đơn.
+        ghi nhận trả NCC và tính vào số lượng đã xử lý của đơn. Giá vốn được tính bình quân theo đơn
+        vị lẻ. Giá bán = Giá vốn × 1,25, làm tròn lên bội số 500đ sau xác nhận.
       </p>
       <Button type="submit">Lưu kiểm nhận và trả hàng lỗi</Button>
     </form>

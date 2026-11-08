@@ -65,6 +65,11 @@ async function setup(page, admin) {
       });
       stock = body.stock;
       data = { productId: 1, stock };
+    } else if (path === '/management/product-editor/1' && method === 'PUT') {
+      const body = req.postDataJSON();
+      products[0].ten = body.fullName;
+      products[0].dung_tich = body.volume;
+      data = products[0];
     } else if (/^\/staff\/products\/\d+\/inventory-details$/.test(path)) {
       data = path.includes('/1/')
         ? {
@@ -222,6 +227,34 @@ test('admin changes stock inline with reason and handles concurrent changes safe
   await expect(page.getByRole('alert')).toContainText('Tồn kho đã thay đổi');
   await page.getByRole('button', { name: 'Tải lại danh sách', exact: true }).click();
   await expect(stock).toHaveValue('30');
+  expect(state.unexpected).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('product editing displays automatic price without sending manual pricing', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  await page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Giá bán tự động', { exact: true })).toHaveAttribute(
+    'readonly',
+    '',
+  );
+  await dialog.getByLabel('Tên sản phẩm', { exact: true }).fill('Nước kiểm thử cập nhật');
+  await dialog.getByLabel('Quy cách', { exact: true }).fill('330ml');
+  await dialog.getByRole('button', { name: 'Lưu sản phẩm', exact: true }).click();
+  await expect
+    .poll(() => state.writes.filter((w) => w.path === '/management/product-editor/1').length)
+    .toBe(1);
+  expect(
+    state.writes.find((w) => w.path === '/management/product-editor/1').body,
+  ).not.toHaveProperty('price');
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: 'Thêm sản phẩm', exact: true }).click();
+  await expect(
+    page.getByRole('dialog').getByLabel('Số lượng tồn kho', { exact: true }),
+  ).toHaveAttribute('readonly', '');
   expect(state.unexpected).toEqual([]);
   expect(state.errors).toEqual([]);
 });

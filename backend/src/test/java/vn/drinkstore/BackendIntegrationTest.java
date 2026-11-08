@@ -54,6 +54,7 @@ class BackendIntegrationTest {
     @Autowired Db db; @Autowired AuthService auth; @Autowired CartService carts; @Autowired OrderService orders;
     @Autowired PurchaseService purchases; @Autowired BillingService billing; @Autowired MockMvc mvc;
     @Autowired SupplierReturnService supplierReturns;
+    @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Autowired vn.drinkstore.reporting.ProductFinanceController productFinance;
     long account,customer,admin,employee,product,pack,supplier,address;
     @BeforeEach void setup() {
@@ -69,6 +70,26 @@ class BackendIntegrationTest {
         as(admin);
     }
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
+    @Test void anonymousOtpResetChangesPasswordRevokesSessionsAndRejectsReplay() throws Exception {
+        auth.login("customer@test.invalid","TestPass123!");
+        UUID challenge=UUID.randomUUID();
+        db.jdbc().update("insert into password_reset_challenge(id,tai_khoan_id,otp_hash,het_han) values (?,?,?,now()+interval '5 minutes')",challenge,account,passwordEncoder.encode("123456"));
+        clear();
+        mvc.perform(post("/api/v1/auth/password-reset/verify").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"challengeId\":\""+challenge+"\",\"code\":\"111111\"}"))
+            .andExpect(status().isBadRequest());
+        assertEquals(1,db.number("select so_lan_sai from password_reset_challenge where id=?",challenge));
+        String response=mvc.perform(post("/api/v1/auth/password-reset/verify").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"challengeId\":\""+challenge+"\",\"code\":\"123456\"}"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String token=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("resetToken").asText();
+        String complete="{\"challengeId\":\""+challenge+"\",\"resetToken\":\""+token+"\",\"newPassword\":\"ReplacementPass123!\"}";
+        mvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content(complete)).andExpect(status().isOk());
+        assertEquals(0,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",account));
+        mvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content(complete)).andExpect(status().isBadRequest());
+        assertThrows(ApiException.class,()->auth.login("customer@test.invalid","TestPass123!"));
+        assertNotNull(auth.login("customer@test.invalid","ReplacementPass123!").get("accessToken"));
+    }
     void as(long id) { SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(id,null,List.of())); }
     long stock() { return db.number("select so_luong_co_ban from so_luong_san_pham where san_pham_id=?",product); }
     long receive(int quantity) {
@@ -130,7 +151,7 @@ class BackendIntegrationTest {
     String editProduct(long quantity,long expected,String reason) {
         long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
         return """
-            {"fullName":"Edited drink","brand":"Test Brand","categoryId":%d,"price":12000,"active":true,
+            {"fullName":"Edited drink","brand":"Test Brand","categoryId":%d,"active":true,
             "packageId":%d,"packaging":"LON","stock":%d,"expectedStock":%d,"stockReason":"%s"}
             """.formatted(category,pack,quantity,expected,reason);
     }
@@ -328,7 +349,7 @@ class BackendIntegrationTest {
             "/management/reports/revenue?from=2020-01-01&to=2021-01-01","/management/reports/order-status",
             "/management/reports/promotions","/management/reports/expiring-documents","/debts"))
             mvc.perform(get("/api/v1"+path).header("Authorization","Bearer "+token)).andExpect(status().isOk());
-        assertEquals(44,db.number("select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'"));
+        assertEquals(1,db.number("select count(*) from information_schema.tables where table_schema='public' and table_name='password_reset_challenge'"));
     }
     @Test void joinedRolePermissionsAndAssignmentsRevokeSessions() throws Exception {
         String customerToken=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
@@ -391,9 +412,28 @@ class BackendIntegrationTest {
         long id=((Number)((Map<?,?>)orders.checkout(customer,address,null,"COD",null)).get("id")).longValue();
         var line=db.one("select * from chi_tiet_don_hang where don_hang_id=?",id);
         assertEquals(6,Db.n(line,"he_so_quy_doi"));
-        assertEquals(0,new BigDecimal("69000").compareTo(Db.money(line,"don_gia")));
+        assertEquals(0,new BigDecimal("60000").compareTo(Db.money(line,"don_gia")));
         as(admin); orders.transition(id,"DANG_CHUAN_BI",null);
         assertEquals(8,stock());
+    }
+    @Test void receiptGroupsPackagesBeforeAveragingAndAutomaticallyAddsTwentyFivePercent() {
+        receive(50);
+        var po=(Map<?,?>)purchases.create(new PurchaseController.Create(supplier,null,List.of(
+            new PurchaseController.Line(pack,12,new BigDecimal("9000")),
+            new PurchaseController.Line(null,15,new BigDecimal("54000"),product,"LOC",6))));
+        long purchase=((Number)po.get("id")).longValue();
+        var lines=db.rows("select d.id,d.he_so_quy_doi from chi_tiet_don_ncc d where d.don_ncc_id=? order by d.he_so_quy_doi",purchase);
+        var draft=(Map<?,?>)purchases.receipt(purchase,new PurchaseController.Receive(List.of(
+            new PurchaseController.ReceiptLine(Db.n(lines.get(0),"id"),10,new BigDecimal("9000"),2,"Broken"),
+            new PurchaseController.ReceiptLine(Db.n(lines.get(1),"id"),15,new BigDecimal("54000")))));
+        long receipt=((Number)draft.get("id")).longValue();
+        assertEquals(50,stock());
+        purchases.confirm(receipt); purchases.confirm(receipt);
+        assertEquals(150,stock());
+        var primary=db.one("select gia_von,gia_ban from quy_cach_san_pham where id=?",pack);
+        assertEquals(0,new BigDecimal("8666.67").compareTo(Db.money(primary,"gia_von")));
+        assertEquals(0,new BigDecimal("11000").compareTo(Db.money(primary,"gia_ban")));
+        assertEquals(900000,db.number("select so_tien_phai_tra from cong_no_ncc where lan_nhap_id=?",receipt));
     }
     @Test void damagedDeliveryExcludesRejectedGoodsFromStockAndDebt() {
         var po=(Map<?,?>)purchases.create(new PurchaseController.Create(supplier,null,List.of(new PurchaseController.Line(pack,10,new BigDecimal("10000")))));
