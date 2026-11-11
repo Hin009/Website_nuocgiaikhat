@@ -37,7 +37,7 @@ Vite chuyển tiếp `/api` đến backend tại `http://127.0.0.1:8080`. Fronte
 
 ## Database và ảnh
 
-Docker hiện chỉ nạp **một file** `backend/database/beverage_store_13UC_HOAN_CHINH.sql`. File đã đồng bộ từ PostgreSQL Docker hiện tại: 45 bảng, 492 dòng dữ liệu, 39 bộ đếm ID, cùng các hàm, trigger và khóa ngoại. Số dòng từng bảng đã đối chiếu với database nguồn. Phần bổ sung backend và các migration mới nhất đã có trong bản xuất, không cần chạy thêm SQL khác.
+Docker hiện chỉ nạp **một file** `backend/database/beverage_store_13UC_HOAN_CHINH.sql`. File đã đồng bộ từ PostgreSQL Docker ngày 11/11/2026 lúc 12:32:59 (UTC+7): 54 bảng, 1.179 dòng dữ liệu, 42 bộ đếm ID, cùng các hàm, trigger và khóa ngoại. Bản xuất đã được khôi phục thử trong PostgreSQL riêng; cấu trúc, số dòng, dấu kiểm dữ liệu từng bảng và bộ đếm ID đều khớp. Phần bổ sung backend và các migration mới nhất đã có trong bản xuất, không cần chạy thêm SQL khác.
 
 Chỉ khôi phục vào database/volume **trống**. Docker chỉ tự nạp file khi tạo volume lần đầu. Không chạy file này lên database đang có dữ liệu và không xóa volume hiện tại chỉ để nạp lại SQL.
 
