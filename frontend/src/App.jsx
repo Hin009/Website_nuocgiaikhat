@@ -9,6 +9,7 @@ const CatalogPage = lazy(() => import('@/pages/customer/CatalogPage'));
 const ProductPage = lazy(() => import('@/pages/customer/ProductPage'));
 const CartPage = lazy(() => import('@/pages/customer/CartPage'));
 const CheckoutPage = lazy(() => import('@/pages/customer/CheckoutPage'));
+const MomoPaymentPage = lazy(() => import('@/pages/customer/MomoPaymentPage'));
 const AccountLayout = lazy(() => import('@/pages/customer/AccountPage'));
 const ProfilePage = lazy(() =>
   import('@/pages/customer/AccountPage').then((m) => ({ default: m.ProfilePage })),
@@ -95,6 +96,8 @@ export default function App() {
             <Route path="unauthorized" element={<UnauthorizedPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="payments/momo/:id" element={<MomoPaymentPage />} />
+              <Route path="payments/momo/return" element={<MomoPaymentPage />} />
               <Route path="account" element={<AccountLayout />}>
                 <Route index element={<ProfilePage />} />
                 <Route path="orders" element={<OrdersPage />} />

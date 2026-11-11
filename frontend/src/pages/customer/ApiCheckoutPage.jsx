@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,11 +14,10 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { OrderSummary } from './CartPage';
 import { money, paymentMethodLabels } from '@/utils/format';
-import BankTransferDetails from '@/components/customer/BankTransferDetails';
 import ApiCheckoutVouchers from '@/components/customer/ApiCheckoutVouchers';
 import { provinces } from '@/utils/address';
 const schema = z.object({
-  paymentMethod: z.enum(['COD', 'BANK_TRANSFER']),
+  paymentMethod: z.enum(['COD', 'MOMO']),
   receiver: z.string().trim().min(1, 'Nhập tên người nhận.').max(150),
   phone: phoneSchema,
   address: z.string().trim().min(1, 'Nhập địa chỉ.').max(1000),
@@ -27,6 +26,13 @@ const schema = z.object({
   note: z.string().max(2000),
 });
 export default function ApiCheckoutPage() {
+  const navigate = useNavigate();
+  const [requestKey] = useState(() => {
+    const saved = sessionStorage.getItem('waterbus-checkout-key');
+    const key = saved || crypto.randomUUID();
+    sessionStorage.setItem('waterbus-checkout-key', key);
+    return key;
+  });
   const { user } = useAuth();
   const cart = useCart();
   const client = useQueryClient();
@@ -94,15 +100,17 @@ export default function ApiCheckoutPage() {
     setCoupon(code);
   };
   const action = useAction(
-    (values) => orderService.create(user, { ...values, voucherCode: coupon }, selected),
+    (values) => orderService.create(user, { ...values, voucherCode: coupon, requestKey }, selected),
     'Đã tạo đơn hàng',
   );
   const confirm = async () => {
     try {
       const created = await action.mutateAsync(confirmation);
+      sessionStorage.removeItem('waterbus-checkout-key');
       setOrder(created);
       setConfirmation(null);
       await cart.removePurchased(selected);
+      if (created.paymentMethod === 'MOMO') navigate(`/payments/momo/${created.id}`);
     } catch {
       setConfirmation(null);
     }
@@ -115,13 +123,6 @@ export default function ApiCheckoutPage() {
           Mã đơn <strong>{order.code}</strong> · {money(order.total)}
         </p>
         <p>{paymentMethodLabels[order.paymentMethod]}</p>
-        {order.paymentMethod === 'BANK_TRANSFER' && (
-          <BankTransferDetails
-            bank={options.data?.bankTransfer}
-            amount={order.total}
-            reference={order.code}
-          />
-        )}
         <Button asChild>
           <Link to={`/account/orders/${order.id}`}>Xem đơn hàng</Link>
         </Button>
@@ -215,11 +216,17 @@ export default function ApiCheckoutPage() {
               <>
                 <Field label="Chọn phương thức thanh toán" error={errors.paymentMethod}>
                   <select {...register('paymentMethod')}>
-                    {options.data.paymentMethods.map((method) => (
-                      <option key={method.code} value={method.code}>
-                        {method.label}
-                      </option>
-                    ))}
+                    {options.data.paymentMethods
+                      .filter((method) => ['COD', 'MOMO'].includes(method.code))
+                      .map((method) => (
+                        <option
+                          key={method.code}
+                          value={method.code}
+                          disabled={method.enabled === false}
+                        >
+                          {method.label}
+                        </option>
+                      ))}
                   </select>
                 </Field>
                 <p>
@@ -228,8 +235,11 @@ export default function ApiCheckoutPage() {
                       ?.description
                   }
                 </p>
-                {paymentMethod === 'BANK_TRANSFER' && (
-                  <BankTransferDetails bank={options.data.bankTransfer} />
+                {options.data.momoEnabled === false && (
+                  <p role="status">
+                    MoMo Sandbox chưa sẵn sàng. Cửa hàng cần hoàn tất cấu hình trước khi nhận thanh
+                    toán.
+                  </p>
                 )}
               </>
             )}

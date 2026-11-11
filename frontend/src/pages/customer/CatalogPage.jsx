@@ -1,7 +1,7 @@
 import { canPurchase } from '@/utils/inventory';
 import { sortByExpiry } from '@/utils/expiry';
 import { useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, X, ArrowUpRight } from 'lucide-react';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { useState } from 'react';
 import { useProducts, useCategories } from '@/hooks/useData';
 import { Breadcrumb, QueryState, EmptyState, Pagination } from '@/components/common/Shared';
@@ -74,9 +74,6 @@ export default function CatalogPage() {
           </h1>
           <p>Mỗi lựa chọn là một cách làm mới ngày của bạn.</p>
         </div>
-        <span className="banner-symbol">
-          <ArrowUpRight size={68} strokeWidth={0.8} />
-        </span>
       </div>
       <div className="catalog-layout">
         <aside className={'filters ' + (mobile ? 'filters-open' : '')}>

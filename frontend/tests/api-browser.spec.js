@@ -122,7 +122,7 @@ test('real PostgreSQL catalog, customer checkout, and management pages', async (
   await expect(page.locator('.order-summary').getByText('Miễn phí', { exact: true })).toBeVisible();
   await page.goto('/checkout');
   await expect(page.locator('.order-summary').getByText('Miễn phí', { exact: true })).toBeVisible();
-  await page.getByLabel('Chọn phương thức thanh toán').selectOption('BANK_TRANSFER');
+  await page.getByLabel('Chọn phương thức thanh toán').selectOption('COD');
   await page.getByLabel('Địa chỉ nhận hàng').fill('123 API Test');
   await page.getByLabel('Tỉnh/Thành phố').selectOption('Thành phố Hồ Chí Minh');
   await page.getByLabel('Phường/Xã').selectOption('Phường Bến Thành');
@@ -133,7 +133,7 @@ test('real PostgreSQL catalog, customer checkout, and management pages', async (
   await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   const saved = await (await placed).json();
   expect(saved.phi_van_chuyen).toBe(0);
-  expect(saved.payments[0].phuong_thuc).toBe('BANK_TRANSFER');
+  expect(saved.payments[0].phuong_thuc).toBe('COD');
   expect(saved.payments[0].trang_thai).toBe('PENDING');
   await expect(page.getByRole('heading', { name: 'Đặt hàng thành công' })).toBeVisible();
   await page.getByRole('link', { name: 'Xem đơn hàng', exact: true }).click();

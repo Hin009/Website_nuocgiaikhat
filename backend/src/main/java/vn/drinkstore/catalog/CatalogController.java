@@ -7,6 +7,7 @@ import vn.drinkstore.common.*;
 @RestController
 @RequestMapping("/api/v1/catalog")
 public class CatalogController {
+    @org.springframework.beans.factory.annotation.Autowired private vn.drinkstore.billing.MomoProperties momo;
     private final Db db;
     private final java.math.BigDecimal shipping;
     private final Map<String,String> bankTransfer;
@@ -19,11 +20,12 @@ public class CatalogController {
         this.bankTransfer=Map.of("bankId",bankId.trim(),"bankName",bankName.trim(),"accountNumber",accountNumber.trim(),"accountName",accountName.trim());
     }
     @GetMapping("/checkout-options") public Object checkoutOptions() {
-        return Map.of("shippingFee",shipping,"bankTransfer",bankTransfer,"paymentMethods",List.of(
-            Map.of("code","COD","label","Thanh toán khi nhận hàng (COD)","description","Thanh toán khi đơn hàng được giao."),
-            Map.of("code","BANK_TRANSFER","label","Chuyển khoản ngân hàng","description","Thanh toán qua mã QR hoặc thông tin tài khoản bên dưới. Cửa hàng xác nhận sau khi nhận tiền.")
-        ));
+        var methods=new ArrayList<Map<String,Object>>();
+        methods.add(Map.of("code","COD","label","Thanh toán khi nhận hàng (COD)","description","Thanh toán khi đơn hàng được giao."));
+        methods.add(Map.of("code","MOMO","label","Ví điện tử MoMo (Sandbox)","enabled",momo.ready(),"description",momo.ready()?"Quét QR bằng ứng dụng MoMo Test. Không phát sinh tiền thật.":"MoMo Sandbox chưa sẵn sàng. Cửa hàng cần hoàn tất cấu hình trước khi nhận thanh toán."));
+        return Map.of("shippingFee",shipping,"bankTransfer",bankTransfer,"paymentMethods",methods,"momoEnabled",momo.ready());
     }
+
     private static final String VISIBLE=" s.trang_thai in ('DANG_BAN','HET_HANG') and s.hien_thi and exists(select 1 from loai_san_pham c where c.id=s.loai_san_pham_id and c.hien_thi) and exists(select 1 from thuong_hieu b where b.id=s.thuong_hieu_id and b.hien_thi) ";
     private static final String EXPIRY="""
         case when k.so_luong_co_ban>0 then (

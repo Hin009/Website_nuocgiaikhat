@@ -80,7 +80,9 @@ export function mapOrder(row) {
     color: '#61846b',
     accent: '#edf2df',
     label: l.ten_san_pham,
-    art: 'bottle',
+    imageUrl: l.image_url || '',
+    volume: l.dung_tich || '',
+    art: l.loai_bao_bi === 'LON' ? 'can' : l.loai_bao_bi === 'HOP' ? 'carton' : 'bottle',
   }));
   return {
     source: 'api',

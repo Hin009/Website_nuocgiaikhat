@@ -1293,17 +1293,6 @@ legend {
   font-size: 11px;
   margin-top: 6px;
 }
-.banner-symbol {
-  border: 1px solid #c8d3b6;
-  border-radius: 100%;
-  width: 108px;
-  height: 108px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #91a477;
-  transform: rotate(10deg);
-}
 .catalog-layout {
   display: grid;
   grid-template-columns: 213px 1fr;
@@ -4696,17 +4685,6 @@ td small {
     font-size: 10px;
     max-width: 200px;
   }
-  .banner-symbol {
-    width: 65px;
-    height: 65px;
-    position: absolute;
-    right: 18px;
-    bottom: 24px;
-    opacity: 0.4;
-  }
-  .banner-symbol svg {
-    width: 38px;
-  }
   .catalog-layout {
     grid-template-columns: 1fr;
   }
@@ -6277,3 +6255,11 @@ td small {
     font-size: 10px;
   }
 }
+
+.momo-page { padding-block: 40px; }
+.momo-card { max-width: 560px; margin: auto; text-align: center; }
+.momo-brand { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.momo-logo { background: #a50064; color: white; border-radius: 12px; padding: 10px; font-weight: 800; line-height: .85; font-size: 24px; }
+.momo-sandbox { color: #a50064; font-weight: 600; }
+.momo-qr { display: inline-block; background: white; padding: 8px; border-radius: 16px; border: 1px solid #ead2e2; margin: 16px 0; max-width: 100%; }
+.momo-qr svg { max-width: 100%; height: auto; }

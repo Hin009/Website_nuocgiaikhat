@@ -12,6 +12,7 @@ export const useOrders = (user) =>
   useQuery({
     queryKey: ['orders', user?.id, user?.role],
     queryFn: () => orderService.list(user),
+    refetchInterval: 10000,
     enabled: !!user,
   });
 export function useAction(fn, message) {

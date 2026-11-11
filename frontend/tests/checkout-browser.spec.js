@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 for (const edited of [false, true]) {
-  test(`checkout submits ${edited ? 'edited' : 'saved'} recipient and shows transfer QR`, async ({
+  test(`checkout submits ${edited ? 'edited' : 'saved'} recipient and shows MoMo QR and polls server status`, async ({
     page,
   }) => {
     const address = {
@@ -22,19 +22,15 @@ for (const edited of [false, true]) {
     const writes = [],
       errors = [],
       unexpected = [];
-    let placed = false;
+    let placed = false,
+      paymentStarted = false,
+      paymentPaid = false;
     page.on('pageerror', (error) => errors.push(error.message));
     await page.addInitScript(() =>
       sessionStorage.setItem(
         'waterbus.api.session',
         JSON.stringify({ token: 'test-token', portal: 'customer' }),
       ),
-    );
-    await page.route('https://img.vietqr.io/**', (route) =>
-      route.fulfill({
-        contentType: 'image/svg+xml',
-        body: '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><rect width="240" height="240" fill="white"/></svg>',
-      }),
     );
     await page.route('**/api/v1/**', async (route) => {
       const request = route.request();
@@ -71,7 +67,7 @@ for (const edited of [false, true]) {
           bankTransfer: bank,
           paymentMethods: [
             { code: 'COD', label: 'Thanh toán khi nhận hàng' },
-            { code: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+            { code: 'MOMO', label: 'Ví điện tử MoMo (Sandbox)' },
           ],
         };
       else if (path === '/catalog/promotions')
@@ -136,8 +132,30 @@ for (const edited of [false, true]) {
           id: 20,
           ma_don: 'DH-TEST20',
           tong_tien: request.postDataJSON().couponCode ? 47000 : 50000,
-          payments: [{ phuong_thuc: 'BANK_TRANSFER', trang_thai: 'PENDING' }],
+          payments: [{ phuong_thuc: 'MOMO', trang_thai: 'PENDING' }],
         };
+      } else if (path === '/payments/orders/20/status' || path === '/payments/momo/return') {
+        data = {
+          orderId: 20,
+          orderCode: 'DH-TEST20',
+          orderStatus: 'CHO_XAC_NHAN',
+          phuong_thuc: 'MOMO',
+          so_tien: edited ? 47000 : 50000,
+          trang_thai: paymentPaid ? 'SUCCESS' : 'PENDING',
+          ma_giao_dich: paymentPaid ? 'fixture-trans-123' : null,
+          attempt: paymentStarted
+            ? {
+                momo_order_id: 'WB-fixture-20',
+                status: paymentPaid ? 'SUCCESS' : 'PENDING',
+                qr_code_data: 'fixture-qr-payload',
+                pay_url: 'https://test-payment.momo.vn/v2/gateway/pay?fixture=20',
+                paid_at: paymentPaid ? '2026-11-10T05:00:00Z' : null,
+              }
+            : null,
+        };
+      } else if (path === '/payments/orders/20/momo' && request.method() === 'POST') {
+        paymentStarted = true;
+        data = {};
       } else {
         unexpected.push(path);
         await route.fulfill({ status: 404, json: { message: 'Unexpected API' } });
@@ -226,36 +244,20 @@ for (const edited of [false, true]) {
       await expect(summary.locator('.summary-discount')).toHaveCount(0);
       await expect(summary.locator('.summary-total')).toContainText('50.000');
     }
-    const qr = page.getByRole('img', { name: 'Mã QR chuyển khoản ngân hàng' });
+    const qr = page.getByRole('img', { name: 'Mã QR MoMo Sandbox' });
     await expect(qr).toHaveCount(0);
-    await page.getByLabel('Chọn phương thức thanh toán').selectOption('BANK_TRANSFER');
-    await expect(qr).toBeVisible();
-    expect(
-      await qr.evaluate((element) => element.getBoundingClientRect().width),
-    ).toBeLessThanOrEqual(168);
-    if (edited) {
-      await page.screenshot({ path: 'test-results/checkout-compact-desktop.png', fullPage: true });
-      await page.setViewportSize({ width: 390, height: 844 });
-      expect(
-        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-      ).toBe(true);
-      await page.screenshot({ path: 'test-results/checkout-compact-mobile.png', fullPage: true });
-      await page.setViewportSize({ width: 1280, height: 900 });
-    }
-    await expect(qr).toHaveAttribute('src', /970436-0123456789-qr_only/);
-    await expect(page.locator('.bank-transfer-account')).toContainText(bank.accountNumber);
-    await expect(page.locator('.bank-transfer-account')).toContainText(bank.accountName);
-    await page.getByLabel('Chọn phương thức thanh toán').selectOption('COD');
+    await page.getByLabel('Chọn phương thức thanh toán').selectOption('MOMO');
     await expect(qr).toHaveCount(0);
-    await page.getByLabel('Chọn phương thức thanh toán').selectOption('BANK_TRANSFER');
     await page.getByRole('button', { name: 'Đặt hàng', exact: true }).click();
     await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Đặt hàng thành công' })).toBeVisible();
+    await expect(page).toHaveURL(/payments\/momo\/20$/);
+    await expect(qr).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Chờ thanh toán');
     expect(writes.at(-1)).toMatchObject({
       path: '/orders',
       body: {
         addressId: edited ? 11 : 10,
-        paymentMethod: 'BANK_TRANSFER',
+        paymentMethod: 'MOMO',
         couponCode: edited ? 'SAVE10' : null,
       },
     });
@@ -272,8 +274,15 @@ for (const edited of [false, true]) {
         },
       });
     else expect(writes).toHaveLength(1);
-    await expect(qr).toHaveAttribute('src', edited ? /amount=47000/ : /amount=50000/);
-    await expect(qr).toHaveAttribute('src', /addInfo=DH-TEST20/);
+    expect(writes.at(-1).body.requestKey).toMatch(/^[0-9a-f-]{36}$/);
+    await page.goto('/payments/momo/return?orderId=WB-fixture-20&resultCode=0');
+    await expect(page.getByRole('status')).toHaveText('Chờ thanh toán');
+    await expect(page.getByRole('heading', { name: '✓ Thanh toán thành công' })).toHaveCount(0);
+    paymentPaid = true;
+    await expect(page.getByRole('heading', { name: '✓ Thanh toán thành công' })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText('fixture-trans-123')).toBeVisible();
     expect(unexpected).toEqual([]);
     expect(errors).toEqual([]);
   });

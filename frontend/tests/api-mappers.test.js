@@ -61,4 +61,25 @@ describe('PostgreSQL data displayed on the storefront', () => {
       purchasePrice: 257000,
     });
   });
+  it('uses each order product image and packaging for customer and management details', () => {
+    const order = mapOrder({
+      id: 47,
+      items: [
+        {
+          id: 1,
+          ten_san_pham: 'Vinamilk sữa có đường 180ml',
+          image_url: '/api/v1/uploads/vinamilk.png',
+          dung_tich: '180ml',
+          loai_bao_bi: 'HOP',
+        },
+        { id: 2, ten_san_pham: 'Cola', image_url: null, loai_bao_bi: 'LON' },
+      ],
+    });
+    expect(order.items[0]).toMatchObject({
+      imageUrl: '/api/v1/uploads/vinamilk.png',
+      volume: '180ml',
+      art: 'carton',
+    });
+    expect(order.items[1]).toMatchObject({ imageUrl: '', volume: '', art: 'can' });
+  });
 });

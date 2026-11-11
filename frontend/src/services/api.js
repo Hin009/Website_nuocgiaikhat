@@ -190,7 +190,8 @@ export const orderService = {
   async create(user, values, cart) {
     if (!cart.length) throw new Error('Chưa chọn sản phẩm.');
     // Reuse a saved address only when it matches the editable checkout fields.
-    const saved = user.addresses?.find(
+    const addresses = await get('/me/addresses');
+    const saved = addresses.find(
       (address) =>
         address.ten_nguoi_nhan === values.receiver &&
         address.so_dien_thoai === values.phone &&
@@ -213,6 +214,7 @@ export const orderService = {
     return mapOrder(
       await post('/orders', {
         addressId: numeric(addressId),
+        requestKey: values.requestKey,
         paymentMethod: values.paymentMethod || 'COD',
         note: values.note || '',
         couponCode: values.voucherCode || null,

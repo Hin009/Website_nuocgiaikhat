@@ -34,6 +34,14 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
 app:
+  momo:
+    enabled: ${MOMO_ENABLED:false}
+    environment: ${MOMO_ENVIRONMENT:sandbox}
+    partner-code: ${MOMO_PARTNER_CODE:}
+    access-key: ${MOMO_ACCESS_KEY:}
+    secret-key: ${MOMO_SECRET_KEY:}
+    redirect-url: ${MOMO_REDIRECT_URL:}
+    ipn-url: ${MOMO_IPN_URL:}
   bank-transfer:
     bank-id: ${BANK_TRANSFER_BANK_ID:}
     bank-name: ${BANK_TRANSFER_BANK_NAME:}

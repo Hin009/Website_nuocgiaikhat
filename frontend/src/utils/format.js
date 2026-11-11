@@ -25,5 +25,6 @@ export const normalize = (text) =>
 
 export const paymentMethodLabels = {
   COD: 'Thanh toán khi nhận hàng (COD)',
+  MOMO: 'Ví điện tử MoMo (Sandbox)',
   BANK_TRANSFER: 'Chuyển khoản ngân hàng',
 };

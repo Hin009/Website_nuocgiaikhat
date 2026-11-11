@@ -74,3 +74,6 @@ Danh mục và dữ liệu tồn kho thực tế đã có trong file SQL hoàn c
 Ảnh JPG/PNG/WebP tối đa 5 MB được quản trị tải lên từ form sản phẩm. Docker lưu file tại `/app/uploads` trong volume `product_images`; Java chạy ngoài Docker dùng `UPLOAD_DIR` hoặc `./uploads`. Sao lưu volume ảnh cùng database để khôi phục đủ dữ liệu.
 
 Quản trị viên được đặt lại số lượng từ form thêm/sửa sản phẩm, theo đơn vị cơ bản và có lý do. Backend dùng bảng `dieu_chinh_so_luong` và trigger để ghi lịch sử và cập nhật tồn đúng một lần, không sửa thẳng bảng tồn. Phiên bản tồn cũ bị từ chối để tránh ghi đè giao dịch mới. Nhân viên không được điều chỉnh qua form này.
+# Thanh toán MoMo Sandbox
+
+Luồng checkout hỗ trợ COD và MoMo Sandbox. Xem [hướng dẫn tích hợp MoMo](docs/MOMO_SANDBOX.md) để cấu hình khóa merchant, tunnel HTTPS nhận IPN, chạy Docker và kiểm tra thanh toán từ khách hàng đến quản lý.

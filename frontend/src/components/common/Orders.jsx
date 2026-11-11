@@ -1,4 +1,6 @@
 import { Fragment, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { get } from '@/services/http';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search, ShoppingBag, ArrowLeft, PackageCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +14,12 @@ import { money, date, statusLabels, paymentMethodLabels } from '@/utils/format';
 export function OrdersPage({ admin = false }) {
   const { user } = useAuth();
   const query = useOrders(user);
+  const notifications = useQuery({
+    queryKey: ['payment-notifications', user?.id],
+    queryFn: () => get('/staff/payment-notifications'),
+    enabled: admin && !isMock,
+    refetchInterval: 10000,
+  });
   const [q, setQ] = useState('');
   const [params] = useSearchParams();
   const [status, setStatus] = useState(
@@ -32,6 +40,16 @@ export function OrdersPage({ admin = false }) {
         title={admin ? 'Quản lý đơn hàng' : 'Đơn hàng của tôi'}
         description="Theo dõi và xem chi tiết các đơn hàng."
       />
+      {admin && notifications.data?.items?.length > 0 && (
+        <section className="form-card" aria-label="Thông báo thanh toán">
+          <h2>Thông báo thanh toán MoMo</h2>
+          {notifications.data.items.map((n) => (
+            <p key={n.id}>
+              <Link to={`/admin/orders/${n.order_id}`}>{n.message}</Link> · {date(n.created_at)}
+            </p>
+          ))}
+        </section>
+      )}
       <div className="data-panel">
         <div className="data-toolbar">
           <div className="inline-search">
@@ -300,6 +318,30 @@ function OrderDetails({ id, admin = false, inline = false }) {
                     order.paymentMethod ||
                     'Thanh toán khi nhận hàng (COD)'}
                 </p>
+                {!isMock &&
+                  order.payments.map((payment) => (
+                    <div key={payment.id}>
+                      <p>
+                        {{
+                          PENDING: 'Chờ thanh toán',
+                          SUCCESS: 'Đã thanh toán',
+                          FAILED: 'Thanh toán thất bại',
+                          CANCELLED: 'Đã hủy',
+                          REFUNDED: 'Đã hoàn tiền',
+                        }[payment.trang_thai] || payment.trang_thai}
+                      </p>
+                      {payment.environment && <p>Môi trường: {payment.environment}</p>}
+                      {payment.ma_giao_dich && <p>Mã giao dịch: {payment.ma_giao_dich}</p>}
+                      {payment.paid_at && (
+                        <p>Thanh toán lúc: {new Date(payment.paid_at).toLocaleString('vi-VN')}</p>
+                      )}
+                    </div>
+                  ))}
+                {!admin &&
+                  order.paymentMethod === 'MOMO' &&
+                  !['CANCELLED', 'REJECTED'].includes(order.status) && (
+                    <Link to={`/payments/momo/${order.id}`}>Xem thanh toán MoMo</Link>
+                  )}
                 {isMock && <small>Không phản ánh thanh toán thực tế.</small>}
               </div>
               {allowed.length > 0 && (

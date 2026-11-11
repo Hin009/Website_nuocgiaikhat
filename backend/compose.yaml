@@ -22,6 +22,13 @@ services:
   api:
     build: .
     environment:
+      MOMO_ENABLED: ${MOMO_ENABLED:-false}
+      MOMO_ENVIRONMENT: ${MOMO_ENVIRONMENT:-sandbox}
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      MOMO_REDIRECT_URL: ${MOMO_REDIRECT_URL:-}
+      MOMO_IPN_URL: ${MOMO_IPN_URL:-}
       DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-beverage_store}
       DB_USERNAME: ${DB_USERNAME:-drink_user}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}

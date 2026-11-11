@@ -10,6 +10,7 @@ import vn.drinkstore.security.Access;
 
 @Service
 public class OrderService {
+    @org.springframework.beans.factory.annotation.Autowired private vn.drinkstore.billing.MomoProperties momo;
     private final Db db; private final CartService carts; private final PromotionService promotions; private final Access access; private final BigDecimal shipping;
     public OrderService(Db db,CartService carts,PromotionService promotions,Access access,@Value("${app.shipping-fee}") BigDecimal shipping) {
         this.db=db; this.carts=carts; this.promotions=promotions; this.access=access; this.shipping=shipping;
@@ -26,7 +27,8 @@ public class OrderService {
         return Map.of("subtotal",subtotal,"discount",discount.amount(),"shippingFee",shipping,"total",subtotal.subtract(discount.amount()).add(shipping));
     }
     @Transactional public Object checkout(long customer,long address,String note,String method,String coupon,List<Long> packages) {
-        if(!Set.of("COD","BANK_TRANSFER").contains(method)) throw ApiException.bad("Chỉ COD và chuyển khoản thủ công được cấu hình. Cổng thanh toán chưa tích hợp");
+        if(!Set.of("COD","MOMO").contains(method)) throw ApiException.bad("Chỉ hỗ trợ COD và MoMo Sandbox trong checkout mới");
+        if("MOMO".equals(method)) momo.requireReady();
         long cart=carts.cart(customer);
         var lines=carts.selectedLines(customer,packages);
         if(lines.isEmpty()) throw ApiException.bad("Giỏ hàng trống");
@@ -39,6 +41,7 @@ public class OrderService {
         var discount=promotions.calculate(coupon,customer,lines,true);
         BigDecimal subtotal=lines.stream().map(l->Db.money(l,"gia_ban").multiply(BigDecimal.valueOf(Db.n(l,"so_luong")))).reduce(BigDecimal.ZERO,BigDecimal::add);
         BigDecimal total=subtotal.subtract(discount.amount()).add(shipping);
+        if("MOMO".equals(method) && (total.compareTo(BigDecimal.valueOf(1000))<0 || total.compareTo(BigDecimal.valueOf(50000000))>0 || total.stripTrailingZeros().scale()>0)) throw ApiException.bad("MoMo hỗ trợ số tiền nguyên từ 1.000 đến 50.000.000đ");
         long id=db.id("insert into don_hang(kenh_ban,trang_thai,ma_don,khach_hang_id,dia_chi_nhan,ghi_chu,phi_van_chuyen,giam_gia,tong_tien) values ('ONLINE','CHO_XAC_NHAN',?,?,?,?,?,?,?) returning id","DH-"+UUID.randomUUID(),customer,snapshot,note,shipping,discount.amount(),total);
         for(var l:lines) db.jdbc().update("insert into chi_tiet_don_hang(don_hang_id,quy_cach_id,ten_san_pham,ten_quy_cach,he_so_quy_doi,so_luong,don_gia,gia_von_don_vi) values (?,?,?,?,?,?,?,?)",id,l.get("quy_cach_id"),l.get("ten"),l.get("ten_quy_cach"),l.get("he_so_quy_doi"),l.get("so_luong"),l.get("gia_ban"),l.get("gia_von"));
         if(discount.promotionId()!=null) db.jdbc().update("update don_hang set khuyen_mai_id=? where id=?",discount.promotionId(),id);
@@ -48,14 +51,32 @@ public class OrderService {
         db.audit(access.account(),"CHECKOUT","don_hang",id);
         return detail(id,customer);
     }
+    @Transactional public Object checkoutOnce(long customer,long address,String note,String method,String coupon,List<Long> packages,UUID key,String fingerprint) {
+        if(key==null) throw ApiException.bad("Thiếu requestKey tạo đơn");
+        db.one("select id from khach_hang where id=? for update",customer);
+        var previous=db.rows("select * from checkout_request where customer_id=? and request_key=?",customer,key);
+        if(!previous.isEmpty()) {
+            if(!fingerprint.equals(previous.getFirst().get("fingerprint"))) throw ApiException.bad("requestKey đã dùng cho nội dung khác");
+            return detail(Db.n(previous.getFirst(),"order_id"),customer);
+        }
+        var order=(Map<String,Object>)checkout(customer,address,note,method,coupon,packages);
+        db.jdbc().update("insert into checkout_request(customer_id,request_key,fingerprint,order_id) values (?,?,?,?)",customer,key,fingerprint,order.get("id"));
+        return order;
+    }
     public Object detail(long id,Long customer) {
         var order=customer==null?db.one("select * from don_hang where id=?",id):db.one("select * from don_hang where id=? and khach_hang_id=?",id,customer);
         if(order.get("khach_hang_id")!=null) order.put("tai_khoan_khach_id",db.number("select tai_khoan_id from khach_hang where id=?",order.get("khach_hang_id")));
-        var items=db.jdbc().queryForList("select c.*,q.san_pham_id from chi_tiet_don_hang c join quy_cach_san_pham q on q.id=c.quy_cach_id where c.don_hang_id=? order by c.id",id);
+        var items=db.jdbc().queryForList("""
+            select c.*,q.san_pham_id,s.dung_tich,s.loai_bao_bi,
+                (select h.duong_dan from hinh_anh_san_pham h where h.san_pham_id=q.san_pham_id
+                 order by h.anh_chinh desc,h.thu_tu,h.id limit 1) as image_url
+            from chi_tiet_don_hang c join quy_cach_san_pham q on q.id=c.quy_cach_id
+            join san_pham s on s.id=q.san_pham_id where c.don_hang_id=? order by c.id
+            """,id);
         if(customer!=null) items.forEach(l->l.remove("gia_von_don_vi"));
         order.put("items",items);
         order.put("history",db.jdbc().queryForList("select * from lich_su_trang_thai_don where don_hang_id=? order by id",id));
-        order.put("payments",db.jdbc().queryForList("select id,phuong_thuc,so_tien,trang_thai,thoi_gian from thanh_toan where don_hang_id=?",id)); return order;
+        order.put("payments",db.jdbc().queryForList("select p.id,p.phuong_thuc,p.so_tien,p.trang_thai,p.thoi_gian,p.ma_giao_dich,a.paid_at,a.environment from thanh_toan p left join lateral (select paid_at,environment from momo_payment_attempt where payment_id=p.id order by (status='SUCCESS') desc,id desc limit 1) a on true where p.don_hang_id=? order by p.id",id)); return order;
     }
     @Transactional public Object transition(long id,String status,Long customer) { return transition(id,status,customer,null); }
     @Transactional public Object transition(long id,String status,Long customer,String note) {
@@ -72,6 +93,7 @@ public class OrderService {
             || (old.equals("DANG_GIAO") && Set.of("DA_GIAO","DA_HUY").contains(status));
         if(!valid) throw ApiException.bad("Invalid online order transition");
         if("DANG_CHUAN_BI".equals(status)) {
+            if(db.number("select count(*) from thanh_toan where don_hang_id=? and phuong_thuc='MOMO' and trang_thai<>'SUCCESS'",id)>0) throw ApiException.bad("Đơn MoMo cần thanh toán thành công trước khi xác nhận");
             confirmCoupon(order);
             // Snapshot weighted cost at stock issue, while the lines are still editable.
             for(var p:db.rows("select distinct q.san_pham_id from chi_tiet_don_hang c join quy_cach_san_pham q on q.id=c.quy_cach_id where c.don_hang_id=? order by q.san_pham_id",id))
