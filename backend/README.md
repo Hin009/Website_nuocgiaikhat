@@ -26,14 +26,25 @@ Chỉ chạy SQL vào database trống. Script dùng một giao dịch, tạo b�
 
 Bản SQL trước khi thay, dump Docker gốc và báo cáo kiểm tra lần đồng bộ này nằm trong `.tools/sql-export-20261111-123259/` (Git bỏ qua); báo cáo là `verification.json`. Container PostgreSQL kiểm tra đã được dọn sau khi hoàn tất. Các bản SQL và ảnh sao lưu cũ vẫn nằm trong `.tools/sql-export-20261104/`.
 
-SQL không chứa file ảnh nhị phân. `product_images.tar.gz` trong thư mục sao lưu là bản sao ảnh từ volume Docker. Khi chuyển máy, đưa file này sang máy mới, sau khi chạy Compose thực hiện tại `backend/`:
+SQL không chứa file ảnh nhị phân. Bộ ảnh đi kèm nằm tại `product-images/`: 24 file, tổng 8.078.073 byte, đủ 23 ảnh nội bộ được database tham chiếu. File `database/product-images-manifest.json` ghi tên, dung lượng và SHA-256 của từng ảnh. Đưa cả thư mục ảnh và file manifest lên Git cùng Dockerfile để chuyển máy.
+
+Dockerfile đóng gói ảnh vào `/app/uploads` và gán quyền sở hữu cho user `app`. Trên máy mới, chạy `docker compose up -d --build`; Docker tự sao chép ảnh vào volume `product_images` khi tạo volume trống lần đầu. Không cần tải file nén hay khôi phục ảnh thủ công.
+
+Với volume đã tồn tại nhưng thiếu ảnh, chạy tại `backend/` để bổ sung từ bộ ảnh trong project:
 
 ```powershell
-docker compose cp ./product_images.tar.gz api:/tmp/product_images.tar.gz
-docker compose exec api tar -xzf /tmp/product_images.tar.gz -C /app/uploads
+docker compose cp ./product-images/. api:/app/uploads/
 ```
 
-Không cần chạy các lệnh này trên máy hiện tại vì volume ảnh đã có sẵn.
+Lệnh trên chép đè file trùng tên và giữ lại các ảnh khác trong volume. Không cần chạy trên máy hiện tại vì volume ảnh đã có sẵn. Nếu chạy Java ngoài Docker, chép nội dung `product-images/` vào thư mục `uploads/` (hoặc thư mục đã đặt trong `UPLOAD_DIR`).
+
+Sau khi thêm hoặc thay ảnh trong ứng dụng, xuất lại từ Docker trước khi commit (cần Python 3):
+
+```powershell
+python scripts/export-product-images.py
+```
+
+Script giữ bản sao volume trong `.tools/`, kiểm tra đủ ảnh theo database rồi cập nhật `product-images/` và manifest. Nếu dữ liệu sản phẩm thay đổi, cũng cần xuất lại SQL để đường dẫn ảnh và dữ liệu khớp nhau. Ảnh người dùng tải lên sau này vẫn lưu trong volume; Git chỉ chứa bộ ảnh đã xuất.
 
 ## Những thay đổi theo schema 13UC
 

@@ -43,7 +43,7 @@ Chỉ khôi phục vào database/volume **trống**. Docker chỉ tự nạp fil
 
 Bản xuất chứa dữ liệu thật, bao gồm tài khoản, mật khẩu đã băm, khách hàng và phiên xác thực. Giữ riêng file SQL; không đưa bản snapshot này lên GitHub công khai. Tài khoản quản trị sau khôi phục dùng mật khẩu của database nguồn, không tự đổi theo BOOTSTRAP_ADMIN_PASSWORD nếu đã tồn tại.
 
-SQL lưu đường dẫn ảnh; file ảnh nằm trong volume `product_images`. Ảnh và ba SQL cũ được sao lưu tại `backend/.tools/sql-export-20261104/` (ngoài Git). Xem hướng dẫn khôi phục trong [README backend](backend/README.md).
+SQL lưu đường dẫn ảnh; 24 file ảnh đã được xuất vào `backend/product-images/` để lưu cùng mã nguồn trên GitHub. Khi clone sang máy mới và chạy `docker compose up -d --build`, Docker tự nạp ảnh vào volume `product_images` lúc tạo volume lần đầu. Bảng kê dung lượng và SHA-256 nằm tại `backend/database/product-images-manifest.json`. Xem cách bổ sung ảnh vào volume đã có và xuất lại ảnh trong [README backend](backend/README.md).
 
 ## Các chức năng đã kết nối
 
