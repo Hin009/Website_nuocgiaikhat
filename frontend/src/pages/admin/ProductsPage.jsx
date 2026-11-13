@@ -15,23 +15,19 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { DrinkArt } from '@/components/customer/DrinkArt';
 import { money, normalize } from '@/utils/format';
+import { prepareProductImage } from '@/utils/productImage';
 function ProductForm({ item, categories, onClose }) {
   const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState('');
-  useEffect(() => {
-    if (!file) {
-      setPreview('');
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+  const [preparation, setPreparation] = useState(null);
+  const [imageAttempt, setImageAttempt] = useState(0);
   const action = useAction(async (values) => {
     if (!isMock && Number(values.stock) !== Number(item?.stock || 0) && !values.stockReason?.trim())
       throw new Error('Nhập lý do điều chỉnh số lượng.');
-    if (file && file.size > 5 * 1024 * 1024) throw new Error('Ảnh không được vượt quá 5 MB.');
-    const imageUrl = file ? await adminService.uploadImage(file) : values.imageUrl;
+    const source =
+      file || (values.imageUrl?.trim() !== (item?.imageUrl || '') && values.imageUrl?.trim());
+    if (source && (preparation?.source !== source || !preparation.file))
+      throw new Error(preparation?.error || 'Vui lòng chờ xóa phông ảnh xong trước khi lưu.');
+    const imageUrl = source ? await adminService.uploadImage(preparation.file) : values.imageUrl;
     return adminService.save('products', {
       ...item,
       ...values,
@@ -68,6 +64,42 @@ function ProductForm({ item, categories, onClose }) {
           art: 'can',
         },
   });
+  const imageUrl = watch('imageUrl')?.trim() || '';
+  const imageSource = file || (imageUrl !== (item?.imageUrl || '') && imageUrl) || null;
+  const currentImage = preparation?.source === imageSource ? preparation : null;
+  const processingImage = !!imageSource && !currentImage?.file && !currentImage?.error;
+  const preview = imageSource ? currentImage?.preview : imageUrl;
+  useEffect(() => {
+    if (!imageSource) return;
+    let cancelled = false;
+    let previewUrl;
+    // Debounce pasted/typed URLs; selecting a file starts immediately.
+    const timer = setTimeout(
+      async () => {
+        setPreparation({ source: imageSource, progress: 'Đang chuẩn bị ảnh…' });
+        try {
+          const processed = await prepareProductImage(imageSource, (progress) => {
+            if (!cancelled) setPreparation({ source: imageSource, progress });
+          });
+          if (cancelled) return;
+          previewUrl = URL.createObjectURL(processed);
+          setPreparation({ source: imageSource, file: processed, preview: previewUrl });
+        } catch (error) {
+          if (!cancelled)
+            setPreparation({
+              source: imageSource,
+              error: error.message || 'Không xóa phông được ảnh. Vui lòng thử ảnh khác.',
+            });
+        }
+      },
+      typeof imageSource === 'string' ? 700 : 0,
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [imageSource, imageAttempt]);
   return (
     <form
       onSubmit={handleSubmit(async (values) => {
@@ -137,21 +169,43 @@ function ProductForm({ item, categories, onClose }) {
             <Field className="span-two" label="Hoặc đường dẫn ảnh" error={errors.imageUrl}>
               <input
                 {...register('imageUrl')}
-                disabled={!!file}
+                disabled={!!file || action.isPending}
                 placeholder="https://... hoặc đường dẫn ảnh đã tải lên"
               />
             </Field>
-            {(preview || watch('imageUrl')) && (
+            {processingImage && (
+              <p className="muted-note span-two" role="status" aria-live="polite">
+                {currentImage?.progress || 'Đang chuẩn bị xóa phông…'}
+              </p>
+            )}
+            {currentImage?.error && (
+              <div className="span-two">
+                <p role="alert">{currentImage.error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPreparation(null);
+                    setImageAttempt((value) => value + 1);
+                  }}
+                >
+                  Thử xóa phông lại
+                </Button>
+              </div>
+            )}
+            {preview && (
               <div className="span-two">
                 <img
-                  src={preview || watch('imageUrl')}
+                  src={preview}
                   alt="Xem trước ảnh sản phẩm"
-                  style={{ height: 160, maxWidth: '100%', objectFit: 'contain' }}
+                  style={{ height: 200, width: '100%', objectFit: 'contain' }}
                 />
               </div>
             )}
             <p className="muted-note span-two">
-              Chọn ảnh mới để thay ảnh hiện tại. Để trống nếu muốn giữ ảnh đã lưu.
+              Ảnh mới tự động xóa phông, cắt gọn và lưu PNG nền trong suốt cho mọi sản phẩm. Kiểm
+              tra ảnh xem trước khi lưu. Lần đầu cần Internet để tải bộ xử lý. Không chọn ảnh mới
+              nếu muốn giữ ảnh đã lưu.
             </p>
           </>
         )}
@@ -180,8 +234,11 @@ function ProductForm({ item, categories, onClose }) {
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>
-        <Button type="submit" disabled={action.isPending}>
-          {action.isPending ? 'Đang lưu…' : 'Lưu sản phẩm'}
+        <Button
+          type="submit"
+          disabled={action.isPending || processingImage || !!currentImage?.error}
+        >
+          {processingImage ? 'Đang xóa phông…' : action.isPending ? 'Đang lưu…' : 'Lưu sản phẩm'}
         </Button>
       </div>
     </form>
