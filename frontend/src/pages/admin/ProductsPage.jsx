@@ -3,7 +3,7 @@ import ProductInventoryDetails from './ProductInventoryDetails';
 import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Archive, Package, ChevronDown } from 'lucide-react';
+import { Plus, Search, Pencil, Archive, Trash2, Package, ChevronDown } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '@/schemas';
@@ -87,8 +87,13 @@ function ProductForm({ item, categories, onClose }) {
         <Field label="Thương hiệu" error={errors.brand}>
           <input {...register('brand')} />
         </Field>
-        <Field label="Danh mục" error={errors.categoryId}>
+        <Field label="Loại sản phẩm" error={errors.categoryId}>
           <select {...register('categoryId')}>
+            {item && !categories.some((c) => c.id === item.categoryId) && (
+              <option value={item.categoryId} disabled>
+                Loại sản phẩm đã xóa (giữ nguyên)
+              </option>
+            )}
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -280,6 +285,8 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState(undefined);
   const [remove, setRemove] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const deleteAction = useAction((id) => adminService.deleteProduct(id), 'Đã xóa sản phẩm');
   const [expanded, setExpanded] = useState(null);
   const toggleInventory = (id) => setExpanded((previous) => (previous === id ? null : id));
   const action = useAction(
@@ -326,14 +333,14 @@ export default function ProductsPage() {
             />
           </div>
           <select
-            aria-label="Lọc danh mục"
+            aria-label="Lọc loại sản phẩm"
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
               setPage(1);
             }}
           >
-            <option value="">Tất cả danh mục</option>
+            <option value="">Tất cả loại</option>
             {categories.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -361,7 +368,7 @@ export default function ProductsPage() {
                   <thead>
                     <tr>
                       <th>Sản phẩm</th>
-                      <th>Danh mục</th>
+                      <th>Loại sản phẩm</th>
                       <th>Giá bán</th>
                       <th>Tồn kho</th>
                       <th>Trạng thái</th>
@@ -382,7 +389,11 @@ export default function ProductsPage() {
                                 <button
                                   type="button"
                                   className="product-details-toggle"
-                                  title="Xem hoặc thu gọn chi tiết sản phẩm"
+                                  title={
+                                    expanded === p.id
+                                      ? 'Thu gọn chi tiết sản phẩm'
+                                      : 'Xem chi tiết sản phẩm'
+                                  }
                                   aria-expanded={expanded === p.id}
                                   aria-controls={`product-inventory-${p.id}`}
                                   onClick={() => toggleInventory(p.id)}
@@ -423,17 +434,31 @@ export default function ProductsPage() {
                                 <button
                                   className="icon-button"
                                   aria-label={'Sửa ' + p.name}
+                                  title="Chỉnh sửa sản phẩm"
                                   onClick={() => setEdit(p)}
                                 >
                                   <Pencil size={16} />
                                 </button>
-                                {p.active && (
+                                <button
+                                  className="icon-button"
+                                  aria-label={'Ngừng bán ' + p.name}
+                                  title={
+                                    p.active ? 'Ngừng kinh doanh sản phẩm' : 'Đã ngừng kinh doanh'
+                                  }
+                                  disabled={!p.active || action.isPending || deleteAction.isPending}
+                                  onClick={() => setRemove(p)}
+                                >
+                                  <Archive size={16} />
+                                </button>
+                                {(isMock ? p.active === false : p.discontinued) && (
                                   <button
                                     className="icon-button"
-                                    aria-label={'Ngừng bán ' + p.name}
-                                    onClick={() => setRemove(p)}
+                                    aria-label={'Xóa ' + p.name}
+                                    title="Xóa sản phẩm"
+                                    disabled={deleteAction.isPending}
+                                    onClick={() => setDeleting(p)}
                                   >
-                                    <Archive size={16} />
+                                    <Trash2 size={16} />
                                   </button>
                                 )}
                               </div>
@@ -444,6 +469,11 @@ export default function ProductsPage() {
                               type="button"
                               className="icon-button product-expand-button"
                               aria-label={`Chi tiết ${p.name}`}
+                              title={
+                                expanded === p.id
+                                  ? 'Thu gọn chi tiết sản phẩm'
+                                  : 'Xem chi tiết sản phẩm'
+                              }
                               aria-expanded={expanded === p.id}
                               aria-controls={`product-inventory-${p.id}`}
                               onClick={() => toggleInventory(p.id)}
@@ -490,6 +520,22 @@ export default function ProductsPage() {
           />
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={editable && !!deleting}
+        onOpenChange={(open) => !open && !deleteAction.isPending && setDeleting(null)}
+        title="Xóa sản phẩm?"
+        description={`${deleting?.name || ''} sẽ được xóa khỏi danh sách sản phẩm. Lịch sử đơn hàng, nhập hàng và báo cáo được giữ lại.`}
+        pending={deleteAction.isPending}
+        onConfirm={async () => {
+          try {
+            await deleteAction.mutateAsync(deleting.id);
+            if (expanded === deleting.id) setExpanded(null);
+            setDeleting(null);
+          } catch {
+            // Keep the confirmation available after an API error.
+          }
+        }}
+      />
       <ConfirmDialog
         open={editable && !!remove}
         onOpenChange={(v) => !v && !action.isPending && setRemove(null)}

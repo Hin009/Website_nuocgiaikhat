@@ -83,3 +83,31 @@ describe('PostgreSQL data displayed on the storefront', () => {
     expect(order.items[1]).toMatchObject({ imageUrl: '', volume: '', art: 'can' });
   });
 });
+
+describe('order confirmation identity', () => {
+  it('maps the recorded employee instead of the most recent handler', () => {
+    const order = mapOrder({
+      id: 1,
+      nhan_vien_xu_ly_id: 99,
+      nhan_vien_xac_nhan_id: 7,
+      ten_nhan_vien_xac_nhan: 'Nguyễn An',
+      ma_nhan_vien_xac_nhan: 'NV007',
+      thoi_gian_xac_nhan: '2026-11-11T10:00:00+07:00',
+    });
+    expect(order).toMatchObject({
+      confirmedByEmployeeId: '7',
+      confirmedByName: 'Nguyễn An',
+      confirmedByCode: 'NV007',
+      confirmedAt: '2026-11-11T10:00:00+07:00',
+    });
+    expect(mapOrder({ id: 2, nhan_vien_xu_ly_id: 99 }).confirmedByName).toBe('');
+  });
+});
+
+it('only discontinued products qualify for deletion, including hidden and sold-out products', () => {
+  expect(mapProduct({ id: 1, trang_thai: 'DANG_BAN', hien_thi: false }).discontinued).toBe(false);
+  expect(mapProduct({ id: 1, trang_thai: 'HET_HANG', hien_thi: true }).discontinued).toBe(false);
+  expect(mapProduct({ id: 1, trang_thai: 'NGUNG_KINH_DOANH', hien_thi: false }).discontinued).toBe(
+    true,
+  );
+});

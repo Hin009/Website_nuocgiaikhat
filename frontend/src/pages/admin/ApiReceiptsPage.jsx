@@ -102,8 +102,8 @@ export default function ApiReceiptsPage() {
   return (
     <>
       <PageHeading
-        title="Tạo đơn nhập hàng"
-        description="Theo dõi đơn đặt hàng nhà cung cấp, lịch giao dự kiến và từng lần nhập hàng."
+        title={admin ? 'Tạo đơn nhập hàng' : 'Nhập hàng'}
+        description="Theo dõi đơn nhập hàng, lịch giao dự kiến và từng lần nhập hàng."
         action={
           admin && (
             <div className="row-actions">
@@ -114,10 +114,10 @@ export default function ApiReceiptsPage() {
       />
       <div className="date-filter" aria-label="Lọc ngày đặt hàng và nhập hàng">
         <label>
-          Lọc đơn đặt hàng theo
+          Lọc đơn nhập hàng theo
           <select value={orderDateField} onChange={(e) => setOrderDateField(e.target.value)}>
             <option value="ngay_giao_du_kien">Ngày giao dự kiến</option>
-            <option value="ngay_dat">Ngày đặt đơn</option>
+            <option value="ngay_dat">Ngày tạo đơn</option>
           </select>
         </label>
         <label>
@@ -222,8 +222,8 @@ export default function ApiReceiptsPage() {
             <EmptyState
               title={
                 from || to
-                  ? 'Không có đơn đặt hàng trong khoảng ngày đã chọn'
-                  : 'Không có đơn đặt hàng chờ nhận'
+                  ? 'Không có đơn nhập hàng  trong khoảng ngày đã chọn'
+                  : 'Không đơn nhập hàng  chờ nhận'
               }
               description="Đơn đã lập phiếu nhận hoặc đã nhận đủ được theo dõi ở bảng nhập hàng bên dưới. Đơn nhận một phần sẽ hiện lại sau khi xác nhận phiếu."
             />

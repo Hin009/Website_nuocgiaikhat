@@ -10,7 +10,9 @@ import { QueryState, EmptyState, PageHeading, StatusBadge, Pagination, Field } f
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/alert-dialog';
 import { DrinkArt } from '@/components/customer/DrinkArt';
-import { money, date, statusLabels, paymentMethodLabels } from '@/utils/format';
+import { money, date, normalize, statusLabels, paymentMethodLabels } from '@/utils/format';
+import ReportPeriodFilter from '@/pages/admin/ReportPeriodFilter';
+import { createReportPeriod, reportPeriodBounds, isWithinReportPeriod } from '@/utils/reports';
 export function OrdersPage({ admin = false }) {
   const { user } = useAuth();
   const query = useOrders(user);
@@ -21,6 +23,8 @@ export function OrdersPage({ admin = false }) {
     refetchInterval: 10000,
   });
   const [q, setQ] = useState('');
+  const [period, setPeriod] = useState(createReportPeriod);
+  const periodBounds = reportPeriodBounds(period);
   const [params] = useSearchParams();
   const [status, setStatus] = useState(
     statusLabels[params.get('status')] ? params.get('status') : '',
@@ -30,8 +34,13 @@ export function OrdersPage({ admin = false }) {
   const toggleOrder = (id) => setExpandedId((previous) => (previous === id ? null : id));
   const orders = (query.data || []).filter(
     (o) =>
-      (o.id + ' ' + o.receiver).toLowerCase().includes(q.toLowerCase()) &&
-      (!status || o.status === status),
+      normalize(
+        [o.id, o.code, o.receiver, ...(admin ? [o.confirmedByName, o.confirmedByCode] : [])].join(
+          ' ',
+        ),
+      ).includes(normalize(q)) &&
+      (!status || o.status === status) &&
+      (!admin || isWithinReportPeriod(o.createdAt, periodBounds)),
   );
   const current = Math.min(page, Math.max(1, Math.ceil(orders.length / 8)));
   return (
@@ -51,12 +60,14 @@ export function OrdersPage({ admin = false }) {
         </section>
       )}
       <div className="data-panel">
-        <div className="data-toolbar">
+        <div className={`data-toolbar${admin ? ' orders-toolbar' : ''}`}>
           <div className="inline-search">
             <Search size={17} />
             <input
               aria-label="Tìm đơn hàng"
-              placeholder="Tìm mã đơn, người nhận…"
+              placeholder={
+                admin ? 'Tìm mã đơn, người nhận, nhân viên xác nhận…' : 'Tìm mã đơn, người nhận…'
+              }
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);
@@ -81,7 +92,23 @@ export function OrdersPage({ admin = false }) {
               </option>
             ))}
           </select>
+          {admin && (
+            <ReportPeriodFilter
+              value={period}
+              onChange={(next) => {
+                setPeriod(next);
+                setPage(1);
+                setExpandedId(null);
+              }}
+              label="Lọc thời gian đơn hàng"
+            />
+          )}
         </div>
+        {admin && !periodBounds.valid && (
+          <p className="form-error orders-filter-error" role="alert">
+            Chọn ngày, tháng, quý hoặc năm hợp lệ để lọc theo ngày đặt đơn.
+          </p>
+        )}
         <QueryState query={query}>
           {orders.length ? (
             <>
@@ -91,6 +118,7 @@ export function OrdersPage({ admin = false }) {
                     <tr>
                       <th>Mã đơn hàng</th>
                       {admin && <th>Khách hàng</th>}
+                      {admin && <th>Người xác nhận</th>}
                       <th>Ngày đặt</th>
                       <th>Tổng tiền</th>
                       <th>Trạng thái</th>
@@ -121,6 +149,13 @@ export function OrdersPage({ admin = false }) {
                               <small>{o.phone}</small>
                             </td>
                           )}
+                          {admin && (
+                            <td>
+                              {o.confirmedByName ||
+                                (o.status === 'PENDING' ? 'Chưa xác nhận' : 'Chưa ghi nhận')}
+                              {o.confirmedByCode && <small>{o.confirmedByCode}</small>}
+                            </td>
+                          )}
                           <td>{date(o.createdAt)}</td>
                           <td>
                             <strong>{money(o.total)}</strong>
@@ -143,7 +178,7 @@ export function OrdersPage({ admin = false }) {
                         </tr>
                         {expandedId === o.id && (
                           <tr className="order-expanded-row">
-                            <td colSpan={admin ? 6 : 5}>
+                            <td colSpan={admin ? 7 : 5}>
                               <section
                                 id={'order-details-' + o.id}
                                 className="order-inline-details"
@@ -305,6 +340,22 @@ function OrderDetails({ id, admin = false, inline = false }) {
               </div>
             </div>
             <aside>
+              <div className="form-card order-confirmation-card">
+                <h3>Nhân viên xác nhận</h3>
+                <strong>
+                  {order.confirmedByName ||
+                    (order.status === 'PENDING' ? 'Chưa xác nhận' : 'Chưa ghi nhận thông tin')}
+                </strong>
+                {order.confirmedByCode && <p>Mã nhân viên: {order.confirmedByCode}</p>}
+                {order.confirmedAt && (
+                  <p>
+                    Xác nhận lúc:{' '}
+                    {new Date(order.confirmedAt).toLocaleString('vi-VN', {
+                      timeZone: 'Asia/Ho_Chi_Minh',
+                    })}
+                  </p>
+                )}
+              </div>
               <div className="form-card">
                 <h3>Thông tin nhận hàng</h3>
                 <strong>{order.receiver}</strong>

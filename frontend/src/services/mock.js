@@ -28,11 +28,23 @@ async function run(fn) {
   await new Promise((resolve) => setTimeout(resolve, 180));
   return fn();
 }
+function visibleProduct(db, product) {
+  return (
+    product.active &&
+    !product.deletedAt &&
+    db.categories.some((c) => c.id === product.categoryId && !c.deletedAt && c.active !== false)
+  );
+}
 export const catalogService = {
-  list: () => run(() => readDb().products.filter((p) => p.active)),
+  list: () =>
+    run(() => {
+      const db = readDb();
+      return db.products.filter((p) => visibleProduct(db, p));
+    }),
   detail: (id) =>
     run(() => {
-      const p = readDb().products.find((p) => p.id === id && p.active);
+      const db = readDb();
+      const p = db.products.find((p) => p.id === id && visibleProduct(db, p));
       if (!p) throw new Error('Sản phẩm không tồn tại hoặc đã ngừng kinh doanh.');
       return {
         ...p,
@@ -42,7 +54,8 @@ export const catalogService = {
         ),
       };
     }),
-  categories: () => run(() => readDb().categories),
+  categories: () =>
+    run(() => readDb().categories.filter((c) => !c.deletedAt && c.active !== false)),
 };
 export const authService = {
   me: () =>
@@ -224,13 +237,34 @@ export const orderService = {
     ),
 };
 export const adminService = {
-  all: (key) => run(() => readDb()[key]),
+  deleteProduct: (id) =>
+    run(() =>
+      updateDb((db) => {
+        requireProductManager(db);
+        const product = db.products.find((p) => p.id === id && !p.deletedAt);
+        if (!product) throw new Error('Sản phẩm không còn tồn tại.');
+        if (product.active) throw new Error('Hãy ngừng kinh doanh sản phẩm trước khi xóa.');
+        product.deletedAt = new Date().toISOString();
+      }),
+    ),
+  all: (key) =>
+    run(() =>
+      ['users', 'products', 'categories'].includes(key)
+        ? readDb()[key].filter((item) => !item.deletedAt)
+        : readDb()[key],
+    ),
   save: (key, values) =>
     run(() =>
       updateDb((db) => {
         if (key === 'products') {
           requireProductManager(db);
           values = { ...values, ...productSchema.parse(values) };
+          const previous = db.products.find((p) => p.id === values.id);
+          if (
+            previous?.categoryId !== values.categoryId &&
+            !db.categories.some((c) => c.id === values.categoryId && !c.deletedAt)
+          )
+            throw new Error('Loại sản phẩm đã bị xóa. Hãy chọn loại sản phẩm khác.');
         }
         if (!['products', 'categories', 'users'].includes(key))
           throw new Error('Module không hợp lệ.');
@@ -245,7 +279,7 @@ export const adminService = {
           throw new Error('Tên danh mục đã tồn tại.');
         if (values.id) {
           const item = db[key].find((p) => p.id === values.id);
-          if (!item) throw new Error('Dữ liệu không còn tồn tại.');
+          if (!item || item.deletedAt) throw new Error('Dữ liệu không còn tồn tại.');
           Object.assign(item, values);
           return item;
         }
@@ -262,14 +296,25 @@ export const adminService = {
   remove: (key, id) =>
     run(() =>
       updateDb((db) => {
-        if (key === 'categories' && db.products.some((p) => p.categoryId === id))
-          throw new Error('Danh mục đang có sản phẩm, không thể xóa.');
         if (key === 'products') {
           requireProductManager(db);
           const p = db.products.find((p) => p.id === id);
           if (p) p.active = false;
         } else if (key === 'categories') {
-          db.categories = db.categories.filter((p) => p.id !== id);
+          requireProductManager(db);
+          const category = db.categories.find((c) => c.id === id && !c.deletedAt);
+          if (!category) throw new Error('Loại sản phẩm không còn tồn tại.');
+          category.deletedAt = new Date().toISOString();
+          category.active = false;
+        } else if (key === 'users') {
+          requireProductManager(db);
+          const user = db.users.find((u) => u.id === id && !u.deletedAt);
+          if (!user) throw new Error('Tài khoản không còn tồn tại.');
+          if (id === sessionStorage.getItem('waterbus.mock.session'))
+            throw new Error('Không thể xóa tài khoản đang đăng nhập.');
+          if (user.active)
+            throw new Error('Hãy ngừng hoạt động tài khoản trong Chỉnh sửa trước khi xóa.');
+          user.deletedAt = new Date().toISOString();
         } else throw new Error('Thao tác không được hỗ trợ.');
       }),
     ),

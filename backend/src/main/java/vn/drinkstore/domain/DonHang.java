@@ -23,5 +23,9 @@ public record DonHang(
     OffsetDateTime thoiGianNhanDuKien,
     Boolean daTruSoLuong,
     OffsetDateTime ngayCapNhat,
-    Long khuyenMaiId
+    Long khuyenMaiId,
+    Long nhanVienXacNhanId,
+    String tenNhanVienXacNhan,
+    String maNhanVienXacNhan,
+    OffsetDateTime thoiGianXacNhan
 ) {}

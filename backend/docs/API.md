@@ -222,3 +222,27 @@ Các endpoint công khai (POST):
 | `/api/v1/auth/password-reset/complete` | `{ "challengeId": "UUID", "resetToken": "...", "newPassword": "..." }` | Thông báo đổi thành công; thu hồi phiên đăng nhập cũ |
 
 OTP và quyền đặt mật khẩu hết hạn sau 5 phút, dùng một lần. OTP tối đa 5 lần sai, gửi lại sau 60 giây; có giới hạn theo email/IP. Không trả OTP trong API hoặc ghi mã vào log. Tài khoản nhân viên/quản trị không dùng luồng khách hàng này. Xem [cấu hình Gmail và quy tắc](GMAIL_OTP.md). Khi SMTP chưa cấu hình, endpoint yêu cầu OTP trả 503.
+
+
+## Người xác nhận đơn hàng
+
+Khi chuyển đơn online từ `CHO_XAC_NHAN` sang `DANG_CHUAN_BI`, server lưu nhân viên từ phiên đăng nhập, không nhận thông tin người xác nhận từ client. API danh sách/chi tiết đơn hàng trả thêm `nhan_vien_xac_nhan_id`, `ten_nhan_vien_xac_nhan`, `ma_nhan_vien_xac_nhan`, `thoi_gian_xac_nhan`. Tên và mã được chụp tại thời điểm xác nhận, không thay đổi khi nhân viên đổi tên hoặc nhân viên khác xử lý trạng thái tiếp theo.
+
+Migration `20261111_order_confirmation` tự chạy khi API khởi động. Đơn cũ chỉ được bổ sung người xác nhận từ lịch sử chuyển trạng thái có ghi nhận tài khoản thực hiện; không suy đoán từ người hủy/giao hàng. Các giá trị còn thiếu giữ `null`.
+
+Trang quản lý đơn hàng tìm theo mã đơn, người nhận, tên/mã nhân viên xác nhận và lọc ngày/tháng/quý/năm theo ngày đặt đơn, múi giờ Việt Nam. Tháng hiển thị `MM/YYYY`.
+
+
+### Xóa tài khoản đã ngừng hoạt động
+
+`DELETE /api/v1/management/accounts/{id}` dành cho quản trị viên, trả `204` khi thành công. Tài khoản `ACTIVE` hoặc tài khoản đang đăng nhập bị từ chối (`400`). Không tìm thấy hoặc đã xóa trả `404`. Trước khi xóa, ngừng hoạt động bằng trình chỉnh sửa tài khoản. Sau khi xóa, tài khoản biến mất khỏi danh sách tài khoản, khách hàng và nhân viên; không thể mở lại qua API chỉnh sửa/trạng thái. Phiên đăng nhập và yêu cầu đặt lại mật khẩu bị thu hồi. Hệ thống lưu dấu xóa (`deleted_at`) và trạng thái `DISABLED` để giữ nguyên đơn hàng, hóa đơn và lịch sử tham chiếu; email vẫn được giữ cho danh tính cũ.
+
+
+### Xóa sản phẩm đã ngừng kinh doanh
+
+`DELETE /api/v1/management/products/{id}` chỉ dành cho quản trị viên. Chỉ chấp nhận sản phẩm có `trang_thai=NGUNG_KINH_DOANH`; đang bán hoặc hết hàng trả `400`, chưa tồn tại hoặc đã xóa trả `404`, thành công trả `204`. Sản phẩm được đánh dấu `deleted_at`, ẩn khỏi danh sách quản lý và nhân viên; không thể chỉnh sửa hoặc mở bán lại. Quy cách, đơn hàng, phiếu nhập và dữ liệu báo cáo vẫn được giữ để bảo toàn lịch sử. Ngừng kinh doanh vẫn dùng `PATCH` như trước, cho phép mở bán lại nếu chưa xóa.
+
+
+### Xóa loại sản phẩm và giữ lịch sử
+
+`DELETE /api/v1/management/categories/{id}` đánh dấu `deleted_at`, đặt `hien_thi=false` và trả `204`, kể cả khi có sản phẩm hoặc phạm vi khuyến mãi tham chiếu. Không xóa các liên kết này. Loại đã xóa không xuất hiện trong danh sách quản lý, danh sách công khai và lựa chọn mới; không thể chỉnh sửa hoặc mở lại (`404`). Sản phẩm thuộc loại này bị ẩn khỏi cửa hàng đến khi được chuyển sang loại khác. API chặn gán loại đã xóa cho sản phẩm hoặc phạm vi khuyến mãi mới với thông báo cụ thể (`400`); sản phẩm/khuyến mãi hiện tại có thể giữ nguyên liên kết cũ khi sửa thông tin khác. Xóa lại trả `404`.

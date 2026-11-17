@@ -42,7 +42,18 @@ async function setup(page, admin) {
     if (path === '/auth/login') data = { accessToken: 'test-token', user };
     else if (path === '/auth/me') data = user;
     else if (path === '/staff/profile') data = { id: 1, ho_ten: 'Người kiểm thử' };
-    else if (path === '/management/products/1/stock' && method === 'PATCH') {
+    else if (path === '/management/products/1' && method === 'PATCH') {
+      Object.assign(products[0], req.postDataJSON());
+      data = products[0];
+    } else if (path === '/management/products/1' && method === 'DELETE') {
+      if (products[0]?.trang_thai !== 'NGUNG_KINH_DOANH')
+        return route.fulfill({
+          status: 400,
+          json: { message: 'Hãy ngừng kinh doanh sản phẩm trước khi xóa.' },
+        });
+      products.splice(0, 1);
+      return route.fulfill({ status: 204 });
+    } else if (path === '/management/products/1/stock' && method === 'PATCH') {
       const body = req.postDataJSON();
       if (conflict || body.expectedStock !== stock) {
         stock = 30;
@@ -255,6 +266,46 @@ test('product editing displays automatic price without sending manual pricing', 
   await expect(
     page.getByRole('dialog').getByLabel('Số lượng tồn kho', { exact: true }),
   ).toHaveAttribute('readonly', '');
+  expect(state.unexpected).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('admin stops selling before deleting a product and sees action tooltips', async ({ page }) => {
+  const state = await setup(page, true);
+  const edit = page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true });
+  const stop = page.getByRole('button', { name: 'Ngừng bán Nước kiểm thử', exact: true });
+  await expect(edit).toHaveAttribute('title', 'Chỉnh sửa sản phẩm');
+  await expect(stop).toHaveAttribute('title', 'Ngừng kinh doanh sản phẩm');
+  await expect(
+    page.getByRole('button', { name: 'Chi tiết Nước kiểm thử', exact: true }),
+  ).toHaveAttribute('title', 'Xem chi tiết sản phẩm');
+  await expect(page.getByRole('button', { name: 'Xóa Nước kiểm thử', exact: true })).toHaveCount(0);
+  await stop.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Xác nhận', exact: true })
+    .click();
+  const remove = page.getByRole('button', { name: 'Xóa Nước kiểm thử', exact: true });
+  await expect(remove).toBeVisible();
+  await expect(remove).toHaveAttribute('title', 'Xóa sản phẩm');
+  await expect(stop).toBeDisabled();
+  await expect(remove.locator('xpath=preceding-sibling::button[1]')).toHaveAttribute(
+    'aria-label',
+    'Ngừng bán Nước kiểm thử',
+  );
+  await remove.click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('Nước kiểm thử');
+  await dialog.getByRole('button', { name: 'Quay lại', exact: true }).click();
+  await expect(remove).toBeVisible();
+  await remove.click();
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Hàng ngừng bán/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('row', { name: /Hàng ngừng bán/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true })).toHaveCount(0);
   expect(state.unexpected).toEqual([]);
   expect(state.errors).toEqual([]);
 });

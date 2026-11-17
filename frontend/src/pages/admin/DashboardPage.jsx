@@ -31,6 +31,8 @@ import { Button } from '@/components/ui/button';
 import { DrinkArt } from '@/components/customer/DrinkArt';
 import { isMock } from '@/services';
 import ProductProfitPanel from './ProductProfitPanel';
+import ReportPeriodFilter from './ReportPeriodFilter';
+import { createReportPeriod, reportPeriodBounds } from '@/utils/reports';
 import { money, date } from '@/utils/format';
 const monthKey = (value) => value.slice(0, 7);
 export default function DashboardPage({ report = false }) {
@@ -40,24 +42,33 @@ export default function DashboardPage({ report = false }) {
   const users = useAdmin('users');
   const receipts = useAdmin('receipts');
   const [range, setRange] = useState('all');
+  const [period, setPeriod] = useState(createReportPeriod);
+  const reportBounds = reportPeriodBounds(period);
   const [from, setFrom] = useState('2026-01-01');
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const endDate = new Date(to + 'T23:59:59');
-  const startDate =
-    range === 'custom'
+  const endDate = report
+    ? reportBounds.to
+      ? new Date(reportBounds.to + 'T23:59:59.999+07:00')
+      : new Date(8640000000000000)
+    : new Date(to + 'T23:59:59.999');
+  const startDate = report
+    ? reportBounds.from
+      ? new Date(reportBounds.from + 'T00:00:00+07:00')
+      : new Date(-8640000000000000)
+    : range === 'custom'
       ? new Date(from + 'T00:00:00')
       : range === 'all'
         ? new Date(0)
         : new Date(endDate.getTime() - (Number(range) - 1) * 86400000);
-  startDate.setHours(0, 0, 0, 0);
-  const invalid = range === 'custom' && from > to;
+  if (!report) startDate.setHours(0, 0, 0, 0);
+  const invalid = report ? !reportBounds.valid : range === 'custom' && from > to;
   const filtered = (orders.data || []).filter(
     (o) => !invalid && new Date(o.createdAt) >= startDate && new Date(o.createdAt) <= endDate,
   );
   const completed = filtered.filter((o) => o.status === 'COMPLETED');
   const revenue = completed.reduce((s, o) => s + o.subtotal - Number(o.discountAmount || 0), 0);
   const received = (receipts.data || []).filter(
-    (r) => new Date(r.createdAt) >= startDate && new Date(r.createdAt) <= endDate,
+    (r) => !invalid && new Date(r.createdAt) >= startDate && new Date(r.createdAt) <= endDate,
   );
   const stockLow = products.data?.filter((p) => p.active && isLowStock(p)) || [];
   const chart = useMemo(() => {
@@ -108,41 +119,39 @@ export default function DashboardPage({ report = false }) {
   return (
     <>
       <PageHeading
-        eyebrow={report ? 'DỮ LIỆU & GÓC NHÌN' : 'KHÔNG GIAN VẬN HÀNH'}
+        eyebrow={report ? undefined : 'KHÔNG GIAN VẬN HÀNH'}
         title={
           report
             ? 'Báo cáo & thống kê'
             : 'Chào ' + user.name.split(' ').slice(-1) + ', ngày mới tốt lành!'
         }
-        description={
-          report
-            ? 'Theo dõi doanh thu và kết quả kinh doanh.'
-            : 'Cùng chăm chút cửa hàng và những đơn hàng hôm nay.'
-        }
+        description={report ? undefined : 'Cùng chăm chút cửa hàng và những đơn hàng hôm nay.'}
       />
-      <div className="dashboard-date">
-        <span>
-          <CalendarDays size={16} />
-          {date(new Date())}
-        </span>
-        <div className="range-buttons">
-          {[
-            ['all', 'Toàn bộ'],
-            ['30', '30 ngày'],
-            ['7', '7 ngày'],
-            ['custom', 'Tùy chọn'],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setRange(value)}
-              className={range === value ? 'active' : ''}
-            >
-              {label}
-            </button>
-          ))}
+      {!report && (
+        <div className="dashboard-date">
+          <span>
+            <CalendarDays size={16} />
+            {date(new Date())}
+          </span>
+          <div className="range-buttons">
+            {[
+              ['all', 'Toàn bộ'],
+              ['30', '30 ngày'],
+              ['7', '7 ngày'],
+              ['custom', 'Tùy chọn'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setRange(value)}
+                className={range === value ? 'active' : ''}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      {range === 'custom' && (
+      )}
+      {!report && range === 'custom' && (
         <div className="date-filter">
           <label>
             Từ ngày
@@ -155,11 +164,24 @@ export default function DashboardPage({ report = false }) {
           {invalid && <p className="form-error">Ngày bắt đầu phải trước ngày kết thúc.</p>}
         </div>
       )}
-      {report && user.role === 'ADMIN' && !isMock && !invalid && (
+      {report && user.role === 'ADMIN' && !isMock && (
         <ProductProfitPanel
-          from={range === 'all' ? undefined : startDate.toLocaleDateString('sv-SE')}
-          to={range === 'all' ? undefined : to}
+          from={reportBounds.from}
+          to={reportBounds.to}
+          valid={reportBounds.valid}
+          period={period}
+          onPeriodChange={setPeriod}
         />
+      )}
+      {report && (user.role !== 'ADMIN' || isMock) && (
+        <div className="profit-toolbar">
+          <ReportPeriodFilter value={period} onChange={setPeriod} />
+          {invalid && (
+            <p className="form-error" role="alert">
+              Chọn thời gian hợp lệ.
+            </p>
+          )}
+        </div>
       )}
       <QueryState query={orders}>
         <div className="metrics-grid">

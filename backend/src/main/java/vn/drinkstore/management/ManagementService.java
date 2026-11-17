@@ -29,9 +29,16 @@ public class ManagementService {
     public ManagementService(Db db,Access access) { this.db=db; this.access=access; }
     public Resource resource(String name) { var r=RESOURCES.get(name); if(r==null) throw ApiException.missing(); return r; }
     public Object list(String name,int page,int size) {
+        if(name.equals("categories")) return db.page("select * from loai_san_pham where deleted_at is null order by id desc","select count(*) from loai_san_pham where deleted_at is null",List.of(),page,size);
+        if(name.equals("products")) return db.page("select * from san_pham where deleted_at is null order by id desc","select count(*) from san_pham where deleted_at is null",List.of(),page,size);
         var r=resource(name); String order=name.equals("supplier-products")?"nha_cung_cap_id,san_pham_id":"id desc"; return db.page("select * from "+r.table()+" order by "+order,"select count(*) from "+r.table(),List.of(),page,size);
     }
-    public Object detail(String name,long id) { if(name.equals("supplier-products")) throw ApiException.bad("Use /supplier-products/{supplierId}/{productId}"); return db.one("select * from "+resource(name).table()+" where id=?",id); }
+    public Object detail(String name,long id) { if(name.equals("supplier-products")) throw ApiException.bad("Use /supplier-products/{supplierId}/{productId}"); return db.one("select * from "+resource(name).table()+" where id=?"+(Set.of("products","categories").contains(name)?" and deleted_at is null":""),id); }
+    private void categoryAssignment(Object category,boolean retainExisting) {
+        var row=db.one("select deleted_at from loai_san_pham where id=? for update",category);
+        if(row.get("deleted_at")!=null && !retainExisting)
+            throw ApiException.bad("Loại sản phẩm đã bị xóa. Hãy chọn loại sản phẩm khác.");
+    }
     private String placeholder(String field) {
         if(Set.of("bat_dau","ket_thuc").contains(field)) return "cast(? as timestamptz)";
         if(Set.of("ngay_cap","ngay_het_han").contains(field)) return "cast(? as date)";
@@ -51,7 +58,13 @@ public class ManagementService {
             var v=body.get(key);
             if(v instanceof Map || v instanceof List || (r.required().contains(key) && (v==null || v.toString().isBlank()))) throw ApiException.bad("Giá trị không hợp lệ: "+key);
         }
-        if(id!=null) db.one("select id from "+r.table()+" where id=? for update",id);
+        if(id!=null) db.one("select id from "+r.table()+" where id=?"+(Set.of("products","categories").contains(name)?" and deleted_at is null":"")+" for update",id);
+        if(body.get("loai_san_pham_id")!=null) {
+            boolean retain=id!=null && Set.of("products","promotion-scopes").contains(name)
+                && db.number("select count(*) from "+r.table()+" where id=? and loai_san_pham_id=?",id,body.get("loai_san_pham_id"))>0;
+            categoryAssignment(body.get("loai_san_pham_id"),retain);
+        }
+        if(body.get("san_pham_id")!=null) db.one("select id from san_pham where id=? and deleted_at is null for update",body.get("san_pham_id"));
         if(name.equals("packages") && id!=null && (body.containsKey("san_pham_id") || body.containsKey("he_so_quy_doi"))) {
             throw ApiException.bad("Tạo quy cách mới khi thay sản phẩm hoặc hệ số quy đổi; không thay giá vốn của quy cách cũ.");
         }
@@ -116,11 +129,23 @@ public class ManagementService {
         return detail(name,result);
     }
     @Transactional public void delete(String name,long id) {
-        var r=resource(name); if(name.equals("supplier-products")) throw ApiException.bad("Use composite supplier and product IDs"); db.one("select id from "+r.table()+" where id=? for update",id);
+        var r=resource(name);
+        if(name.equals("supplier-products")) throw ApiException.bad("Use composite supplier and product IDs");
         if(name.equals("products")) {
-            if(db.number("select (select count(*) from chi_tiet_don_hang d join quy_cach_san_pham q on q.id=d.quy_cach_id where q.san_pham_id=?) + (select count(*) from chi_tiet_don_ncc d join quy_cach_san_pham q on q.id=d.quy_cach_id where q.san_pham_id=?)",id,id)>0) throw ApiException.bad("San pham da giao dich, hay an san pham");
+            if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
+            var product=db.one("select trang_thai from san_pham where id=? and deleted_at is null for update",id);
+            if(!"NGUNG_KINH_DOANH".equals(product.get("trang_thai")))
+                throw ApiException.bad("Hãy ngừng kinh doanh sản phẩm trước khi xóa.");
+            // Keep packages and identities referenced by orders, receipts and financial reports.
+            db.jdbc().update("update san_pham set deleted_at=now(),hien_thi=false where id=?",id);
+        } else if(name.equals("categories")) {
+            db.one("select id from loai_san_pham where id=? and deleted_at is null for update",id);
+            db.jdbc().update("update loai_san_pham set deleted_at=now(),hien_thi=false where id=?",id);
+        } else {
+            db.one("select id from "+r.table()+" where id=? for update",id);
+            db.jdbc().update("delete from "+r.table()+" where id=?",id);
         }
-        db.jdbc().update("delete from "+r.table()+" where id=?",id); db.audit(access.account(),"DELETE",r.table(),id);
+        db.audit(access.account(),"DELETE",r.table(),id);
     }
     public Object supplierProduct(long supplier,long product) {
         return db.one("select * from nha_cung_cap_san_pham where nha_cung_cap_id=? and san_pham_id=?",supplier,product);
@@ -134,7 +159,6 @@ public class ManagementService {
         if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
         if(r.price()!=null) throw ApiException.bad("Giá bán tự động bằng giá vốn bình quân × 1,25; không nhập giá bán trong quản lý sản phẩm.");
         if(id==null && r.stock()!=null && r.stock()>0) throw ApiException.bad("Sản phẩm mới bắt đầu tồn kho bằng 0; tạo phiếu nhận hàng để ghi nhận giá vốn và số lượng.");
-        db.one("select id from loai_san_pham where id=?",r.categoryId());
         // Take the inventory lock first, matching order/receipt triggers. Reject stale stock edits.
         if(id!=null && r.stock()!=null) {
             long current=db.number("select so_luong_co_ban from so_luong_san_pham where san_pham_id=? for update",id);
@@ -173,7 +197,7 @@ public class ManagementService {
     }
     @Transactional public Object updateStock(long product,ManagementController.StockUpdate r) {
         if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
-        db.one("select id from san_pham where id=?",product);
+        db.one("select id from san_pham where id=? and deleted_at is null",product);
         long current=db.number("select so_luong_co_ban from so_luong_san_pham where san_pham_id=? for update",product);
         if(r.expectedStock()==null || current!=r.expectedStock())
             throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,"Tồn kho đã thay đổi. Tải lại danh sách rồi kiểm tra số lượng trước khi lưu.");
@@ -208,7 +232,7 @@ public class ManagementService {
     }
     private void replaceSupplierProducts(long supplier,java.util.List<Long> products) {
         var ids=new LinkedHashSet<>(products);
-        for(long product:ids) db.one("select id from san_pham where id=?",product);
+        for(long product:ids) db.one("select id from san_pham where id=? and deleted_at is null",product);
         for(long previous:supplierProductIds(supplier))
             if(!ids.contains(previous)) db.jdbc().update("delete from nha_cung_cap_san_pham where nha_cung_cap_id=? and san_pham_id=?",supplier,previous);
         for(long product:ids) db.jdbc().update("insert into nha_cung_cap_san_pham(nha_cung_cap_id,san_pham_id) values (?,?) on conflict (nha_cung_cap_id,san_pham_id) do nothing",supplier,product);
@@ -250,7 +274,10 @@ public class ManagementService {
         }
         if(!ids.isEmpty()) {
             String table=switch(r.scope()) { case "PRODUCT" -> "san_pham"; case "CATEGORY" -> "loai_san_pham"; case "BRAND" -> "thuong_hieu"; default -> throw ApiException.bad("Phạm vi không hợp lệ"); };
-            for(Long selected:ids) db.one("select id from "+table+" where id=?",selected);
+            for(Long selected:ids) {
+                if("CATEGORY".equals(r.scope())) categoryAssignment(selected,id!=null && db.number("select count(*) from pham_vi_khuyen_mai where khuyen_mai_id=? and loai_san_pham_id=?",id,selected)>0);
+                else db.one("select id from "+table+" where id=?",selected);
+            }
         }
         var fields=new LinkedHashMap<String,Object>();
         fields.put("ma_code",r.code().toUpperCase(Locale.ROOT)); fields.put("ten",r.fullName().trim()); fields.put("mo_ta",optional(r.description()));

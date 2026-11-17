@@ -21,7 +21,7 @@ const categorySchema = z.object({
 function CategoryForm({ item, onClose }) {
   const action = useAction(
     (values) => adminService.save('categories', { ...item, ...values, icon: item?.icon || 'cup' }),
-    'Đã lưu danh mục',
+    'Đã lưu loại sản phẩm',
   );
   const {
     register,
@@ -44,7 +44,7 @@ function CategoryForm({ item, onClose }) {
       })}
       noValidate
     >
-      <Field label="Tên danh mục" error={errors.name}>
+      <Field label="Tên loại sản phẩm" error={errors.name}>
         <input {...register('name')} />
       </Field>
       <Field label="Mô tả ngắn" error={errors.description}>
@@ -58,7 +58,7 @@ function CategoryForm({ item, onClose }) {
           Hủy
         </Button>
         <Button disabled={action.isPending} type="submit">
-          Lưu danh mục
+          Lưu loại sản phẩm
         </Button>
       </div>
     </form>
@@ -70,17 +70,17 @@ export function CategoriesPage() {
   const [edit, setEdit] = useState(undefined);
   const [remove, setRemove] = useState(null);
   const [q, setQ] = useState('');
-  const action = useAction((id) => adminService.remove('categories', id), 'Đã xóa danh mục');
+  const action = useAction((id) => adminService.remove('categories', id), 'Đã xóa loại sản phẩm');
   const data = (query.data || []).filter((c) => normalize(c.name).includes(normalize(q)));
   return (
     <>
       <PageHeading
-        title="Quản lý danh mục"
+        title="Quản lý loại sản phẩm"
         description="Sắp xếp từng nhóm đồ uống để khách dễ tìm hơn."
         action={
           <Button onClick={() => setEdit(null)}>
             <Plus size={17} />
-            Thêm danh mục
+            Thêm loại sản phẩm
           </Button>
         }
       />
@@ -91,8 +91,8 @@ export function CategoriesPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Tìm danh mục…"
-              aria-label="Tìm danh mục"
+              placeholder="Tìm loại sản phẩm…"
+              aria-label="Tìm loại sản phẩm"
             />
           </div>
         </div>
@@ -102,7 +102,7 @@ export function CategoriesPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Danh mục</th>
+                    <th>Loại sản phẩm</th>
                     <th>Mô tả</th>
                     <th>Số sản phẩm</th>
                     <th>Thao tác</th>
@@ -126,14 +126,17 @@ export function CategoriesPage() {
                           <button
                             className="icon-button"
                             onClick={() => setEdit(c)}
-                            aria-label={'Sửa danh mục ' + c.name}
+                            aria-label={'Sửa loại sản phẩm ' + c.name}
+                            title="Chỉnh sửa loại sản phẩm"
                           >
                             <Pencil size={16} />
                           </button>
                           <button
                             className="icon-button"
                             onClick={() => setRemove(c)}
-                            aria-label={'Xóa danh mục ' + c.name}
+                            aria-label={'Xóa loại sản phẩm ' + c.name}
+                            title="Xóa loại sản phẩm"
+                            disabled={action.isPending}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -145,26 +148,28 @@ export function CategoriesPage() {
               </table>
             </div>
           ) : (
-            <EmptyState title="Không tìm thấy danh mục" />
+            <EmptyState title="Không tìm thấy loại sản phẩm" />
           )}
         </QueryState>
       </div>
       <p className="muted-note">
-        Danh mục có sản phẩm liên quan sẽ không thể xóa, kể cả sản phẩm đã ngừng bán.
+        Loại đã xóa sẽ không còn được chọn cho sản phẩm hoặc khuyến mãi mới. Sản phẩm thuộc loại này
+        sẽ ẩn khỏi cửa hàng cho đến khi được chuyển sang loại khác. Lịch sử liên quan vẫn được giữ
+        lại.
       </p>
       <Dialog open={edit !== undefined} onOpenChange={(v) => !v && setEdit(undefined)}>
-        <DialogContent title={edit ? 'Chỉnh sửa danh mục' : 'Thêm danh mục'}>
+        <DialogContent title={edit ? 'Chỉnh sửa loại sản phẩm' : 'Thêm loại sản phẩm'}>
           <CategoryForm key={edit?.id || 'new'} item={edit} onClose={() => setEdit(undefined)} />
         </DialogContent>
       </Dialog>
       <ConfirmDialog
         open={!!remove}
         onOpenChange={(v) => !v && !action.isPending && setRemove(null)}
-        title="Xóa danh mục?"
+        title="Xóa loại sản phẩm?"
         description={
-          'Bạn đang xóa danh mục ' +
+          'Bạn đang xóa loại sản phẩm ' +
           remove?.name +
-          '. Thao tác chỉ hợp lệ khi không còn sản phẩm liên quan.'
+          '. Loại sẽ biến mất khỏi danh sách và các lựa chọn mới. Sản phẩm thuộc loại này sẽ ẩn khỏi cửa hàng cho đến khi chuyển sang loại khác. Lịch sử sản phẩm, đơn hàng và khuyến mãi được giữ lại.'
         }
         pending={action.isPending}
         onConfirm={async () => {
@@ -423,6 +428,8 @@ export function UsersPage({ customers = false }) {
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState(undefined);
   const [detail, setDetail] = useState(null);
+  const [remove, setRemove] = useState(null);
+  const deleteAction = useAction((id) => adminService.remove('users', id), 'Đã xóa tài khoản');
   const data = (query.data || []).filter(
     (u) =>
       (!customers || u.role === 'CUSTOMER') &&
@@ -521,6 +528,9 @@ export function UsersPage({ customers = false }) {
                             <button
                               className="icon-button"
                               aria-label={'Xem ' + u.name}
+                              title={
+                                customers ? 'Xem thông tin khách hàng' : 'Xem thông tin tài khoản'
+                              }
                               onClick={() => setDetail(u)}
                             >
                               <Eye size={17} />
@@ -529,9 +539,21 @@ export function UsersPage({ customers = false }) {
                               <button
                                 className="icon-button"
                                 aria-label={'Sửa ' + u.name}
+                                title="Chỉnh sửa tài khoản"
                                 onClick={() => setEdit(u)}
                               >
                                 <Pencil size={16} />
+                              </button>
+                            )}
+                            {!customers && u.active === false && (
+                              <button
+                                className="icon-button"
+                                aria-label={'Xóa ' + u.name}
+                                title="Xóa tài khoản"
+                                disabled={deleteAction.isPending}
+                                onClick={() => setRemove(u)}
+                              >
+                                <Trash2 size={16} />
                               </button>
                             )}
                           </div>
@@ -552,6 +574,21 @@ export function UsersPage({ customers = false }) {
           )}
         </QueryState>
       </div>
+      <ConfirmDialog
+        open={!!remove}
+        onOpenChange={(open) => !open && !deleteAction.isPending && setRemove(null)}
+        title="Xóa tài khoản?"
+        description={`Xóa tài khoản ${remove?.email || ''}? Tài khoản sẽ không còn xuất hiện trong danh sách và không thể đăng nhập. Lịch sử đơn hàng và thao tác được giữ lại.`}
+        pending={deleteAction.isPending}
+        onConfirm={async () => {
+          try {
+            await deleteAction.mutateAsync(remove.id);
+            setRemove(null);
+          } catch {
+            // The error toast leaves the confirmation open for retry or cancellation.
+          }
+        }}
+      />
       <Dialog open={edit !== undefined} onOpenChange={(v) => !v && setEdit(undefined)}>
         <DialogContent title={edit ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản'}>
           <UserForm key={edit?.id || 'new'} item={edit} onClose={() => setEdit(undefined)} />

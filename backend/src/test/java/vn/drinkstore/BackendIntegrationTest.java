@@ -54,6 +54,7 @@ class BackendIntegrationTest {
             } catch(Exception e) { throw new IllegalStateException("Cannot initialize disposable test database",e); }
         }
     }
+    @Autowired org.springframework.transaction.PlatformTransactionManager testTransactions;
     @Autowired Db db; @Autowired AuthService auth; @Autowired CartService carts; @Autowired OrderService orders;
     @Autowired PurchaseService purchases; @Autowired BillingService billing; @Autowired MockMvc mvc;
     @Autowired SupplierReturnService supplierReturns;
@@ -95,6 +96,168 @@ class BackendIntegrationTest {
         mvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content(complete)).andExpect(status().isBadRequest());
         assertThrows(ApiException.class,()->auth.login("customer@test.invalid","TestPass123!"));
         assertNotNull(auth.login("customer@test.invalid","ReplacementPass123!").get("accessToken"));
+    }
+    @Test void categoryDeletionRetainsProductAndPromotionReferencesAndRejectsNewAssignments() throws Exception {
+        receive(20); long historicalOrder=checkout(); as(admin);
+        long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
+        long promotion=db.id("insert into khuyen_mai(ma_code,ten,loai_giam,gia_tri_giam,bat_dau,ket_thuc,pham_vi_ap_dung) values ('CATEGORY_DELETE','Category history','PERCENT',10,now()-interval '1 day',now()+interval '1 day','CATEGORY') returning id");
+        long scope=db.id("insert into pham_vi_khuyen_mai(khuyen_mai_id,loai_san_pham_id) values (?,?) returning id",promotion,category);
+        db.jdbc().update("update san_pham set trang_thai='NGUNG_KINH_DOANH',hien_thi=false,deleted_at=now() where id=?",product);
+        long liveProduct=db.id("insert into san_pham(sku,ten,loai_san_pham_id,thuong_hieu_id) select 'CAT-LIVE','Live category product',loai_san_pham_id,thuong_hieu_id from san_pham where id=? returning id",product);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(delete("/api/v1/management/categories/"+category).header("Authorization","Bearer "+token)).andExpect(status().isNoContent());
+        assertEquals(1,db.number("select count(*) from loai_san_pham where id=? and deleted_at is not null and not hien_thi",category));
+        assertEquals(2,db.number("select count(*) from san_pham where id in (?,?) and loai_san_pham_id=?",product,liveProduct,category));
+        assertEquals(1,db.number("select count(*) from pham_vi_khuyen_mai where id=? and loai_san_pham_id=?",scope,category));
+        assertFalse(((List<?>)((Map<?,?>)orders.detail(historicalOrder,customer)).get("items")).isEmpty());
+        mvc.perform(get("/api/v1/management/categories").param("size","100").header("Authorization","Bearer "+token)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == "+category+")]").isEmpty());
+        mvc.perform(get("/api/v1/catalog/categories")).andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == "+category+")]").isEmpty());
+        mvc.perform(get("/api/v1/management/categories/"+category).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/management/categories/"+category).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content("{\"hien_thi\":true}")).andExpect(status().isNotFound());
+        mvc.perform(delete("/api/v1/management/categories/"+category).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        String newProduct="{\"sku\":\"CAT-NEW\",\"ten\":\"New category product\",\"loai_san_pham_id\":"+category+",\"thuong_hieu_id\":"+db.number("select thuong_hieu_id from san_pham where id=?",product)+"}";
+        mvc.perform(post("/api/v1/management/products").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(newProduct)).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Loại sản phẩm đã bị xóa. Hãy chọn loại sản phẩm khác."));
+        mvc.perform(post("/api/v1/management/promotion-scopes").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"khuyen_mai_id\":"+promotion+",\"loai_san_pham_id\":"+category+"}")).andExpect(status().isBadRequest());
+        // Existing associations may be retained when editing unrelated data.
+        mvc.perform(patch("/api/v1/management/products/"+liveProduct).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"loai_san_pham_id\":"+category+",\"ten\":\"Retained category product\"}")).andExpect(status().isOk());
+        long replacement=db.id("insert into loai_san_pham(ten) values ('Replacement category') returning id");
+        mvc.perform(patch("/api/v1/management/products/"+liveProduct).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"loai_san_pham_id\":"+replacement+"}")).andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/management/products/"+liveProduct).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"loai_san_pham_id\":"+category+"}")).andExpect(status().isBadRequest());
+    }
+    @Test void productDeletionRequiresDiscontinuedStatusAndPreservesTransactions() throws Exception {
+        receive(20); long historicalOrder=checkout(); as(admin);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        auth.createAccount("delete-product-staff@test.invalid","TestPass123!","NHAN_VIEN");
+        String staffToken=auth.login("delete-product-staff@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(delete("/api/v1/management/products/"+product).header("Authorization","Bearer "+staffToken)).andExpect(status().isForbidden());
+        for(String state:List.of("DANG_BAN","HET_HANG")) {
+            db.jdbc().update("update san_pham set trang_thai=?,hien_thi=false where id=?",state,product);
+            mvc.perform(delete("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)).andExpect(status().isBadRequest());
+        }
+        mvc.perform(patch("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"trang_thai\":\"NGUNG_KINH_DOANH\",\"hien_thi\":false}")).andExpect(status().isOk());
+        mvc.perform(delete("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)).andExpect(status().isNoContent());
+        assertEquals(1,db.number("select count(*) from san_pham where id=? and deleted_at is not null",product));
+        assertEquals(1,db.number("select count(*) from chi_tiet_don_hang where don_hang_id=? and quy_cach_id=?",historicalOrder,pack));
+        assertFalse(((List<?>)((Map<?,?>)orders.detail(historicalOrder,customer)).get("items")).isEmpty());
+        mvc.perform(get("/api/v1/management/products").header("Authorization","Bearer "+token)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == "+product+")]").isEmpty());
+        mvc.perform(get("/api/v1/staff/products").header("Authorization","Bearer "+token)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == "+product+")]").isEmpty());
+        mvc.perform(get("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/staff/products/"+product+"/inventory-details").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        mvc.perform(delete("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/management/products/"+product).header("Authorization","Bearer "+token)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"trang_thai\":\"DANG_BAN\",\"hien_thi\":true}")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/catalog/products/"+product)).andExpect(status().isNotFound());
+    }
+    @Test void accountDeletionRequiresInactiveAccountAndRetainsHistory() throws Exception {
+        receive(20); long historicalOrder=checkout(); as(admin);
+        String adminToken=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        String customerToken=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
+        db.audit(account,"TEST_HISTORY","tai_khoan",account);
+        mvc.perform(delete("/api/v1/management/accounts/"+admin).header("Authorization","Bearer "+customerToken)).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/v1/management/accounts/"+admin).header("Authorization","Bearer "+adminToken)).andExpect(status().isBadRequest());
+        mvc.perform(delete("/api/v1/management/accounts/"+account).header("Authorization","Bearer "+adminToken)).andExpect(status().isBadRequest());
+        assertEquals(0,db.number("select count(*) from tai_khoan where id=? and deleted_at is not null",account));
+        mvc.perform(put("/api/v1/management/account-editor/"+account).header("Authorization","Bearer "+adminToken)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"customer@test.invalid\",\"fullName\":\"Test Customer\",\"phone\":\"0901234567\",\"role\":\"KHACH_HANG\",\"active\":false}"))
+            .andExpect(status().isOk());
+        mvc.perform(delete("/api/v1/management/accounts/"+account).header("Authorization","Bearer "+adminToken)).andExpect(status().isNoContent());
+        assertEquals(1,db.number("select count(*) from tai_khoan where id=? and deleted_at is not null and trang_thai='DISABLED'",account));
+        assertEquals(1,db.number("select count(*) from khach_hang where id=?",customer));
+        assertEquals(1,db.number("select count(*) from don_hang where id=? and khach_hang_id=?",historicalOrder,customer));
+        assertEquals(1,db.number("select count(*) from nhat_ky_hoat_dong where tai_khoan_id=? and hanh_dong='TEST_HISTORY'",account));
+        assertEquals(0,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",account));
+        mvc.perform(get("/api/v1/management/accounts").header("Authorization","Bearer "+adminToken)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.email == 'customer@test.invalid')]").isEmpty());
+        mvc.perform(get("/api/v1/staff/customers").param("q","Test Customer").header("Authorization","Bearer "+adminToken))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+        mvc.perform(delete("/api/v1/management/accounts/"+account).header("Authorization","Bearer "+adminToken)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/management/accounts/"+account+"/status").header("Authorization","Bearer "+adminToken)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ACTIVE\"}")).andExpect(status().isNotFound());
+        org.springframework.security.test.context.TestSecurityContextHolder.clearContext();
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+customerToken)).andExpect(status().isUnauthorized());
+        assertThrows(ApiException.class,()->auth.login("customer@test.invalid","TestPass123!"));
+    }
+    @Test void inactiveEmployeeAccountCanBeDeletedWithoutRemovingEmployeeHistory() throws Exception {
+        long staff=auth.createAccount("delete-staff@test.invalid","TestPass123!","NHAN_VIEN");
+        long profile=db.id("insert into nhan_vien(tai_khoan_id,ma_nhan_vien,ho_ten) values (?,'NV-DELETE','Delete Staff') returning id",staff);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(patch("/api/v1/management/accounts/"+staff+"/status").header("Authorization","Bearer "+token)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+        mvc.perform(delete("/api/v1/management/accounts/"+staff).header("Authorization","Bearer "+token)).andExpect(status().isNoContent());
+        assertEquals(1,db.number("select count(*) from nhan_vien where id=?",profile));
+        mvc.perform(get("/api/v1/management/employees").param("q","Delete Staff").header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+        mvc.perform(patch("/api/v1/management/employees/"+profile+"/employment").header("Authorization","Bearer "+token)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ACTIVE\",\"position\":\"Staff\"}")).andExpect(status().isNotFound());
+    }
+    @Test void orderConfirmationPreservesOriginalEmployeeAndSnapshots() throws Exception {
+        receive(20); long id=checkout(); as(admin);
+        var confirmed=(Map<?,?>)orders.transition(id,"DANG_CHUAN_BI",null);
+        assertEquals(employee,((Number)confirmed.get("nhan_vien_xac_nhan_id")).longValue());
+        assertEquals("Admin Test",confirmed.get("ten_nhan_vien_xac_nhan"));
+        assertEquals("NV-TEST",confirmed.get("ma_nhan_vien_xac_nhan"));
+        assertNotNull(confirmed.get("thoi_gian_xac_nhan"));
+        Object confirmedAt=confirmed.get("thoi_gian_xac_nhan");
+        long staff=auth.createAccount("confirmer2@test.invalid","TestPass123!","NHAN_VIEN");
+        db.jdbc().update("insert into nhan_vien(tai_khoan_id,ma_nhan_vien,ho_ten) values (?,'NV-OTHER','Other Staff')",staff);
+        db.jdbc().update("update nhan_vien set ho_ten='Renamed Admin',ma_nhan_vien='NV-RENAMED' where id=?",employee);
+        as(staff);
+        orders.transition(id,"DANG_CHUAN_BI",null); // retry is idempotent, even from another employee
+        var shipped=(Map<?,?>)orders.transition(id,"DANG_GIAO",null);
+        assertEquals("Admin Test",shipped.get("ten_nhan_vien_xac_nhan"));
+        assertEquals("NV-TEST",shipped.get("ma_nhan_vien_xac_nhan"));
+        assertEquals(confirmedAt,shipped.get("thoi_gian_xac_nhan"));
+        assertEquals("Admin Test",((Map<?,?>)orders.detail(id,customer)).get("ten_nhan_vien_xac_nhan"));
+        String token=auth.login("confirmer2@test.invalid","TestPass123!").get("accessToken").toString();
+        clear();
+        mvc.perform(get("/api/v1/staff/orders/"+id).header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.ten_nhan_vien_xac_nhan").value("Admin Test"));
+        mvc.perform(get("/api/v1/staff/orders").header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[?(@.id == "+id+")].ma_nhan_vien_xac_nhan").value(org.hamcrest.Matchers.hasItem("NV-TEST")));
+    }
+    @Test void orderCancellationDoesNotInventAConfirmer() {
+        receive(20); long id=checkout(); as(admin);
+        var cancelled=(Map<?,?>)orders.transition(id,"DA_HUY",null,"Cancelled before confirmation");
+        assertNotNull(cancelled.get("nhan_vien_xu_ly_id"));
+        assertNull(cancelled.get("nhan_vien_xac_nhan_id"));
+        assertNull(cancelled.get("ten_nhan_vien_xac_nhan"));
+        assertNull(cancelled.get("thoi_gian_xac_nhan"));
+    }
+    @Test void orderConfirmationFailureRollsBackIdentityAndStatus() {
+        receive(2); long first=checkout(); long second=checkout(); as(admin);
+        orders.transition(first,"DANG_CHUAN_BI",null);
+        var nested=new org.springframework.transaction.support.TransactionTemplate(testTransactions);
+        nested.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_NESTED);
+        assertThrows(RuntimeException.class,()->nested.executeWithoutResult(status->orders.transition(second,"DANG_CHUAN_BI",null)));
+        var unchanged=db.one("select * from don_hang where id=?",second);
+        assertEquals("CHO_XAC_NHAN",unchanged.get("trang_thai"));
+        assertNull(unchanged.get("nhan_vien_xac_nhan_id"));
+        assertNull(unchanged.get("ten_nhan_vien_xac_nhan"));
+    }
+    @Test void orderConfirmationBackfillUsesActualHistoryAndKeepsExistingSnapshots() throws Exception {
+        receive(20); long confirmed=checkout(); as(admin); orders.transition(confirmed,"DANG_CHUAN_BI",null);
+        db.jdbc().update("update don_hang set nhan_vien_xac_nhan_id=null,ten_nhan_vien_xac_nhan=null,ma_nhan_vien_xac_nhan=null,thoi_gian_xac_nhan=null where id=?",confirmed);
+        long cancelled=checkout(); as(admin); orders.transition(cancelled,"DA_HUY",null);
+        long unknown=checkout(); as(admin); orders.transition(unknown,"DANG_CHUAN_BI",null);
+        db.jdbc().update("update lich_su_trang_thai_don set tai_khoan_thuc_hien_id=null where don_hang_id=?",unknown);
+        db.jdbc().update("update don_hang set nhan_vien_xac_nhan_id=null,ten_nhan_vien_xac_nhan=null,ma_nhan_vien_xac_nhan=null,thoi_gian_xac_nhan=null where id=?",unknown);
+        String migration=new ClassPathResource("db/migrations/20261111_order_confirmation.sql").getContentAsString(StandardCharsets.UTF_8);
+        db.jdbc().execute(migration);
+        assertEquals("Admin Test",db.one("select ten_nhan_vien_xac_nhan from don_hang where id=?",confirmed).get("ten_nhan_vien_xac_nhan"));
+        assertNull(db.one("select ten_nhan_vien_xac_nhan from don_hang where id=?",cancelled).get("ten_nhan_vien_xac_nhan"));
+        assertNull(db.one("select ten_nhan_vien_xac_nhan from don_hang where id=?",unknown).get("ten_nhan_vien_xac_nhan"));
+        db.jdbc().update("update nhan_vien set ho_ten='New Name' where id=?",employee);
+        db.jdbc().execute(migration);
+        assertEquals("Admin Test",db.one("select ten_nhan_vien_xac_nhan from don_hang where id=?",confirmed).get("ten_nhan_vien_xac_nhan"));
     }
     void as(long id) { SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(id,null,List.of())); }
     long stock() { return db.number("select so_luong_co_ban from so_luong_san_pham where san_pham_id=?",product); }

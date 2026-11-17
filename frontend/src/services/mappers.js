@@ -44,6 +44,7 @@ export function mapProduct(row, packages = [], brands = [], stock) {
     lowStockThreshold: stock?.nguong_canh_bao == null ? null : Number(stock.nguong_canh_bao),
     description: row.mo_ta || '',
     active: row.trang_thai !== 'NGUNG_KINH_DOANH' && row.hien_thi !== false,
+    discontinued: row.trang_thai === 'NGUNG_KINH_DOANH',
     purchasable: row.trang_thai === 'DANG_BAN',
     createdAt: row.ngay_tao,
     nextExpiry: row.next_expiry || null,
@@ -103,6 +104,11 @@ export function mapOrder(row) {
     rawStatus: row.trang_thai,
     channel: row.kenh_ban,
     createdAt: row.ngay_dat,
+    confirmedByEmployeeId:
+      row.nhan_vien_xac_nhan_id == null ? null : String(row.nhan_vien_xac_nhan_id),
+    confirmedByName: row.ten_nhan_vien_xac_nhan || '',
+    confirmedByCode: row.ma_nhan_vien_xac_nhan || '',
+    confirmedAt: row.thoi_gian_xac_nhan || null,
     history: (row.history || []).map((h) => ({
       status: statuses[h.trang_thai_moi] || h.trang_thai_moi,
       at: h.thoi_gian,

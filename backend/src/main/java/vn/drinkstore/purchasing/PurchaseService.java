@@ -17,6 +17,7 @@ public class PurchaseService {
         for(var line:r.items()) {
             ImportPackaging.validate(line);
             long product=line.packageId()==null?line.productId():Db.n(db.one("select san_pham_id from quy_cach_san_pham where id=?",line.packageId()),"san_pham_id");
+            db.one("select id from san_pham where id=? and deleted_at is null for update",product);
             if(db.number("select count(*) from nha_cung_cap_san_pham where nha_cung_cap_id=? and san_pham_id=?",supplier,product)==0)
                 throw ApiException.bad("Sản phẩm chưa được gán cho nhà cung cấp. Cập nhật sản phẩm trong quản lý nhà cung cấp trước khi lập đơn nhập.");
         }

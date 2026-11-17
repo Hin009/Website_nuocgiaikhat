@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { hasRole, safeReturn, authReturn } from '../src/utils/access';
 import { phoneSchema, checkoutSchema, productSchema } from '../src/schemas';
 import { resetDb, readDb, updateDb } from '../src/mocks/database';
-import { orderService, authService, adminService } from '../src/services/mock';
+import { orderService, authService, adminService, catalogService } from '../src/services/mock';
 class MemoryStorage {
   store = {};
   getItem(k) {
@@ -127,7 +127,7 @@ describe('Đơn hàng và kho mẫu', () => {
     expect(readDb().products[0].stock).toBe(stock);
     expect(readDb().orders).toHaveLength(count);
   });
-  it('Phiếu nhập tăng đúng số lượng và danh mục có sản phẩm không được xóa', async () => {
+  it('Phiếu nhập giữ đúng số lượng và xóa loại sản phẩm giữ nguyên lịch sử', async () => {
     sessionStorage.setItem('waterbus.mock.session', 'u3');
     const stock = readDb().products[0].stock;
     const r = await adminService.receipt({
@@ -139,7 +139,14 @@ describe('Đơn hàng và kho mẫu', () => {
     });
     expect(r.total).toBe(168000);
     expect(readDb().products[0].stock).toBe(stock + 24);
-    await expect(adminService.remove('categories', 'soda')).rejects.toThrow('đang có sản phẩm');
+    const before = readDb().products.filter((p) => p.categoryId === 'soda');
+    await adminService.remove('categories', 'soda');
+    expect(readDb().products.filter((p) => p.categoryId === 'soda')).toEqual(before);
+    expect(readDb().categories.find((c) => c.id === 'soda').deletedAt).toBeTruthy();
+    expect((await adminService.all('categories')).some((c) => c.id === 'soda')).toBe(false);
+    expect((await catalogService.categories()).some((c) => c.id === 'soda')).toBe(false);
+    expect((await catalogService.list()).some((p) => p.categoryId === 'soda')).toBe(false);
+    await expect(adminService.remove('categories', 'soda')).rejects.toThrow('không còn tồn tại');
   });
 });
 describe('Tài khoản mẫu', () => {

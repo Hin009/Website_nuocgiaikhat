@@ -283,6 +283,7 @@ export const purchasingService = {
   confirm: (id) => post(`/receipts/${id}/confirm`),
 };
 export const adminService = {
+  deleteProduct: (id) => del(`/management/products/${id}`),
   inventoryDetails: (id) => get(`/staff/products/${id}/inventory-details`),
   adjustStock: (product, values) => patch(`/management/products/${product.id}/stock`, values),
   async uploadImage(file) {
@@ -407,6 +408,7 @@ export const adminService = {
         hien_thi: false,
       });
     if (key === 'categories') return del(`/management/categories/${id}`);
+    if (key === 'users') return del(`/management/accounts/${id}`);
     throw new Error('Thao tác không được hỗ trợ.');
   },
 };

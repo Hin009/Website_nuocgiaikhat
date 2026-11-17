@@ -46,6 +46,7 @@ test('admin expands orders inline and retains order processing controls', async 
     else if (path === '/auth/me') data = user;
     else if (path === '/staff/profile') data = { id: 1, ho_ten: 'Admin' };
     else if (path === '/staff/orders') data = { items: orders, total: orders.length };
+    else if (path === '/staff/payment-notifications') data = [];
     else if (/^\/staff\/orders\/\d+$/.test(path))
       data = orders.find((order) => order.id === Number(path.split('/').at(-1)));
     else if (path === '/staff/orders/1/status' && request.method() === 'PATCH') {
@@ -72,7 +73,10 @@ test('admin expands orders inline and retains order processing controls', async 
   const details = page.getByRole('region', { name: 'Chi tiết đơn 1', exact: true });
   await expect(details.getByRole('heading', { name: 'Đơn hàng #1', exact: true })).toBeVisible();
   await expect(details).toContainText('Nước thử nghiệm');
-  await expect(details.locator('xpath=..')).toHaveAttribute('colspan', '6');
+  await expect(details.locator('xpath=..')).toHaveAttribute(
+    'colspan',
+    String(await page.locator('.data-panel thead th').count()),
+  );
   await expect(page).toHaveURL(/\/admin\/orders$/);
   await details.getByRole('button', { name: 'Xác nhận đơn', exact: true }).click();
   await page

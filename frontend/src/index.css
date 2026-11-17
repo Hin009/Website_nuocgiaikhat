@@ -8,10 +8,13 @@
   --color-secondary: #e6efcb;
   --color-muted: #f4f6f0;
   --color-border: var(--border);
-  --font-sans: 'Be Vietnam Pro', sans-serif;
+  --font-sans: var(--font-family-ui);
   --radius-lg: 12px;
 }
 :root {
+  --font-family-ui: 'Be Vietnam Pro', sans-serif;
+  --font-size-body: 10px;
+  --font-size-caption: 9px;
   --background: #fff;
   --foreground: #263e33;
   --primary: #204c3b;
@@ -19,10 +22,10 @@
   --green: #204c3b;
   --ink: #263e33;
   --gray: #7b847e;
-  font-family: 'Be Vietnam Pro', sans-serif;
+  font-family: var(--font-family-ui);
   color: var(--ink);
   background: #fff;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.65;
   font-synthesis: none;
 }
@@ -74,7 +77,7 @@ select {
   padding: 11px 13px;
   min-width: 0;
   max-width: 100%;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 input:focus,
 textarea:focus,
@@ -137,7 +140,7 @@ p {
   color: var(--gray);
 }
 small {
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 svg {
   flex-shrink: 0;
@@ -169,7 +172,7 @@ legend {
   border-radius: 7px;
   padding: 12px 20px;
   font-weight: 550;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.4;
   white-space: nowrap;
   min-height: 43px;
@@ -215,7 +218,7 @@ legend {
 .btn-sm {
   min-height: 33px;
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .btn-icon {
   width: 35px;
@@ -244,7 +247,7 @@ legend {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   color: var(--green);
 }
@@ -255,7 +258,7 @@ legend {
   border: 0;
   background: transparent;
   color: #809271;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   padding: 0;
 }
 .back-link {
@@ -263,11 +266,11 @@ legend {
   align-items: center;
   gap: 8px;
   color: #7a877b;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-bottom: 25px;
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   font-weight: 650;
   letter-spacing: 1.7px;
   color: #7c8b6c;
@@ -286,7 +289,7 @@ legend {
 }
 .section-heading p,
 .page-heading p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-top: 9px;
 }
 .section-heading .text-link {
@@ -301,7 +304,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #929a90;
   padding: 25px 0;
   flex-wrap: wrap;
@@ -321,7 +324,7 @@ legend {
   justify-content: space-between;
   align-items: center;
   padding: 8px max(48px, calc((100% - 1240px) / 2));
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .announcement > span:last-child {
   display: flex;
@@ -402,12 +405,12 @@ legend {
   border: 0;
   background: transparent;
   width: 100%;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   padding: 14px 0;
   outline: 0;
 }
 .header-search kbd {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   color: #9da595;
   border: 1px solid #dfe5d7;
   border-radius: 4px;
@@ -456,7 +459,7 @@ legend {
   background: transparent;
   color: var(--green);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   text-align: left;
   cursor: pointer;
 }
@@ -474,7 +477,7 @@ legend {
 .account-link small,
 .account-link strong {
   display: block;
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .account-link small {
   color: #9aa092;
@@ -516,7 +519,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   padding: 15px 0;
   position: relative;
   color: #6c786a;
@@ -544,7 +547,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #7b8775;
 }
 .mobile-menu-toggle,
@@ -596,7 +599,7 @@ legend {
   color: #819151;
 }
 .hero-copy > p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   line-height: 1.95;
   margin: 17px 0 24px;
   color: #818970;
@@ -813,7 +816,7 @@ legend {
   justify-content: space-between;
   padding: 15px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #a1a795;
 }
 .demo-inline {
@@ -821,7 +824,7 @@ legend {
   align-items: center;
   gap: 7px;
   color: #899174;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
 }
 .demo-dot {
   display: inline-block;
@@ -840,7 +843,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   margin-bottom: 24px;
 }
 .category-section {
@@ -958,7 +961,7 @@ legend {
   background: #fdfcf5dd;
   color: #8b8d7a;
   padding: 3px 9px;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   border-radius: 4px;
 }
 .product-info {
@@ -979,7 +982,7 @@ legend {
 }
 .product-name {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   line-height: 1.65;
   min-height: 40px;
@@ -993,12 +996,12 @@ legend {
   gap: 7px;
 }
 .product-bottom strong {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   color: #2e563a;
   letter-spacing: -0.5px;
 }
 .product-bottom del {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #a7aa9f;
   margin-left: 7px;
 }
@@ -1061,7 +1064,7 @@ legend {
   align-items: center;
   gap: 9px;
   margin-top: 18px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   font-weight: 500;
 }
 .promo-card > .drink-art {
@@ -1131,7 +1134,7 @@ legend {
 }
 .story-visual > i {
   font-style: normal;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   color: #748763;
   margin-top: 28px;
@@ -1141,7 +1144,7 @@ legend {
   line-height: 1.45;
 }
 .story-copy p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   line-height: 1.95;
   margin-top: 14px;
   max-width: 400px;
@@ -1152,7 +1155,7 @@ legend {
   margin: 18px 0 23px;
 }
 .story-checks span {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1176,7 +1179,7 @@ legend {
 }
 .benefits-grid strong {
   display: block;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #4a6343;
   font-weight: 550;
 }
@@ -1210,7 +1213,7 @@ legend {
   font-size: 25px;
 }
 .footer-grid p {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #a1b29a;
   line-height: 1.9;
   margin-top: 17px;
@@ -1290,7 +1293,7 @@ legend {
   color: #92a167;
 }
 .catalog-banner p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 6px;
 }
 .catalog-layout {
@@ -1325,7 +1328,7 @@ legend {
   padding-bottom: 0;
 }
 .filters legend {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   margin-bottom: 13px;
 }
@@ -1333,7 +1336,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #7d8776;
   margin-bottom: 12px;
   cursor: pointer;
@@ -1343,11 +1346,11 @@ legend {
 }
 .radio-row span {
   margin-left: auto;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #a4ad9b;
 }
 .filters select {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   width: 100%;
 }
 .catalog-toolbar {
@@ -1373,14 +1376,14 @@ legend {
   outline: 0;
   width: 100%;
   padding: 11px 0;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   background: transparent;
 }
 .catalog-toolbar > select {
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .result-count {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #a1a797;
   padding: 19px 0;
 }
@@ -1408,7 +1411,7 @@ legend {
   border-radius: 6px;
   background: transparent;
   color: #7c8973;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .pagination > button.active {
   background: var(--green);
@@ -1439,7 +1442,7 @@ legend {
 .detail-art > span {
   position: absolute;
   bottom: 20px;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #8b9679;
 }
 .detail-copy h1 {
@@ -1447,7 +1450,7 @@ legend {
   line-height: 1.5;
 }
 .detail-volume {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 14px;
 }
 .detail-volume span {
@@ -1471,21 +1474,21 @@ legend {
   font-size: 16px;
 }
 .detail-price > span {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #a58b5a;
   background: #fbf2dc;
   padding: 4px 8px;
   border-radius: 4px;
 }
 .detail-copy > p:not(.detail-volume) {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.9;
 }
 .stock-label {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #6f8c51;
   margin: 22px 0;
 }
@@ -1529,7 +1532,7 @@ legend {
 .quantity span {
   min-width: 35px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .detail-perks {
   border-top: 1px solid var(--border);
@@ -1543,7 +1546,7 @@ legend {
   align-items: center;
   gap: 10px;
   color: #8c967e;
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .tabs {
   display: flex;
@@ -1555,7 +1558,7 @@ legend {
   border: 0;
   background: transparent;
   color: #88917d;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .tabs button.active {
   color: var(--green);
@@ -1564,7 +1567,7 @@ legend {
 .tab-panel {
   padding: 25px 0;
   color: #828d76;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.9;
 }
 .tab-panel h3,
@@ -1580,7 +1583,7 @@ legend {
   gap: 22px;
   border-bottom: 1px solid var(--border);
   padding: 12px 0;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .spec-list dt {
   color: #8b957d;
@@ -1638,19 +1641,19 @@ legend {
   text-transform: uppercase;
 }
 .cart-item-name > a {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   display: block;
 }
 .cart-item-name > span {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #98a18c;
   display: block;
   margin-top: 3px;
 }
 .cart-item-name > strong {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 7px;
 }
 .cart-item .quantity {
@@ -1661,7 +1664,7 @@ legend {
   min-width: 25px;
 }
 .cart-line-total {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   white-space: nowrap;
 }
 .continue-link {
@@ -1683,7 +1686,7 @@ legend {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 14px;
 }
 .order-summary > div > span {
@@ -1702,7 +1705,7 @@ legend {
   font-weight: 550;
 }
 .order-summary > p {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   margin: 12px 0 22px;
 }
 .summary-trust {
@@ -1711,7 +1714,7 @@ legend {
   align-items: center;
   gap: 8px;
   color: #92a07f;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   margin-top: 16px;
 }
 .checkout-form {
@@ -1749,7 +1752,7 @@ legend {
   display: grid;
   gap: 8px;
   margin: 14px 0;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .checkout-coupon-code {
   display: inline-flex;
@@ -1800,7 +1803,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   cursor: pointer;
 }
 .checkout-voucher-ticket {
@@ -1853,19 +1856,19 @@ legend {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .checkout-voucher-info > strong {
   font-size: 17px;
   color: var(--primary);
 }
 .checkout-voucher-info > b {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   letter-spacing: 0.04em;
 }
 .checkout-voucher-info small {
   color: var(--gray);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .checkout-voucher-info small.form-error {
   color: #b42318;
@@ -1887,7 +1890,7 @@ legend {
 }
 .checkout-voucher-footer p {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .checkout-voucher-footer > div {
   display: flex;
@@ -1909,13 +1912,13 @@ legend {
   .checkout-voucher-stamp {
     width: 70px;
     padding: 14px 6px;
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .checkout-voucher-ticket {
     gap: 10px;
   }
   .checkout-voucher-info > strong {
-    font-size: 15px;
+    font-size: var(--font-size-body);
   }
   .checkout-voucher-ticket > input {
     margin-right: 10px;
@@ -1948,7 +1951,7 @@ legend {
   margin: 0;
 }
 .bank-transfer-account dt {
-  font-size: 0.875rem;
+  font-size: var(--font-size-body);
   color: var(--gray);
 }
 .bank-transfer-account dd {
@@ -1999,7 +2002,7 @@ legend {
   min-width: 0;
 }
 .field > span {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   color: #6c7b62;
 }
@@ -2007,10 +2010,10 @@ legend {
 .field textarea,
 .field select {
   width: 100%;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .field small {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #b46d55;
 }
 .field:has(small) input,
@@ -2023,7 +2026,7 @@ legend {
   gap: 18px;
 }
 .form-error {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #ad5d49 !important;
   line-height: 1.7;
 }
@@ -2039,10 +2042,10 @@ legend {
 .payment-option strong,
 .payment-option small {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .payment-option small {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #94a080;
   margin-top: 5px;
 }
@@ -2052,7 +2055,7 @@ legend {
   gap: 20px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .checkout-line:last-child {
   border-bottom: 0;
@@ -2080,7 +2083,7 @@ legend {
   margin-bottom: 15px;
 }
 .success-page > p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-top: 10px;
 }
 .success-actions {
@@ -2119,7 +2122,7 @@ legend {
 }
 .account-sidebar > small {
   color: #9aa38d;
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .account-sidebar nav {
   margin-top: 25px;
@@ -2135,7 +2138,7 @@ legend {
   gap: 10px;
   padding: 12px 10px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   text-align: left;
   color: #829172;
 }
@@ -2150,7 +2153,7 @@ legend {
   font-size: 21px;
 }
 .profile-card > p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin: 8px 0 25px;
 }
 .profile-card .btn {
@@ -2172,12 +2175,12 @@ legend {
   flex: 1;
 }
 .order-detail-item strong {
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .order-detail-item small {
   display: block;
   color: #95a087;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   margin-top: 4px;
 }
 .order-totals {
@@ -2188,18 +2191,18 @@ legend {
   display: flex;
   justify-content: space-between;
   gap: 15px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   padding: 7px 0;
 }
 .order-totals p:last-child {
   border-top: 1px solid var(--border);
   margin-top: 8px;
   color: var(--green);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   padding-top: 14px;
 }
 .order-detail-grid aside p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-top: 10px;
 }
 .timeline-item {
@@ -2215,15 +2218,15 @@ legend {
   margin-top: 5px;
 }
 .timeline-item strong {
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .timeline-item small {
   display: block;
   color: #98a18c;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
 }
 .timeline-item p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 5px;
 }
 .info-page {
@@ -2267,7 +2270,7 @@ legend {
   font-size: 18px;
 }
 .about-grid > div > p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-top: 19px;
   line-height: 1.9;
 }
@@ -2289,7 +2292,7 @@ legend {
   margin-bottom: 12px;
 }
 .guide-steps p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.9;
 }
 .step-number {
@@ -2311,7 +2314,7 @@ legend {
   font-size: 21px;
 }
 .policy-content p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 2;
   margin-top: 12px;
 }
@@ -2340,7 +2343,7 @@ legend {
   line-height: 1.5;
 }
 .auth-pitch p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.9;
   margin-top: 15px;
 }
@@ -2351,7 +2354,7 @@ legend {
   max-height: 440px;
 }
 .auth-visual > small {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #9ca68b;
   margin-top: auto;
 }
@@ -2373,7 +2376,7 @@ legend {
   margin: 12px 0 22px;
 }
 .auth-form-wrap .demo-notice {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   line-height: 1.8;
   padding: 10px 12px;
 }
@@ -2437,7 +2440,7 @@ legend {
   margin-bottom: 22px;
 }
 .demo-accounts > span {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #8c987c;
 }
 .demo-accounts > div {
@@ -2457,13 +2460,13 @@ legend {
   color: #778e60;
   border-radius: 6px;
   padding: 10px 4px;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
 }
 .demo-accounts button:hover {
   background: #e8f0d7;
 }
 .demo-accounts small {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #a0a88f;
 }
 .password-input {
@@ -2482,7 +2485,7 @@ legend {
   color: #a1ac92;
 }
 .auth-switch {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   text-align: center;
   margin-top: 24px;
 }
@@ -2492,7 +2495,7 @@ legend {
   margin-left: 5px;
 }
 .auth-footnote {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   text-align: center;
   line-height: 1.9;
   color: #a7af9d;
@@ -2531,7 +2534,7 @@ legend {
   font-size: 20px;
 }
 .dialog-heading p {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   margin-top: 7px;
 }
 .dialog-actions {
@@ -2548,7 +2551,7 @@ legend {
   font-size: 20px;
 }
 .confirm-dialog > p {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin: 14px 0 20px;
   line-height: 1.9;
 }
@@ -2568,11 +2571,11 @@ legend {
   flex: 1;
 }
 .notification-list strong {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   display: block;
 }
 .notification-list small {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #9aa88d;
 }
 
@@ -2630,7 +2633,7 @@ legend {
   align-items: center;
   gap: 12px;
   color: #a7b99a;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   padding: 12px;
   border-radius: 7px;
   white-space: nowrap;
@@ -2667,18 +2670,18 @@ legend {
   margin-bottom: 22px;
 }
 .sidebar-tip > span {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   color: #d8e4bd;
   font-weight: 550;
 }
 .sidebar-tip p {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #99ad89;
   line-height: 1.8;
   margin-top: 7px;
 }
 .sidebar-tip a {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #d6e1be;
   display: flex;
   align-items: center;
@@ -2690,7 +2693,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 11px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #a2b491;
   padding: 12px;
   width: 100%;
@@ -2721,10 +2724,10 @@ legend {
   background: #d4dfb7;
   color: #49623d;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .sidebar-user strong {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   display: block;
   color: #dce5cc;
@@ -2760,7 +2763,7 @@ legend {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #a2aa97;
 }
 .admin-breadcrumb strong {
@@ -2809,14 +2812,14 @@ legend {
   letter-spacing: -0.9px;
 }
 .admin-main .page-heading p {
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .admin-main .page-heading .eyebrow {
   font-size: 8px;
   letter-spacing: 1.4px;
 }
 .admin-main .page-heading > .btn {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   min-height: 38px;
   padding: 10px 15px;
 }
@@ -2860,7 +2863,7 @@ legend {
   margin: 0 0 25px;
 }
 .dashboard-date > span {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #929e84;
   display: flex;
   align-items: center;
@@ -2879,7 +2882,7 @@ legend {
   border: 0;
   padding: 6px 11px;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   color: #8b997d;
 }
 .range-buttons button.active {
@@ -2895,14 +2898,14 @@ legend {
   flex-wrap: wrap;
 }
 .date-filter label {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #829172;
   display: flex;
   align-items: center;
   gap: 9px;
 }
 .date-filter input {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   padding: 7px;
 }
 .metrics-grid {
@@ -2924,7 +2927,7 @@ legend {
   gap: 8px;
 }
 .metric-top > span:first-child {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #8f9a82;
 }
 .metric-icon {
@@ -3050,7 +3053,7 @@ legend {
   min-width: 0;
 }
 .top-product a {
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   font-weight: 550;
   display: block;
   white-space: nowrap;
@@ -3065,7 +3068,7 @@ legend {
   margin-top: 4px;
 }
 .top-product > strong {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   text-align: right;
 }
@@ -3074,7 +3077,7 @@ legend {
 }
 .top-products-link {
   margin: 15px 23px 20px;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
 }
 .dashboard-bottom {
   display: grid;
@@ -3104,7 +3107,7 @@ legend {
   line-height: 1.45;
 }
 .operations-card p {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   line-height: 2;
   margin: 17px 0 22px;
   color: #8d9a7b;
@@ -3114,7 +3117,7 @@ legend {
   color: #738758;
 }
 .operations-card .btn {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   padding: 11px 14px;
   min-height: 38px;
   background: #d8e5ba;
@@ -3136,14 +3139,14 @@ legend {
   border-bottom: 1px solid var(--border);
 }
 .data-toolbar > select {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   padding: 10px 25px 10px 12px;
 }
 .inline-search {
   max-width: 380px;
 }
 .inline-search input {
-  font-size: 10px;
+  font-size: var(--font-size-body);
 }
 .table-scroll {
   width: 100%;
@@ -3154,7 +3157,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   white-space: nowrap;
 }
 thead {
@@ -3162,7 +3165,7 @@ thead {
 }
 th {
   color: #98a28b;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   font-weight: 500;
   padding: 14px 20px;
   border-bottom: 1px solid #edf0e7;
@@ -3189,7 +3192,7 @@ td small {
   margin-top: 4px;
 }
 .order-id {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   font-weight: 550;
   color: #627a52;
 }
@@ -3273,7 +3276,7 @@ td small {
 }
 .receipt-product-dates {
   margin-top: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .receipt-product-dates summary {
   cursor: pointer;
@@ -3310,7 +3313,7 @@ td small {
   color: #819767;
 }
 .muted-note {
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #a0aa91;
   line-height: 1.9;
   margin-top: 16px;
@@ -3329,7 +3332,7 @@ td small {
 }
 .small-metrics span {
   display: block;
-  font-size: 10px;
+  font-size: var(--font-size-body);
   color: #9da98c;
 }
 .small-metrics strong {
@@ -3359,7 +3362,7 @@ td small {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #8c9b7a;
   padding-top: 20px;
 }
@@ -3376,7 +3379,7 @@ td small {
   gap: 11px;
   min-height: 180px;
   color: #9cab8c;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .spin {
   animation: spin 1.2s linear infinite;
@@ -3406,7 +3409,7 @@ td small {
   font-size: 17px;
 }
 .empty-state p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   max-width: 380px;
   line-height: 1.9;
 }
@@ -3429,7 +3432,7 @@ td small {
   font-size: 15px;
 }
 .error-state p {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   margin-top: 5px;
 }
 .skeleton {
@@ -3605,7 +3608,7 @@ td small {
     font-size: 22px;
   }
   .metric-top > span:first-child {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .metric-card > small {
     font-size: 7px;
@@ -3726,7 +3729,7 @@ td small {
     letter-spacing: -1.3px;
   }
   .hero-copy > p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .hero-proof {
     gap: 7px;
@@ -3845,11 +3848,11 @@ td small {
     font-size: 7px;
   }
   .product-name {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     min-height: 34px;
   }
   .product-bottom strong {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .product-bottom del {
     font-size: 8px;
@@ -3906,7 +3909,7 @@ td small {
     font-size: 24px;
   }
   .story-copy p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .story-checks {
     gap: 10px;
@@ -3965,7 +3968,7 @@ td small {
     font-size: 8px;
   }
   .radio-row {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     gap: 6px;
   }
   .catalog-grid {
@@ -3973,10 +3976,10 @@ td small {
   }
   .catalog-toolbar > select {
     max-width: 150px;
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .catalog-search input {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .detail-art {
     min-height: 390px;
@@ -3998,7 +4001,7 @@ td small {
     font-size: 25px;
   }
   .detail-copy > p:not(.detail-volume) {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .detail-price {
     gap: 8px;
@@ -4007,7 +4010,7 @@ td small {
     gap: 10px;
   }
   .purchase-row > .btn {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     padding: 10px 12px;
   }
   .cart-layout {
@@ -4022,7 +4025,7 @@ td small {
     height: 78px;
   }
   .cart-item-name > a {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .cart-item {
     gap: 10px;
@@ -4044,7 +4047,7 @@ td small {
     font-size: 14px;
   }
   .order-summary .btn {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     padding: 12px 10px;
   }
   .form-grid {
@@ -4064,7 +4067,7 @@ td small {
     padding: 12px;
   }
   .payment-option strong {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .payment-option > svg {
     display: none;
@@ -4081,7 +4084,7 @@ td small {
   }
   .account-sidebar nav a,
   .account-sidebar nav button {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .order-detail-grid {
     grid-template-columns: 1fr;
@@ -4107,7 +4110,7 @@ td small {
     font-size: 14px;
   }
   .guide-steps p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .auth-visual {
     padding: 28px;
@@ -4303,7 +4306,7 @@ td small {
     gap: 0 15px;
   }
   .nav-links a {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     padding: 12px 0;
   }
   .nav-links a.active:after {
@@ -4319,14 +4322,14 @@ td small {
   .mobile-search input {
     flex: 1;
     width: 0;
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .mobile-user {
     display: flex;
     justify-content: space-between;
     padding: 14px 20px;
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-size-body);
     color: #899b73;
   }
   .mobile-user button {
@@ -4358,12 +4361,12 @@ td small {
     letter-spacing: -1.3px;
   }
   .hero-copy > p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     line-height: 1.9;
     margin: 15px 0 19px;
   }
   .hero .btn {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     min-height: 44px;
     padding: 12px 17px;
   }
@@ -4467,7 +4470,7 @@ td small {
     margin-bottom: 7px;
   }
   .section-heading p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     margin-top: 6px;
     line-height: 1.8;
   }
@@ -4527,14 +4530,14 @@ td small {
     font-size: 7px;
   }
   .product-name {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     min-height: 34px;
   }
   .product-bottom {
     margin-top: 8px;
   }
   .product-bottom strong {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .product-bottom del {
     font-size: 7px;
@@ -4565,7 +4568,7 @@ td small {
     height: 200px;
   }
   .promo-card .promo-link {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .promo-fruit {
     right: 75px;
@@ -4595,7 +4598,7 @@ td small {
   }
   .story-visual > i {
     margin-top: 15px;
-    font-size: 13px;
+    font-size: var(--font-size-body);
   }
   .story-copy {
     padding: 0 7px 10px;
@@ -4604,13 +4607,13 @@ td small {
     font-size: 25px;
   }
   .story-copy p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .story-copy .eyebrow {
     font-size: 8px;
   }
   .story-checks span {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .benefits-grid {
     grid-template-columns: 1fr 1fr;
@@ -4664,7 +4667,7 @@ td small {
     padding: 17px 0;
   }
   .breadcrumb {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     padding: 20px 0;
     gap: 5px;
   }
@@ -4682,7 +4685,7 @@ td small {
     font-size: 7px;
   }
   .catalog-banner p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     max-width: 200px;
   }
   .catalog-layout {
@@ -4706,17 +4709,17 @@ td small {
     font-size: 13px;
   }
   .filter-heading .text-button {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .filters legend {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .radio-row {
-    font-size: 12px;
+    font-size: var(--font-size-body);
     margin-bottom: 16px;
   }
   .filters select {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .mobile-only {
     display: inline-flex;
@@ -4731,10 +4734,10 @@ td small {
   .catalog-toolbar > select {
     max-width: none;
     flex: 1;
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .catalog-toolbar > .btn {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     min-height: 38px;
   }
   .catalog-grid {
@@ -4745,7 +4748,7 @@ td small {
     min-height: 180px;
   }
   .catalog-grid .product-name {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     min-height: 34px;
   }
   .catalog-grid .product-info {
@@ -4780,10 +4783,10 @@ td small {
     font-size: 28px;
   }
   .detail-copy > p:not(.detail-volume) {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .purchase-row .btn {
-    font-size: 12px;
+    font-size: var(--font-size-body);
     padding: 12px 18px;
     flex: 1;
   }
@@ -4794,10 +4797,10 @@ td small {
     gap: 24px;
   }
   .tabs button {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .tab-panel {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .related-section {
     margin-top: 25px;
@@ -4815,11 +4818,11 @@ td small {
     font-size: 25px;
   }
   .page-heading p {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     line-height: 1.8;
   }
   .page-heading .btn {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .cart-layout {
     grid-template-columns: 1fr;
@@ -4834,16 +4837,16 @@ td small {
   }
   .order-summary > div,
   .order-summary .btn {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .order-summary > p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .cart-item-name > a {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .cart-item-name > strong {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .cart-art {
     width: 65px;
@@ -4869,7 +4872,7 @@ td small {
     min-height: auto;
   }
   .demo-notice {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     line-height: 1.9;
     padding: 11px 13px;
   }
@@ -4879,14 +4882,14 @@ td small {
   .field input,
   .field textarea,
   .field select {
-    font-size: 13px;
+    font-size: var(--font-size-body);
     padding: 12px;
   }
   .payment-option strong {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .checkout-line {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .checkout-line > strong {
     white-space: nowrap;
@@ -4899,7 +4902,7 @@ td small {
     font-size: 27px;
   }
   .success-page > p {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     line-height: 1.9;
   }
   .success-actions {
@@ -4929,7 +4932,7 @@ td small {
     font-size: 13px;
   }
   .account-sidebar > small {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .account-sidebar nav {
     grid-column: 1/-1;
@@ -4942,7 +4945,7 @@ td small {
   }
   .account-sidebar nav a,
   .account-sidebar nav button {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     padding: 9px 8px;
     gap: 6px;
   }
@@ -4958,13 +4961,13 @@ td small {
     gap: 10px;
   }
   .order-detail-item strong {
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
   .order-detail-item small {
     font-size: 8px;
   }
   .spec-list > div {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .about-grid {
     grid-template-columns: 1fr;
@@ -4987,7 +4990,7 @@ td small {
     font-size: 17px;
   }
   .guide-steps p {
-    font-size: 12px;
+    font-size: var(--font-size-body);
   }
   .info-page {
     padding-bottom: 40px;
@@ -5012,7 +5015,7 @@ td small {
     font-size: 11px;
   }
   .demo-accounts button {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     padding: 12px 6px;
   }
   .dialog-content {
@@ -5023,7 +5026,7 @@ td small {
     font-size: 19px;
   }
   .dialog-heading p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     line-height: 1.8;
   }
   .dialog-content .form-grid > .field {
@@ -5073,7 +5076,7 @@ td small {
     padding-left: 10px;
   }
   .admin-sidebar nav > a {
-    font-size: 12px;
+    font-size: var(--font-size-body);
     padding: 13px 12px;
   }
   .sidebar-label {
@@ -5101,7 +5104,7 @@ td small {
     display: none;
   }
   .admin-breadcrumb {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     gap: 7px;
   }
   .admin-breadcrumb strong {
@@ -5123,11 +5126,11 @@ td small {
     line-height: 1.5;
   }
   .admin-main .page-heading p {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     line-height: 1.9;
   }
   .admin-main .page-heading > .btn {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     min-height: 36px;
   }
   .admin-footer {
@@ -5142,10 +5145,10 @@ td small {
     margin-bottom: 20px;
   }
   .dashboard-date > span {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
   }
   .range-buttons button {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     padding: 6px 10px;
   }
   .metrics-grid {
@@ -5156,7 +5159,7 @@ td small {
     padding: 15px 13px;
   }
   .metric-top > span:first-child {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     line-height: 1.7;
   }
   .metric-icon {
@@ -5195,7 +5198,7 @@ td small {
     padding: 10px 18px;
   }
   .top-product a {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     max-width: none;
   }
   .top-product small {
@@ -5218,11 +5221,11 @@ td small {
     font-size: 24px;
   }
   .operations-card p {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     margin: 16px 0;
   }
   .operations-card .btn {
-    font-size: 11px;
+    font-size: var(--font-size-body);
     margin-bottom: 14px;
   }
   .operations-icon {
@@ -5237,10 +5240,10 @@ td small {
     max-width: none;
   }
   .inline-search input {
-    font-size: 11px;
+    font-size: var(--font-size-body);
   }
   .data-toolbar select {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     flex: 1;
     min-width: 0;
     padding: 11px 24px 11px 10px;
@@ -5260,18 +5263,18 @@ td small {
     font-size: 23px;
   }
   th {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     padding: 13px 15px;
   }
   td {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     padding: 15px;
   }
   .table-scroll {
     max-width: 100%;
   }
   .table-product strong {
-    font-size: 10px;
+    font-size: var(--font-size-body);
     max-width: 165px;
   }
   .admin-main .order-detail-grid {
@@ -5320,7 +5323,7 @@ td small {
   }
   .product-name,
   .catalog-grid .product-name {
-    font-size: 9px;
+    font-size: var(--font-size-caption);
     min-height: 30px;
   }
   .promo-card {
@@ -5378,7 +5381,7 @@ td small {
   }
 }
 .field > label {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   color: #6c7b62;
 }
@@ -5476,7 +5479,7 @@ td small {
 
 .package-savings {
   color: var(--green);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   margin-bottom: 12px;
 }
 
@@ -5550,7 +5553,7 @@ td small {
 }
 .voucher-none {
   align-items: center;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-bottom: 4px;
 }
 .voucher-card {
@@ -5583,31 +5586,31 @@ td small {
 }
 .voucher-content {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .voucher-content > strong {
   display: block;
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .voucher-code {
   display: inline-block;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   margin: 4px 0 8px;
   color: var(--green);
 }
 .voucher-conditions {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #6c7569;
   line-height: 1.7;
 }
 .voucher-unavailable {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #95603e;
   margin-top: 8px;
 }
 .voucher-hint {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #6c7569;
   margin-top: 14px;
 }
@@ -5619,7 +5622,7 @@ td small {
   padding: 14px;
   background: #f4f8ed;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .confirmation-pricing p + p {
   margin-top: 8px;
@@ -5668,7 +5671,7 @@ td small {
   align-items: center;
   gap: 8px;
   color: var(--muted-foreground, #67796d);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .supplier-workflow b {
   display: grid;
@@ -5701,7 +5704,7 @@ td small {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .verification-confirm input {
   flex: 0 0 18px;
@@ -5714,7 +5717,7 @@ td small {
   display: inline-block;
   border-radius: 20px;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   background: #f0f1ed;
   color: #5b665b;
   white-space: nowrap;
@@ -5736,7 +5739,7 @@ td small {
 .promotion-targets legend {
   padding: 0 8px;
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--font-size-body);
 }
 .target-toolbar {
   display: flex;
@@ -5756,7 +5759,7 @@ td small {
   padding: 6px 10px;
   border-radius: 20px;
   background: #eaf0e3;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   color: #214e3e;
 }
 .target-actions {
@@ -5765,7 +5768,7 @@ td small {
   margin: 12px 0;
 }
 .target-actions button {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   color: #245740;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -5807,7 +5810,7 @@ td small {
   border: 1px solid #e1e6dc;
   border-radius: 10px;
   background: white;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   cursor: pointer;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -5858,7 +5861,7 @@ td small {
   background: #fff4da;
   color: #825e1e;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   line-height: 1.7;
 }
 .profit-totals {
@@ -5880,7 +5883,7 @@ td small {
   gap: 8px;
   max-width: 420px;
   margin: 20px 0;
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .profit-search input {
   width: 100%;
@@ -5909,7 +5912,7 @@ td small {
   border-radius: 12px;
   background: #edf5eb;
   color: #21503b;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.7;
 }
 .product-inventory-details {
@@ -5918,7 +5921,7 @@ td small {
   border: 1px solid #e0e7da;
   border-radius: 12px;
   background: #fff;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .product-inventory-details ul {
   list-style: none;
@@ -5939,7 +5942,7 @@ td small {
 }
 .product-inventory-details li span {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   margin-top: 5px;
 }
 .product-inventory-details .adjustment-reason {
@@ -5961,13 +5964,13 @@ td small {
 .product-inventory-details .inventory-scroll-hint {
   display: block;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .product-inventory-details li strong {
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .product-inventory-details li span {
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .product-inventory-grid {
   display: grid;
@@ -5999,7 +6002,7 @@ td small {
   padding: 2px 8px;
   border-radius: 12px;
   background: #edf2e7;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #617253;
 }
 .inventory-empty {
@@ -6104,7 +6107,7 @@ td small {
   background: #204c3b;
 }
 .carousel-counter {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   color: #6d8059;
   letter-spacing: 1px;
   margin-left: 4px;
@@ -6127,7 +6130,7 @@ td small {
 .forgot-password-link {
   text-align: right;
   margin-top: -8px;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   color: #204c3b;
 }
@@ -6150,7 +6153,7 @@ td small {
   border-radius: 9px;
   background: #f4f6ef;
   color: #99a28c;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .password-reset-steps li.is-current {
   background: #e9efdd;
@@ -6170,7 +6173,7 @@ td small {
   padding: 12px 14px;
   border-radius: 9px;
   background: #eef3e6;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   color: #526647;
   line-height: 1.7;
 }
@@ -6178,7 +6181,7 @@ td small {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--font-size-body);
 }
 .auth-switch a:has(svg) {
   display: inline-flex;
@@ -6221,7 +6224,7 @@ td small {
 .checkout-compact .field select,
 .checkout-compact .field textarea {
   padding: 9px 11px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .checkout-compact .field textarea {
   min-height: 60px;
@@ -6252,7 +6255,7 @@ td small {
   .password-reset-steps li {
     padding: 8px 6px;
     gap: 4px;
-    font-size: 10px;
+    font-size: var(--font-size-body);
   }
 }
 
@@ -6263,3 +6266,114 @@ td small {
 .momo-sandbox { color: #a50064; font-weight: 600; }
 .momo-qr { display: inline-block; background: white; padding: 8px; border-radius: 16px; border: 1px solid #ead2e2; margin: 16px 0; max-width: 100%; }
 .momo-qr svg { max-width: 100%; height: auto; }
+
+/* Report controls stay next to product search and wrap on narrow screens. */
+.profit-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 20px 0;
+}
+.profit-toolbar .profit-search {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.report-period-filter {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 100%;
+}
+.report-period-filter label {
+  display: grid;
+  gap: 8px;
+  font-size: var(--font-size-body);
+}
+.report-period-filter input,
+.report-period-filter select {
+  min-height: 46px;
+  min-width: 120px;
+  max-width: 100%;
+  border: 1px solid #dce5d7;
+  background: white;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+}
+.report-period-filter input[type='number'] { width: 120px; }
+.profit-table .profit-sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.profit-sort svg { flex-shrink: 0; opacity: .55; }
+.profit-table th[aria-sort='ascending'] .profit-sort,
+.profit-table th[aria-sort='descending'] .profit-sort,
+.profit-table .profit-sort:hover { color: #24573e; }
+.profit-sort:focus-visible { outline: 2px solid #56876c; outline-offset: 4px; border-radius: 3px; }
+.profit-sort-pair { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+@media (max-width: 600px) {
+  .profit-toolbar .profit-search { max-width: none; flex-basis: 100%; }
+  .report-period-filter { width: 100%; }
+  .report-period-filter label { flex: 1 1 120px; min-width: 0; }
+  .report-period-filter input, .report-period-filter select { width: 100%; min-width: 0; }
+}
+
+.report-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 20px;
+}
+.report-export-spinner { animation: report-export-spin 1s linear infinite; }
+@keyframes report-export-spin { to { transform: rotate(360deg); } }
+@media print { iframe[title="Bản in báo cáo WaterBus"] { border: 0; } }
+
+.report-month-field { display: grid; gap: 8px; font-size: var(--font-size-body); }
+.report-month-input { position: relative; }
+.report-month-input > input { width: 180px; padding-right: 44px; }
+.report-month-calendar {
+  position: absolute; right: 12px; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center; width: 24px;
+}
+.report-month-calendar input {
+  position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0;
+  min-height: 0; padding: 0; border: 0; opacity: 0; cursor: pointer;
+}
+.report-month-calendar input::-webkit-calendar-picker-indicator {
+  position: absolute; inset: 0; width: auto; height: auto; cursor: pointer;
+}
+.report-month-calendar:focus-within { outline: 2px solid #56876c; outline-offset: 3px; border-radius: 3px; }
+@media (max-width: 600px) {
+  .report-month-field { flex: 1 1 160px; min-width: 0; }
+  .report-month-input > input { width: 100%; }
+}
+
+.data-toolbar.orders-toolbar { flex-wrap: wrap; align-items: flex-end; }
+.orders-toolbar > .inline-search { flex: 1 1 280px; max-width: 460px; }
+.orders-toolbar > select { min-height: 46px; }
+.orders-filter-error { margin: 16px 21px; }
+.order-confirmation-card strong { display: block; }
+
+/* Keep native controls and notifications on the shared UI typeface. */
+input::file-selector-button {
+  font: inherit;
+}
+[data-sonner-toaster],
+[data-sonner-toast],
+[data-sonner-toast] [data-description],
+[data-sonner-toast] [data-button] {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
+}

@@ -9,6 +9,7 @@ import vn.drinkstore.common.*;
 import vn.drinkstore.security.Access;
 
 @Service
+@org.springframework.context.annotation.DependsOn("orderConfirmationSchema")
 public class OrderService {
     @org.springframework.beans.factory.annotation.Autowired private vn.drinkstore.billing.MomoProperties momo;
     private final Db db; private final CartService carts; private final PromotionService promotions; private final Access access; private final BigDecimal shipping;
@@ -103,7 +104,12 @@ public class OrderService {
         // Database trigger is the ONLY writer of stock and cancellation rollback.
         db.jdbc().update("update don_hang set trang_thai=?,nhan_vien_xu_ly_id=coalesce(nhan_vien_xu_ly_id,?) where id=?",status,customer==null?access.employee():null,id);
         db.jdbc().update("update lich_su_trang_thai_don set tai_khoan_thuc_hien_id=?,ghi_chu=? where id=(select max(id) from lich_su_trang_thai_don where don_hang_id=?)",access.account(),note,id);
-        if("DANG_CHUAN_BI".equals(status)) invoice(id);
+        if("DANG_CHUAN_BI".equals(status)) {
+            var confirmer=db.one("select id,ma_nhan_vien,ho_ten from nhan_vien where id=?",access.employee());
+            db.jdbc().update("update don_hang set nhan_vien_xac_nhan_id=?,ten_nhan_vien_xac_nhan=?,ma_nhan_vien_xac_nhan=?,thoi_gian_xac_nhan=now() where id=? and ten_nhan_vien_xac_nhan is null",
+                confirmer.get("id"),confirmer.get("ho_ten"),confirmer.get("ma_nhan_vien"),id);
+            invoice(id);
+        }
         db.audit(access.account(),"ORDER_"+status,"don_hang",id);
         return detail(id,customer);
     }

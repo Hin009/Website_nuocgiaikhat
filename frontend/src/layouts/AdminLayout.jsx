@@ -27,7 +27,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PermissionGuard } from '@/routes/Guards';
 import { isMock } from '@/services';
 import { roleLabels } from '@/utils/format';
-const items = [
+const navigationItems = [
   { to: '/admin', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/admin/products', label: 'Sản phẩm', icon: Package },
   { to: '/admin/categories', label: 'Loại sản phẩm ', icon: Shapes, adminOnly: !isMock },
@@ -52,6 +52,11 @@ const items = [
 ];
 export default function AdminLayout() {
   const { user, logout } = useAuth();
+  const items = navigationItems.map((item) =>
+    item.to === '/admin/stock-receipts' && user.role === 'STAFF'
+      ? { ...item, label: 'Nhập hàng' }
+      : item,
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [notifications, setNotifications] = useState(false);

@@ -2,7 +2,11 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   testMatch: [
+    'category-deletion-browser.spec.js',
+    'account-deletion-browser.spec.js',
     'business-browser.spec.js',
+    'reports-browser.spec.js',
+    'order-confirmation-browser.spec.js',
     'purchasing-browser.spec.js',
     'products-browser.spec.js',
     'staff-address-browser.spec.js',

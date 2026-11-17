@@ -54,7 +54,7 @@ public class CatalogController {
         p.put("packages",db.rows("select id,san_pham_id,ten_quy_cach,don_vi_tinh,he_so_quy_doi,gia_ban,?::bigint/he_so_quy_doi as so_luong_co_the_mua from quy_cach_san_pham where san_pham_id=? and dang_ban order by he_so_quy_doi,id",p.get("so_luong_co_ban"),id));
         p.put("images",db.jdbc().queryForList("select id,duong_dan,anh_chinh,thu_tu from hinh_anh_san_pham where san_pham_id=? order by anh_chinh desc,thu_tu,id",id)); return p;
     }
-    @GetMapping("/categories") public Object categories() { return db.jdbc().queryForList("select id,ten,mo_ta,hinh_anh from loai_san_pham where hien_thi order by ten"); }
+    @GetMapping("/categories") public Object categories() { return db.jdbc().queryForList("select id,ten,mo_ta,hinh_anh from loai_san_pham where hien_thi and deleted_at is null order by ten"); }
     @GetMapping("/brands") public Object brands() { return db.jdbc().queryForList("select id,ten,mo_ta,logo from thuong_hieu where hien_thi order by ten"); }
     @GetMapping("/promotions") public Object promotions() {
         var promotions=db.jdbc().queryForList("select id,ma_code,ten,loai_giam,gia_tri_giam,giam_toi_da,don_toi_thieu,bat_dau,ket_thuc,pham_vi_ap_dung from khuyen_mai where trang_thai='ACTIVE' and now() between bat_dau and ket_thuc order by ket_thuc");

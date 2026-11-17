@@ -27,15 +27,27 @@ public class AdminService {
     }
     @Transactional public Object employment(long id,AdminController.Employment r) {
         var staff=db.one("select * from nhan_vien where id=? for update",id);
+        db.one("select id from tai_khoan where id=? and deleted_at is null for update",staff.get("tai_khoan_id"));
         if(Db.n(staff,"tai_khoan_id")==access.account()) throw ApiException.bad("Không tự thay đổi trạng thái làm việc");
         db.jdbc().update("update nhan_vien set trang_thai=?,chuc_vu=? where id=?",r.status(),r.position(),id);
         db.jdbc().update("update tai_khoan set trang_thai=?,so_lan_dang_nhap_sai=0 where id=?","ACTIVE".equals(r.status())?"ACTIVE":"DISABLED",staff.get("tai_khoan_id"));
         db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",staff.get("tai_khoan_id"));
         db.audit(access.account(),"STAFF_"+r.status(),"nhan_vien",id); return db.one("select * from nhan_vien where id=?",id);
     }
+    /** Retain identities referenced by orders, invoices and audit history. */
+    @Transactional public void deleteAccount(long id) {
+        if(id==access.account()) throw ApiException.bad("Không thể xóa tài khoản đang đăng nhập.");
+        var account=db.one("select trang_thai from tai_khoan where id=? and deleted_at is null for update",id);
+        if("ACTIVE".equals(account.get("trang_thai")))
+            throw ApiException.bad("Hãy ngừng hoạt động tài khoản trong Chỉnh sửa trước khi xóa.");
+        db.jdbc().update("update tai_khoan set trang_thai='DISABLED',deleted_at=now() where id=?",id);
+        db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
+        db.jdbc().update("update password_reset_challenge set da_dung=true,otp_hash=null,reset_token_hash=null,reset_het_han=null where tai_khoan_id=?",id);
+        db.audit(access.account(),"ACCOUNT_DELETE","tai_khoan",id);
+    }
     @Transactional public Object accountStatus(long id,String status) {
         if(id==access.account()) throw ApiException.bad("Không tự khóa tài khoản quản trị đang dùng");
-        db.one("select id from tai_khoan where id=? for update",id);
+        db.one("select id from tai_khoan where id=? and deleted_at is null for update",id);
         if(status.equals("ACTIVE") && db.number("select count(*) from nhan_vien where tai_khoan_id=? and trang_thai<>'ACTIVE'",id)>0) throw ApiException.bad("Khôi phục nhân viên trước khi mở tài khoản");
         db.jdbc().update("update tai_khoan set trang_thai=?,so_lan_dang_nhap_sai=0 where id=?",status,id);
         db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
@@ -43,7 +55,7 @@ public class AdminService {
     }
     @Transactional public void reset(long id,String password) {
         Passwords.validate(password);
-        db.one("select id from tai_khoan where id=? for update",id);
+        db.one("select id from tai_khoan where id=? and deleted_at is null for update",id);
         rejectCustomerPasswordChange(id);
         db.jdbc().update("update tai_khoan set mat_khau_hash=? where id=?",passwords.encode(password),id);
         db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
@@ -61,7 +73,7 @@ public class AdminService {
     }
     @Transactional public void assign(long account,long role,boolean add) {
         if(account==access.account()) throw ApiException.bad("Cannot change own roles");
-        db.one("select id from tai_khoan where id=? for update",account);
+        db.one("select id from tai_khoan where id=? and deleted_at is null for update",account);
         var r=db.one("select * from vai_tro where id=?",role);
         if(add && Set.of("QUAN_TRI_VIEN","NHAN_VIEN").contains(r.get("ma_vai_tro")) && db.number("select count(*) from nhan_vien where tai_khoan_id=? and trang_thai='ACTIVE'",account)==0) throw ApiException.bad("Active employee profile required");
         if(add) db.jdbc().update("insert into tai_khoan_vai_tro(tai_khoan_id,vai_tro_id) values (?,?) on conflict do nothing",account,role);
@@ -88,7 +100,7 @@ public class AdminService {
         long role=db.id("select id from vai_tro where ma_vai_tro=?",r.role());
         boolean created=id==null;
         if(created) { if(r.password()==null || r.password().isBlank()) throw ApiException.bad("Cần mật khẩu cho tài khoản mới"); id=auth.createAccount(r.email(),r.password(),r.role()); }
-        var account=db.one("select * from tai_khoan where id=? for update",id);
+        var account=db.one("select * from tai_khoan where id=? and deleted_at is null for update",id);
         if(!created && r.password()!=null && !r.password().isBlank()) {
             if("KHACH_HANG".equals(r.role())) throw ApiException.bad("Không đặt mật khẩu mới cho khách hàng trong quản lý tài khoản.");
             rejectCustomerPasswordChange(id);
