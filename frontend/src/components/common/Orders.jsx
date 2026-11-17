@@ -40,7 +40,7 @@ export function OrdersPage({ admin = false }) {
         ),
       ).includes(normalize(q)) &&
       (!status || o.status === status) &&
-      (!admin || isWithinReportPeriod(o.createdAt, periodBounds)),
+      isWithinReportPeriod(o.createdAt, periodBounds),
   );
   const current = Math.min(page, Math.max(1, Math.ceil(orders.length / 8)));
   return (
@@ -60,7 +60,7 @@ export function OrdersPage({ admin = false }) {
         </section>
       )}
       <div className="data-panel">
-        <div className={`data-toolbar${admin ? ' orders-toolbar' : ''}`}>
+        <div className="data-toolbar orders-toolbar">
           <div className="inline-search">
             <Search size={17} />
             <input
@@ -92,21 +92,22 @@ export function OrdersPage({ admin = false }) {
               </option>
             ))}
           </select>
-          {admin && (
-            <ReportPeriodFilter
-              value={period}
-              onChange={(next) => {
-                setPeriod(next);
-                setPage(1);
-                setExpandedId(null);
-              }}
-              label="Lọc thời gian đơn hàng"
-            />
-          )}
+          <ReportPeriodFilter
+            value={period}
+            onChange={(next) => {
+              setPeriod(next);
+              setPage(1);
+              setExpandedId(null);
+            }}
+            label="Lọc thời gian đơn hàng"
+            types={admin ? undefined : ['all', 'day', 'month']}
+          />
         </div>
-        {admin && !periodBounds.valid && (
+        {!periodBounds.valid && (
           <p className="form-error orders-filter-error" role="alert">
-            Chọn ngày, tháng, quý hoặc năm hợp lệ để lọc theo ngày đặt đơn.
+            {admin
+              ? 'Chọn ngày, tháng, quý hoặc năm hợp lệ để lọc theo ngày đặt đơn.'
+              : 'Chọn ngày hoặc tháng hợp lệ để lọc theo ngày đặt đơn.'}
           </p>
         )}
         <QueryState query={query}>

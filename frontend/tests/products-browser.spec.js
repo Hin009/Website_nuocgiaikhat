@@ -148,6 +148,8 @@ test('staff can view stock including inactive products without editing controls'
   page,
 }) => {
   const state = await setup(page, false);
+  await expect(page.locator('button[title="Khóa sản phẩm"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Nhập Excel', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Sản phẩm', exact: true })).toBeVisible();
   await expect(
     page.getByRole('row', { name: /Nước kiểm thử/ }).getByRole('cell', { name: '20', exact: true }),
@@ -273,9 +275,9 @@ test('product editing displays automatic price without sending manual pricing', 
 test('admin stops selling before deleting a product and sees action tooltips', async ({ page }) => {
   const state = await setup(page, true);
   const edit = page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true });
-  const stop = page.getByRole('button', { name: 'Ngừng bán Nước kiểm thử', exact: true });
+  const stop = page.getByRole('button', { name: 'Khóa sản phẩm Nước kiểm thử', exact: true });
   await expect(edit).toHaveAttribute('title', 'Chỉnh sửa sản phẩm');
-  await expect(stop).toHaveAttribute('title', 'Ngừng kinh doanh sản phẩm');
+  await expect(stop).toHaveAttribute('title', 'Khóa sản phẩm');
   await expect(
     page.getByRole('button', { name: 'Chi tiết Nước kiểm thử', exact: true }),
   ).toHaveAttribute('title', 'Xem chi tiết sản phẩm');
@@ -288,10 +290,25 @@ test('admin stops selling before deleting a product and sees action tooltips', a
   const remove = page.getByRole('button', { name: 'Xóa Nước kiểm thử', exact: true });
   await expect(remove).toBeVisible();
   await expect(remove).toHaveAttribute('title', 'Xóa sản phẩm');
-  await expect(stop).toBeDisabled();
+  const unlock = page.getByRole('button', { name: 'Mở khóa sản phẩm Nước kiểm thử', exact: true });
+  await expect(unlock).toBeEnabled();
+  await expect(unlock).toHaveAttribute('title', 'Mở khóa sản phẩm');
+  await unlock.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Xác nhận', exact: true })
+    .click();
+  await expect(stop).toBeVisible();
+  await expect(remove).toHaveCount(0);
+  await stop.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Xác nhận', exact: true })
+    .click();
+  await expect(remove).toBeVisible();
   await expect(remove.locator('xpath=preceding-sibling::button[1]')).toHaveAttribute(
     'aria-label',
-    'Ngừng bán Nước kiểm thử',
+    'Mở khóa sản phẩm Nước kiểm thử',
   );
   await remove.click();
   const dialog = page.getByRole('alertdialog');
@@ -308,4 +325,95 @@ test('admin stops selling before deleting a product and sees action tooltips', a
   await expect(page.getByRole('button', { name: 'Sửa Nước kiểm thử', exact: true })).toHaveCount(0);
   expect(state.unexpected).toEqual([]);
   expect(state.errors).toEqual([]);
+});
+
+async function excelBuffer(rows) {
+  const { default: writeExcelFile } = await import('write-excel-file/node');
+  const headers = [
+    'Tên sản phẩm',
+    'Thương hiệu',
+    'Loại sản phẩm',
+    'Quy cách',
+    'Bao bì',
+    'Mô tả',
+    'Đang kinh doanh',
+  ];
+  return writeExcelFile(
+    [headers, ...rows].map((r) => r.map((value) => ({ value, type: String }))),
+  ).toBuffer();
+}
+test('admin previews Excel errors then imports multiple products in one request', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  const batches = [];
+  await page.route('**/api/v1/management/product-import', async (route) => {
+    batches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { createdCount: batches.at(-1).products.length } });
+  });
+  await expect(page.getByRole('button', { name: 'Nhập Excel', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Thêm sản phẩm', exact: true }).click();
+  await expect(page.getByLabel('Đang kinh doanh', { exact: true })).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Nhập Excel', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Tải file Excel mẫu' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('WaterBus-mau-nhap-san-pham.xlsx');
+  const { readSheet } = await import('read-excel-file/node');
+  expect((await readSheet(await file.path()))[0][0]).toBe('Tên sản phẩm');
+  const first = ['Cam Excel', 'Cam Việt', 'Nước ngọt', 'Lon 330ml', 'Lon', '', 'Có'];
+  await dialog.getByLabel('Chọn file Excel').setInputFiles({
+    name: 'loi.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: await excelBuffer([first, ['Lỗi Excel', 'Cam Việt', 'Không có', '330ml', 'Túi']]),
+  });
+  await expect(dialog.getByRole('alert')).toContainText('Sửa các dòng lỗi');
+  await expect(dialog.getByRole('button', { name: 'Nhập 2 sản phẩm', exact: true })).toBeDisabled();
+  expect(batches).toHaveLength(0);
+  await dialog.getByLabel('Chọn file Excel').setInputFiles({
+    name: 'san-pham.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: await excelBuffer([
+      first,
+      ['Trà Excel', 'Trà Việt', 'Nước ngọt', 'Chai 500ml', 'Chai', 'Mô tả', 'Không'],
+    ]),
+  });
+  await expect(dialog.getByRole('status')).toContainText('2 sản phẩm, 0 dòng lỗi');
+  expect(batches).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Nhập 2 sản phẩm', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(batches).toHaveLength(1);
+  expect(batches[0].products).toMatchObject([
+    {
+      rowNumber: 2,
+      product: { fullName: 'Cam Excel', categoryId: 1, packaging: 'LON', active: true },
+    },
+    { rowNumber: 3, product: { fullName: 'Trà Excel', packaging: 'CHAI', active: false } },
+  ]);
+  expect(state.errors).toEqual([]);
+});
+test('Excel import keeps preview on API failure and rejects legacy xls', async ({ page }) => {
+  await setup(page, true);
+  await page.route('**/api/v1/management/product-import', (route) =>
+    route.fulfill({ status: 400, json: { message: 'Dòng Excel 2: sản phẩm đã tồn tại.' } }),
+  );
+  await expect(page.getByRole('button', { name: 'Nhập Excel', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Thêm sản phẩm', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Nhập Excel', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Chọn file Excel').setInputFiles({
+    name: 'cu.xls',
+    mimeType: 'application/vnd.ms-excel',
+    buffer: Buffer.from('invalid'),
+  });
+  await expect(dialog.getByRole('alert')).toContainText('.xlsx');
+  await dialog.getByLabel('Chọn file Excel').setInputFiles({
+    name: 'moi.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: await excelBuffer([['Cam Excel', 'Cam Việt', 'Nước ngọt', '330ml', 'Lon']]),
+  });
+  await dialog.getByRole('button', { name: 'Nhập 1 sản phẩm', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Dòng Excel 2');
+  await expect(dialog.getByRole('button', { name: 'Nhập 1 sản phẩm', exact: true })).toBeEnabled();
 });

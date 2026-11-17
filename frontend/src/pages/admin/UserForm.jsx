@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,8 +34,6 @@ export default function UserForm({ item, onClose }) {
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(userSchema),
@@ -43,15 +41,7 @@ export default function UserForm({ item, onClose }) {
       ? { ...item, password: '' }
       : { name: '', email: '', phone: '', role: 'STAFF', active: true, password: '' },
   });
-  const selectedRole = watch('role');
-  const canChangePassword =
-    !item ||
-    (item.role !== 'CUSTOMER' &&
-      !item.roles?.includes('KHACH_HANG') &&
-      selectedRole !== 'CUSTOMER');
-  useEffect(() => {
-    if (!canChangePassword) setValue('password', '', { shouldValidate: true });
-  }, [canChangePassword, setValue]);
+  const canChangePassword = !item;
   const action = useAction(async (values) => {
     if (item?.id === user.id && (!values.active || values.role !== 'ADMIN'))
       throw new Error('Không thể khóa hoặc hạ quyền tài khoản đang sử dụng.');
@@ -109,10 +99,6 @@ export default function UserForm({ item, onClose }) {
               ))}
             </select>
           </Field>
-          <label className="checkbox-field">
-            <input type="checkbox" {...register('active')} />
-            Đang hoạt động
-          </label>
         </div>
         {canChangePassword && (
           <Field

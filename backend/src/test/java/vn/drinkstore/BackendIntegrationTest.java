@@ -63,6 +63,8 @@ class BackendIntegrationTest {
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean vn.drinkstore.billing.MomoClient momoGateway;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Autowired vn.drinkstore.reporting.ProductFinanceController productFinance;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean vn.drinkstore.auth.PasswordResetMail emailChangeMail;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean vn.drinkstore.auth.EmailChangeRateLimit emailChangeLimits;
     long account,customer,admin,employee,product,pack,supplier,address;
     @BeforeEach void setup() {
         account=((Number)auth.register("customer@test.invalid","TestPass123!","Test Customer").get("id")).longValue();
@@ -77,10 +79,18 @@ class BackendIntegrationTest {
         as(admin);
     }
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
-    @Test void anonymousOtpResetChangesPasswordRevokesSessionsAndRejectsReplay() throws Exception {
-        auth.login("customer@test.invalid","TestPass123!");
-        UUID challenge=UUID.randomUUID();
-        db.jdbc().update("insert into password_reset_challenge(id,tai_khoan_id,otp_hash,het_han) values (?,?,?,now()+interval '5 minutes')",challenge,account,passwordEncoder.encode("123456"));
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"KHACH_HANG","NHAN_VIEN","QUAN_TRI_VIEN"})
+    void anonymousOtpResetChangesPasswordRevokesSessionsAndRejectsReplay(String role) throws Exception {
+        String email=role.toLowerCase(java.util.Locale.ROOT)+"@reset.test.invalid";
+        long resetAccount=auth.createAccount(email,"TestPass123!",role);
+        auth.login(email,"TestPass123!");
+        var resetService=new vn.drinkstore.auth.PasswordResetService(db,passwordEncoder,
+            org.mockito.Mockito.mock(vn.drinkstore.auth.PasswordResetMail.class),Runnable::run);
+        var requested=(Map<?,?>)resetService.request(email);
+        UUID challenge=(UUID)requested.get("challengeId");
+        assertEquals(1,db.number("select count(*) from password_reset_challenge where id=? and tai_khoan_id=?",challenge,resetAccount));
+        db.jdbc().update("update password_reset_challenge set otp_hash=? where id=?",passwordEncoder.encode("123456"),challenge);
         clear();
         mvc.perform(post("/api/v1/auth/password-reset/verify").contentType(MediaType.APPLICATION_JSON)
             .content("{\"challengeId\":\""+challenge+"\",\"code\":\"111111\"}"))
@@ -92,10 +102,203 @@ class BackendIntegrationTest {
         String token=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("resetToken").asText();
         String complete="{\"challengeId\":\""+challenge+"\",\"resetToken\":\""+token+"\",\"newPassword\":\"ReplacementPass123!\"}";
         mvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content(complete)).andExpect(status().isOk());
-        assertEquals(0,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",account));
+        assertEquals(0,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",resetAccount));
         mvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content(complete)).andExpect(status().isBadRequest());
-        assertThrows(ApiException.class,()->auth.login("customer@test.invalid","TestPass123!"));
-        assertNotNull(auth.login("customer@test.invalid","ReplacementPass123!").get("accessToken"));
+        assertThrows(ApiException.class,()->auth.login(email,"TestPass123!"));
+        assertNotNull(auth.login(email,"ReplacementPass123!").get("accessToken"));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"KHACH_HANG","NHAN_VIEN","QUAN_TRI_VIEN"})
+    void ownPasswordChangeRequiresCurrentPasswordAndRevokesAllSessions(String role) throws Exception {
+        String email="own-password-"+role.toLowerCase(java.util.Locale.ROOT)+"@test.invalid";
+        long owner=auth.createAccount(email,"TestPass123!",role);
+        String token=auth.login(email,"TestPass123!").get("accessToken").toString();
+        auth.login(email,"TestPass123!");
+        String otherHash=db.one("select mat_khau_hash from tai_khoan where id=?",admin).get("mat_khau_hash").toString();
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+        clear();
+        mvc.perform(put("/api/v1/auth/password").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("oldPassword","WrongPass123!","newPassword","ReplacementPass123!")))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+token)).andExpect(status().isOk());
+        mvc.perform(put("/api/v1/auth/password").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("oldPassword","TestPass123!","newPassword","TestPass123!")))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/auth/password").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("oldPassword","TestPass123!","newPassword","ReplacementPass123!","id",admin)))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/auth/password").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("oldPassword","TestPass123!","newPassword","ReplacementPass123!")))).andExpect(status().isOk());
+        assertEquals(0,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",owner));
+        assertEquals(otherHash,db.one("select mat_khau_hash from tai_khoan where id=?",admin).get("mat_khau_hash"));
+        clear(); mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+token)).andExpect(status().isUnauthorized());
+        assertThrows(ApiException.class,()->auth.login(email,"TestPass123!"));
+        assertNotNull(auth.login(email,"ReplacementPass123!").get("accessToken"));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"KHACH_HANG","NHAN_VIEN","QUAN_TRI_VIEN"})
+    void managementCannotResetOrEditExistingAccountPasswords(String role) throws Exception {
+        String email="managed-password-"+role.toLowerCase(java.util.Locale.ROOT)+"@test.invalid";
+        long target=auth.createAccount(email,"TestPass123!",role);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+        clear();
+        mvc.perform(put("/api/v1/management/accounts/"+target+"/password").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("password","ReplacementPass123!")))).andExpect(status().isForbidden());
+        mvc.perform(put("/api/v1/management/account-editor/"+target).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("email",email,"fullName","Managed User","phone","0901234567","role",role,"active",true,"password","ReplacementPass123!")))).andExpect(status().isForbidden());
+        assertNotNull(auth.login(email,"TestPass123!").get("accessToken"));
+    }
+    private void emailChangeTestDelivery() {
+        org.mockito.Mockito.doNothing().when(emailChangeMail).requireConfigured();
+        org.mockito.Mockito.doNothing().when(emailChangeMail).sendEmailChange(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyBoolean());
+        org.mockito.Mockito.doNothing().when(emailChangeLimits).request(org.mockito.ArgumentMatchers.anyLong(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString());
+        org.mockito.Mockito.doNothing().when(emailChangeLimits).verify(org.mockito.ArgumentMatchers.anyString());
+    }
+    private org.springframework.test.web.servlet.ResultActions emailChangePost(String token,String action,Map<String,?> body) throws Exception {
+        clear();
+        return mvc.perform(post("/api/v1/auth/email-change/"+action).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+            .content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body)));
+    }
+    private UUID emailChangeStart(String token) throws Exception {
+        String response=emailChangePost(token,"request-current",Map.of()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return UUID.fromString(new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("challengeId").asText());
+    }
+    private UUID emailChangeVerifiedCurrent(String token) throws Exception {
+        UUID challenge=emailChangeStart(token);
+        emailChangeKnownCode(challenge,"123456");
+        emailChangePost(token,"verify-current",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isOk());
+        return challenge;
+    }
+    private void emailChangeKnownCode(UUID challenge,String code) {
+        db.jdbc().update("update email_change_challenge set otp_hash=? where id=?",passwordEncoder.encode(code),challenge);
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"KHACH_HANG","NHAN_VIEN","QUAN_TRI_VIEN"})
+    void emailChangeRequiresBothEmailOtpsForEveryRole(String role) throws Exception {
+        emailChangeTestDelivery();
+        String oldEmail="email-"+role.toLowerCase(java.util.Locale.ROOT)+"@test.invalid",newEmail="new-"+oldEmail;
+        long owner=auth.createAccount(oldEmail,"TestPass123!",role);
+        String otherToken=auth.login(oldEmail,"TestPass123!").get("accessToken").toString();
+        String token=auth.login(oldEmail,"TestPass123!").get("accessToken").toString();
+        UUID challenge=emailChangeStart(token);
+        emailChangePost(token,"request-new",Map.of("email",newEmail)).andExpect(status().isBadRequest());
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email",newEmail)).andExpect(status().isBadRequest());
+        emailChangeKnownCode(challenge,"123456");
+        emailChangePost(token,"verify-current",Map.of("challengeId",challenge,"code","111111")).andExpect(status().isBadRequest());
+        assertEquals(1,db.number("select attempts from email_change_challenge where id=?",challenge));
+        emailChangePost(token,"verify-current",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isOk());
+        emailChangePost(token,"verify-current",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isBadRequest());
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email",newEmail)).andExpect(status().isOk());
+        assertEquals(oldEmail,db.one("select email from tai_khoan where id=?",owner).get("email"));
+        assertEquals("NEW_OTP",db.one("select stage from email_change_challenge where id=?",challenge).get("stage"));
+        emailChangeKnownCode(challenge,"654321");
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","111111")).andExpect(status().isBadRequest());
+        assertEquals(1,db.number("select attempts from email_change_challenge where id=?",challenge));
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","654321")).andExpect(status().isOk()).andExpect(jsonPath("$.email").value(newEmail));
+        assertEquals(1,db.number("select count(*) from tai_khoan where id=? and email=? and email_da_xac_thuc",owner,newEmail));
+        assertEquals(1,db.number("select count(*) from phien_xac_thuc where tai_khoan_id=? and not da_thu_hoi",owner));
+        clear();
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+otherToken)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.account.email").value(newEmail));
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","654321")).andExpect(status().isBadRequest());
+        assertThrows(ApiException.class,()->auth.login(oldEmail,"TestPass123!"));
+        assertNotNull(auth.login(newEmail,"TestPass123!").get("accessToken"));
+    }
+    @Test void emailChangeRejectsOtherSessionsExpiredCodesAndCancelledChallenges() throws Exception {
+        emailChangeTestDelivery();
+        String token=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
+        String otherToken=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
+        emailChangePost(token,"request-new",Map.of("email","customer@test.invalid")).andExpect(status().isBadRequest());
+        UUID challenge=emailChangeVerifiedCurrent(token);
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email","new-customer@test.invalid")).andExpect(status().isOk());
+        emailChangeKnownCode(challenge,"123456");
+        emailChangePost(otherToken,"verify-new",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isBadRequest());
+        for(int i=0;i<5;i++) emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","111111")).andExpect(status().isBadRequest());
+        assertEquals(5,db.number("select attempts from email_change_challenge where id=?",challenge));
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isBadRequest());
+        emailChangePost(token,"resend",Map.of("challengeId",challenge)).andExpect(status().isTooManyRequests());
+        emailChangePost(token,"request-current",Map.of()).andExpect(status().isTooManyRequests());
+        db.jdbc().update("update email_change_challenge set last_sent_at=now()-interval '61 seconds' where id=?",challenge);
+        emailChangePost(token,"resend",Map.of("challengeId",challenge)).andExpect(status().isOk());
+        assertEquals(0,db.number("select attempts from email_change_challenge where id=?",challenge));
+        emailChangeKnownCode(challenge,"654321");
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isBadRequest());
+        db.jdbc().update("update email_change_challenge set expires_at=now()-interval '1 second' where id=?",challenge);
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","654321")).andExpect(status().isBadRequest());
+        emailChangePost(token,"cancel",Map.of("challengeId",challenge)).andExpect(status().isOk());
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","654321")).andExpect(status().isBadRequest());
+        assertEquals("customer@test.invalid",db.one("select email from tai_khoan where id=?",account).get("email"));
+        clear(); mvc.perform(post("/api/v1/auth/email-change/request-new").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"new@test.invalid\"}")).andExpect(status().isUnauthorized());
+    }
+    @Test void emailChangeRechecksDuplicateTargetAndReplacesOldOtp() throws Exception {
+        emailChangeTestDelivery();
+        String token=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
+        UUID challenge=emailChangeVerifiedCurrent(token);
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email","admin@test.invalid")).andExpect(status().isConflict());
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email","new-unique@test.invalid")).andExpect(status().isOk());
+        emailChangeKnownCode(challenge,"123456");
+        auth.createAccount("new-unique@test.invalid","TestPass123!","KHACH_HANG");
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isConflict());
+        assertEquals("customer@test.invalid",db.one("select email from tai_khoan where id=?",account).get("email"));
+        db.jdbc().update("update email_change_challenge set last_sent_at=now()-interval '61 seconds' where id=?",challenge);
+        emailChangePost(token,"request-new",Map.of("challengeId",challenge,"email","another-new@test.invalid")).andExpect(status().isOk());
+        emailChangeKnownCode(challenge,"654321");
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","123456")).andExpect(status().isBadRequest());
+        emailChangePost(token,"verify-new",Map.of("challengeId",challenge,"code","654321")).andExpect(status().isOk());
+    }
+    private Map<String,Object> excelProduct(String name,long category) {
+        return Map.of("fullName",name,"brand","Excel Brand","categoryId",category,"volume","330ml","packaging","LON","active",true);
+    }
+    @Test void excelImportCreatesProductsPackagesAndZeroInventory() throws Exception {
+        long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
+        String token=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        var body=Map.of("products",List.of(Map.of("rowNumber",2,"product",excelProduct("Excel First",category)),Map.of("rowNumber",4,"product",excelProduct("Excel Second",category))));
+        mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.createdCount").value(2));
+        assertEquals(2,db.number("select count(*) from san_pham where ten in ('Excel First','Excel Second')"));
+        assertEquals(2,db.number("select count(*) from quy_cach_san_pham q join san_pham p on p.id=q.san_pham_id where p.ten in ('Excel First','Excel Second') and q.he_so_quy_doi=1 and q.gia_ban=0"));
+        assertEquals(0,db.number("select coalesce(sum(s.so_luong_co_ban),0) from so_luong_san_pham s join san_pham p on p.id=s.san_pham_id where p.ten in ('Excel First','Excel Second')"));
+        mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body)))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Dòng Excel 2")));
+        assertEquals(2,db.number("select count(*) from san_pham where ten in ('Excel First','Excel Second')"));
+    }
+    @Test void excelImportRollsBackAllRowsOnInvalidCategory() throws Exception {
+        long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
+        // End the test transaction so the HTTP request owns its transaction, as in production.
+        org.springframework.test.context.transaction.TestTransaction.end();
+        clear();
+        var tx=new org.springframework.transaction.support.TransactionTemplate(testTransactions);
+        var fixture=tx.execute(status -> {
+            String email="excel-rollback-"+UUID.randomUUID()+"@test.invalid";
+            long id=auth.createAccount(email,"TestPass123!","QUAN_TRI_VIEN");
+            return Map.of("id",id,"token",auth.login(email,"TestPass123!").get("accessToken"));
+        });
+        try {
+            var body=Map.of("products",List.of(Map.of("rowNumber",2,"product",excelProduct("Excel Rollback",category)),Map.of("rowNumber",5,"product",excelProduct("Excel Invalid",99999999L))));
+            mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+fixture.get("token")).contentType(MediaType.APPLICATION_JSON).content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Dòng Excel 5")));
+            assertEquals(0,db.number("select count(*) from san_pham where ten like 'Excel %'"));
+            assertEquals(0,db.number("select count(*) from thuong_hieu where ten='Excel Brand'"));
+        } finally {
+            tx.executeWithoutResult(status -> {
+                db.jdbc().update("delete from nhat_ky_hoat_dong where tai_khoan_id=?",fixture.get("id"));
+                db.jdbc().update("delete from phien_xac_thuc where tai_khoan_id=?",fixture.get("id"));
+                db.jdbc().update("delete from tai_khoan_vai_tro where tai_khoan_id=?",fixture.get("id"));
+                db.jdbc().update("delete from tai_khoan where id=?",fixture.get("id"));
+            });
+        }
+    }
+    @Test void excelImportRejectsStaffEmptyBatchAndStockInjection() throws Exception {
+        long category=db.number("select loai_san_pham_id from san_pham where id=?",product);
+        auth.createAccount("excel-staff@test.invalid","TestPass123!","NHAN_VIEN");
+        String staffToken=auth.login("excel-staff@test.invalid","TestPass123!").get("accessToken").toString();
+        var fields=new HashMap<String,Object>(excelProduct("Excel Stock",category)); fields.put("stock",10);
+        var body=Map.of("products",List.of(Map.of("rowNumber",2,"product",fields)));
+        String json=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
+        clear();
+        mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+staffToken).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
+        String adminToken=auth.login("admin@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+adminToken).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/management/product-import").header("Authorization","Bearer "+adminToken).contentType(MediaType.APPLICATION_JSON).content("{\"products\":[]}")).andExpect(status().isBadRequest());
+        assertEquals(0,db.number("select count(*) from san_pham where ten='Excel Stock'"));
     }
     @Test void categoryDeletionRetainsProductAndPromotionReferencesAndRejectsNewAssignments() throws Exception {
         receive(20); long historicalOrder=checkout(); as(admin);

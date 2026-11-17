@@ -86,6 +86,13 @@ test('report filters sit by search, send calendar bounds, and headers toggle num
   await page.goto('/admin/reports');
   const panel = page.locator('.product-profit-section');
   await expect(panel.locator('tbody tr')).toHaveCount(3);
+  await expect(page.locator('.dashboard-bottom')).toHaveCount(0);
+  await expect(page.locator('.operations-card')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Những đơn hàng gần đây' })).toHaveCount(0);
+  await expect(page.locator('.metrics-grid')).not.toContainText('Khách hàng');
+  await expect(page.locator('.metrics-grid')).not.toContainText('Sản phẩm');
+  await expect(page.getByRole('heading', { name: 'Sản phẩm bán chạy trong kỳ' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Xu hướng doanh thu trong kỳ' })).toBeVisible();
   await expect(page.locator('.range-buttons')).toHaveCount(0);
   await expect(panel.locator('.profit-toolbar').getByLabel('Tìm sản phẩm')).toBeVisible();
   const filter = panel.getByLabel('Lọc theo', { exact: true });
@@ -164,4 +171,94 @@ test('report filters sit by search, send calendar bounds, and headers toggle num
   const toolbar = await panel.locator('.profit-toolbar').boundingBox();
   expect(toolbar.width).toBeLessThanOrEqual(390);
   expect(errors).toEqual([]);
+});
+
+test('report order totals and best sellers follow the period while overview retains operations', async ({
+  page,
+}) => {
+  const user = {
+    account: { id: 1, email: 'report@test.invalid', trang_thai: 'ACTIVE' },
+    roles: ['QUAN_TRI_VIEN'],
+    permissions: ['REPORT_ALL'],
+  };
+  const orders = [
+    {
+      id: 1,
+      ngay_dat: '2026-11-10T03:00:00Z',
+      trang_thai: 'HOAN_TAT',
+      giam_gia: 0,
+      phi_van_chuyen: 0,
+      tong_tien: 3000,
+      items: [{ san_pham_id: 1, so_luong: 3, he_so_quy_doi: 1, don_gia: 1000, thanh_tien: 3000 }],
+    },
+    {
+      id: 2,
+      ngay_dat: '2026-12-10T03:00:00Z',
+      trang_thai: 'DA_GIAO',
+      giam_gia: 0,
+      phi_van_chuyen: 0,
+      tong_tien: 7000,
+      items: [{ san_pham_id: 1, so_luong: 7, he_so_quy_doi: 1, don_gia: 1000, thanh_tien: 7000 }],
+    },
+    {
+      id: 3,
+      ngay_dat: '2026-11-10T05:00:00Z',
+      trang_thai: 'CHO_XAC_NHAN',
+      giam_gia: 0,
+      phi_van_chuyen: 0,
+      tong_tien: 1000,
+      items: [],
+    },
+  ];
+  await page.addInitScript(() =>
+    sessionStorage.setItem(
+      'waterbus.api.session',
+      JSON.stringify({ token: 'report-test', portal: 'management' }),
+    ),
+  );
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
+    let data = { items: [], total: 0, page: 0, size: 100 };
+    if (path === '/auth/me') data = user;
+    else if (path === '/staff/profile') data = { id: 1, ho_ten: 'Report Test' };
+    else if (path === '/management/reports/product-profit') data = rows;
+    else if (path === '/staff/orders') data = { items: orders, total: orders.length };
+    else if (/^\/staff\/orders\/\d+$/.test(path))
+      data = orders.find((o) => o.id === Number(path.split('/').pop()));
+    else if (path === '/management/products')
+      data = {
+        items: [
+          {
+            id: 1,
+            ten: 'Cam',
+            loai_san_pham_id: 1,
+            thuong_hieu_id: 1,
+            trang_thai: 'DANG_BAN',
+            hien_thi: true,
+          },
+        ],
+        total: 1,
+      };
+    return route.fulfill({ json: data });
+  });
+  await page.goto('/admin/reports');
+  const metric = (label) =>
+    page.locator('.report-order-metrics .metric-card').filter({ hasText: label }).locator('strong');
+  await expect(metric('Đơn hàng trong kỳ')).toHaveText('3');
+  await expect(metric('Đơn hoàn thành trong kỳ')).toHaveText('2');
+  await page.getByLabel('Lọc theo', { exact: true }).selectOption('day');
+  await page.getByLabel('Ngày', { exact: true }).fill('2026-11-10');
+  await expect(metric('Đơn hàng trong kỳ')).toHaveText('2');
+  await expect(metric('Đơn hoàn thành trong kỳ')).toHaveText('1');
+  await expect(page.locator('.top-products .top-product strong')).toContainText('3');
+  await page.getByLabel('Ngày', { exact: true }).fill('2026-12-10');
+  await expect(metric('Đơn hàng trong kỳ')).toHaveText('1');
+  await expect(page.locator('.top-products .top-product strong')).toContainText('7');
+  await expect(page.locator('.dashboard-bottom')).toHaveCount(0);
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Những đơn hàng gần đây' })).toBeVisible();
+  await expect(page.locator('.operations-card')).toBeVisible();
+  await expect(page.locator('.metrics-grid')).toContainText('Sản phẩm');
+  await expect(page.locator('.metrics-grid')).toContainText('Khách hàng');
+  await expect(page.getByRole('heading', { name: 'Đồ uống được yêu thích' })).toBeVisible();
 });

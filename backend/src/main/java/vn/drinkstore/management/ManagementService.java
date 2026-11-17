@@ -195,6 +195,24 @@ public class ManagementService {
         }
         return product;
     }
+    @Transactional public Object importProducts(List<ManagementController.ProductImportRow> rows) {
+        if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
+        if(rows==null || rows.isEmpty() || rows.size()>200) throw ApiException.bad("Chỉ nhập từ 1 đến 200 sản phẩm mỗi lần.");
+        var seen=new HashSet<List<String>>();
+        for(var row:rows) {
+            var p=row.product();
+            try {
+                if(p.price()!=null || (p.stock()!=null && p.stock()!=0) || p.packageId()!=null || p.imageUrl()!=null && !p.imageUrl().isBlank())
+                    throw ApiException.bad("File nhập sản phẩm không nhận giá, tồn kho, mã quy cách hoặc ảnh. Tạo phiếu nhập hàng để ghi nhận giá vốn và số lượng.");
+                var identity=List.of(p.fullName().trim().toLowerCase(Locale.ROOT),p.brand().trim().toLowerCase(Locale.ROOT),String.valueOf(p.categoryId()),Objects.toString(p.volume(),"").trim().toLowerCase(Locale.ROOT));
+                if(!seen.add(identity)) throw ApiException.bad("Sản phẩm trùng dòng trước trong file.");
+                if(db.number("select count(*) from san_pham p join thuong_hieu b on b.id=p.thuong_hieu_id where p.deleted_at is null and lower(trim(p.ten))=? and lower(trim(b.ten))=? and p.loai_san_pham_id=? and lower(trim(coalesce(p.dung_tich,'')))=?",identity.get(0),identity.get(1),p.categoryId(),identity.get(3))>0)
+                    throw ApiException.bad("Sản phẩm đã tồn tại (tên, thương hiệu, loại và quy cách).");
+                productEditor(null,p);
+            } catch(ApiException e) { throw ApiException.bad("Dòng Excel "+row.rowNumber()+": "+e.getMessage()+" Chưa lưu sản phẩm nào trong lần nhập này."); }
+        }
+        return Map.of("createdCount",rows.size());
+    }
     @Transactional public Object updateStock(long product,ManagementController.StockUpdate r) {
         if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Admin required");
         db.one("select id from san_pham where id=? and deleted_at is null",product);

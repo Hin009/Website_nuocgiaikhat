@@ -79,8 +79,11 @@ export default function DashboardPage({ report = false }) {
     }
     return Object.entries(groups)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, total]) => ({ name: 'T' + Number(month.slice(5)), total }));
-  }, [completed]);
+      .map(([month, total]) => ({
+        name: 'T' + Number(month.slice(5)) + (report ? '/' + month.slice(0, 4) : ''),
+        total,
+      }));
+  }, [completed, report]);
   const best = useMemo(() => {
     const sums = {};
     for (const order of completed)
@@ -92,30 +95,43 @@ export default function DashboardPage({ report = false }) {
       .filter((p) => p.product)
       .slice(0, 4);
   }, [completed, products.data]);
-  const metrics = [
-    [Wallet, 'Doanh thu sản phẩm', money(revenue)],
-    [
-      ShoppingBag,
-      'Đơn hàng',
-      filtered.length,
-      filtered.filter((o) => o.status === 'PENDING').length + ' đơn đang chờ xác nhận',
-      'peach',
-    ],
-    [
-      Package,
-      'Sản phẩm',
-      products.data?.filter((p) => p.active).length || 0,
-      'Sản phẩm đang kinh doanh',
-      'blue',
-    ],
-    [
-      UsersRound,
-      'Khách hàng',
-      users.data?.filter((u) => u.role === 'CUSTOMER').length || 0,
-      'Tài khoản khách hàng',
-      'purple',
-    ],
+  const reportMetrics = [
+    [ShoppingBag, 'Đơn hàng trong kỳ', filtered.length, 'Theo ngày đặt hàng', 'peach'],
+    [ShoppingBag, 'Đơn hoàn thành trong kỳ', completed.length, 'Đã giao hoặc hoàn tất', 'blue'],
   ];
+  if (isMock || user.role !== 'ADMIN')
+    reportMetrics.unshift([
+      Wallet,
+      'Doanh thu trong kỳ',
+      money(revenue),
+      'Sau giảm giá, chưa gồm phí giao hàng',
+    ]);
+  const metrics = report
+    ? reportMetrics
+    : [
+        [Wallet, 'Doanh thu sản phẩm', money(revenue)],
+        [
+          ShoppingBag,
+          'Đơn hàng',
+          filtered.length,
+          filtered.filter((o) => o.status === 'PENDING').length + ' đơn đang chờ xác nhận',
+          'peach',
+        ],
+        [
+          Package,
+          'Sản phẩm',
+          products.data?.filter((p) => p.active).length || 0,
+          'Sản phẩm đang kinh doanh',
+          'blue',
+        ],
+        [
+          UsersRound,
+          'Khách hàng',
+          users.data?.filter((u) => u.role === 'CUSTOMER').length || 0,
+          'Tài khoản khách hàng',
+          'purple',
+        ],
+      ];
   return (
     <>
       <PageHeading
@@ -125,7 +141,11 @@ export default function DashboardPage({ report = false }) {
             ? 'Báo cáo & thống kê'
             : 'Chào ' + user.name.split(' ').slice(-1) + ', ngày mới tốt lành!'
         }
-        description={report ? undefined : 'Cùng chăm chút cửa hàng và những đơn hàng hôm nay.'}
+        description={
+          report
+            ? 'Phân tích kết quả kinh doanh theo kỳ và xuất báo cáo chi tiết.'
+            : 'Cùng chăm chút cửa hàng và những đơn hàng hôm nay.'
+        }
       />
       {!report && (
         <div className="dashboard-date">
@@ -184,7 +204,7 @@ export default function DashboardPage({ report = false }) {
         </div>
       )}
       <QueryState query={orders}>
-        <div className="metrics-grid">
+        <div className={report ? 'metrics-grid report-order-metrics' : 'metrics-grid'}>
           {metrics.map(([Icon, label, value, note, color]) => (
             <div className="metric-card" key={label}>
               <div className="metric-top">
@@ -202,7 +222,7 @@ export default function DashboardPage({ report = false }) {
           <section className="data-panel revenue-panel">
             <div className="panel-heading">
               <div>
-                <h3>{report ? 'Doanh thu theo tháng' : 'Nhịp tăng trưởng cửa hàng'}</h3>
+                <h3>{report ? 'Xu hướng doanh thu trong kỳ' : 'Nhịp tăng trưởng cửa hàng'}</h3>
                 <p>Doanh thu sau giảm giá trong đơn hoàn thành · chưa gồm phí giao hàng</p>
               </div>
             </div>
@@ -255,8 +275,12 @@ export default function DashboardPage({ report = false }) {
           <section className="data-panel top-products">
             <div className="panel-heading">
               <div>
-                <h3>Đồ uống được yêu thích</h3>
-                <p>Theo số lượng trong đơn hoàn thành</p>
+                <h3>{report ? 'Sản phẩm bán chạy trong kỳ' : 'Đồ uống được yêu thích'}</h3>
+                <p>
+                  {report
+                    ? 'Theo số lượng bán trong đơn hoàn thành của kỳ đang chọn'
+                    : 'Theo số lượng trong đơn hoàn thành'}
+                </p>
               </div>
               <TrendingUp size={18} />
             </div>
@@ -268,7 +292,15 @@ export default function DashboardPage({ report = false }) {
                     <DrinkArt product={product} />
                   </div>
                   <div>
-                    <Link to={'/products/' + product.id}>{product.name}</Link>
+                    <Link
+                      to={
+                        report
+                          ? '/admin/products?q=' + encodeURIComponent(product.name)
+                          : '/products/' + product.id
+                      }
+                    >
+                      {product.name}
+                    </Link>
                     <small>{product.volume}</small>
                   </div>
                   <strong>
@@ -283,11 +315,13 @@ export default function DashboardPage({ report = false }) {
                 description="Thay đổi bộ lọc thời gian để xem thêm."
               />
             )}
-            <PermissionGuard roles={['ADMIN']}>
-              <Link className="text-link top-products-link" to="/admin/products">
-                Quản lý sản phẩm <ArrowRight size={15} />
-              </Link>
-            </PermissionGuard>
+            {!report && (
+              <PermissionGuard roles={['ADMIN']}>
+                <Link className="text-link top-products-link" to="/admin/products">
+                  Quản lý sản phẩm <ArrowRight size={15} />
+                </Link>
+              </PermissionGuard>
+            )}
           </section>
         </div>
         {report && (
@@ -329,81 +363,83 @@ export default function DashboardPage({ report = false }) {
             )}
           </section>
         )}
-        <div className="dashboard-bottom">
-          <section className="data-panel recent-orders">
-            <div className="panel-heading">
-              <div>
-                <h3>Những đơn hàng gần đây</h3>
-                <p>Cập nhật tình hình đơn hàng</p>
+        {!report && (
+          <div className="dashboard-bottom">
+            <section className="data-panel recent-orders">
+              <div className="panel-heading">
+                <div>
+                  <h3>Những đơn hàng gần đây</h3>
+                  <p>Cập nhật tình hình đơn hàng</p>
+                </div>
+                <Link className="text-link" to="/admin/orders">
+                  Tất cả đơn hàng <ArrowRight size={15} />
+                </Link>
               </div>
-              <Link className="text-link" to="/admin/orders">
-                Tất cả đơn hàng <ArrowRight size={15} />
-              </Link>
-            </div>
-            {filtered.length ? (
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Mã đơn</th>
-                      <th>Khách hàng</th>
-                      <th>Tổng tiền</th>
-                      <th>Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.slice(0, 5).map((o) => (
-                      <tr key={o.id}>
-                        <td>
-                          <Link className="order-id" to={'/admin/orders/' + o.id}>
-                            #{o.id}
-                          </Link>
-                          <small>{date(o.createdAt)}</small>
-                        </td>
-                        <td>{o.receiver}</td>
-                        <td>
-                          <strong>{money(o.total)}</strong>
-                        </td>
-                        <td>
-                          <StatusBadge status={o.status} />
-                        </td>
+              {filtered.length ? (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mã đơn</th>
+                        <th>Khách hàng</th>
+                        <th>Tổng tiền</th>
+                        <th>Trạng thái</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filtered.slice(0, 5).map((o) => (
+                        <tr key={o.id}>
+                          <td>
+                            <Link className="order-id" to={'/admin/orders/' + o.id}>
+                              #{o.id}
+                            </Link>
+                            <small>{date(o.createdAt)}</small>
+                          </td>
+                          <td>{o.receiver}</td>
+                          <td>
+                            <strong>{money(o.total)}</strong>
+                          </td>
+                          <td>
+                            <StatusBadge status={o.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Không có đơn hàng"
+                  description="Không tìm thấy đơn trong khoảng thời gian này."
+                />
+              )}
+            </section>
+            <aside className="operations-card">
+              <div className="operations-icon">
+                <Clock size={23} />
               </div>
-            ) : (
-              <EmptyState
-                title="Không có đơn hàng"
-                description="Không tìm thấy đơn trong khoảng thời gian này."
-              />
-            )}
-          </section>
-          <aside className="operations-card">
-            <div className="operations-icon">
-              <Clock size={23} />
-            </div>
-            <span className="eyebrow">ĐỪNG BỎ LỠ</span>
-            <h3>
-              Một chút chăm sóc,
-              <br />
-              cửa hàng thêm tốt.
-            </h3>
-            <p>
-              <strong>{filtered.filter((o) => o.status === 'PENDING').length} đơn</strong> đang chờ
-              xác nhận.
-              <br />
-              <strong>{stockLow.length} sản phẩm</strong> sắp hết hàng{' '}
-              {isMock ? '(tồn kho từ ' : 'theo ngưỡng cảnh báo '}{' '}
-              {isMock ? LOW_STOCK_THRESHOLD + ' trở xuống).' : 'của từng sản phẩm.'}
-            </p>
-            <Button asChild variant="secondary">
-              <Link to="/admin/orders?status=PENDING">
-                Xử lý đơn hàng <ArrowUpRight size={17} />
-              </Link>
-            </Button>
-          </aside>
-        </div>
+              <span className="eyebrow">ĐỪNG BỎ LỠ</span>
+              <h3>
+                Một chút chăm sóc,
+                <br />
+                cửa hàng thêm tốt.
+              </h3>
+              <p>
+                <strong>{filtered.filter((o) => o.status === 'PENDING').length} đơn</strong> đang
+                chờ xác nhận.
+                <br />
+                <strong>{stockLow.length} sản phẩm</strong> sắp hết hàng{' '}
+                {isMock ? '(tồn kho từ ' : 'theo ngưỡng cảnh báo '}{' '}
+                {isMock ? LOW_STOCK_THRESHOLD + ' trở xuống).' : 'của từng sản phẩm.'}
+              </p>
+              <Button asChild variant="secondary">
+                <Link to="/admin/orders?status=PENDING">
+                  Xử lý đơn hàng <ArrowUpRight size={17} />
+                </Link>
+              </Button>
+            </aside>
+          </div>
+        )}
       </QueryState>
       {[products, users, receipts].some((q) => q.isError) && (
         <p className="form-error" role="alert">

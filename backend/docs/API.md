@@ -70,7 +70,7 @@ CRUD `/management/{resource}`: GET list, POST create; `/{id}`: GET detail, PATCH
 
 `POST /management/supplier-products` tạo liên kết; `GET/DELETE /management/supplier-products/{supplierId}/{productId}` dùng hai ID vì bảng không có ID đơn. Danh sách vẫn dùng `GET /management/supplier-products`. Thay giá tham khảo có thể xóa rồi tạo lại liên kết. Quy cách đã có giao dịch không được đổi sản phẩm/hệ số. Không sửa tồn trực tiếp qua CRUD.
 
-`GET/POST /management/employees`: tạo `{email,password,fullName,phone,position}`; mã nhân viên tự sinh. `PUT /management/employees/{id}` và `/staff/profile`: `{fullName,birthDate,gender,phone,address}`. `PATCH /management/employees/{id}/employment`: `{status,position}` ACTIVE/ON_LEAVE/RESIGNED. `GET /staff/profile`. Quản trị: `GET /management/accounts`; PATCH `/{id}/status` `{status}` ACTIVE/LOCKED/DISABLED; PUT `/{id}/password` `{password}`; `GET /management/audit`. Các quyền tương ứng được kiểm tra trong controller.
+`GET/POST /management/employees`: tạo `{email,password,fullName,phone,position}`; mã nhân viên tự sinh. `PUT /management/employees/{id}` và `/staff/profile`: `{fullName,birthDate,gender,phone,address}`. `PATCH /management/employees/{id}/employment`: `{status,position}` ACTIVE/ON_LEAVE/RESIGNED. `GET /staff/profile`. Quản trị: `GET /management/accounts`; PATCH `/{id}/status` `{status}` ACTIVE/LOCKED/DISABLED; `GET /management/audit`. Các quyền tương ứng được kiểm tra trong controller.
 
 Báo cáo: `GET /staff/reports/stock?lowOnly=true`, `/staff/reports/purchases?from=...&to=...`; admin `/management/reports/revenue?from=...&to=...&group=day|week|month|quarter|year`, `/order-status`, `/promotions`, `/expiring-documents` (các đường dẫn cuối cùng thuộc `/management/reports`). Doanh thu tính đơn DA_GIAO/HOAN_TAT.
 
@@ -81,7 +81,7 @@ SQL mới có các bảng và hàm POS, liên hệ khách hàng, điều chỉnh
 
 - `GET /receipts`: phân trang từng lần nhận kèm items và tên nhà cung cấp; cần IMPORT_READ.
 - `GET /management/accounts`: hồ sơ/tên và mảng mã roles; không trả mật khẩu.
-- `POST /management/account-editor`, `PUT /management/account-editor/{id}`: `{email,fullName,phone,role,active,password?}`. Vai trò dùng mã tiếng Việt. Tạo mới bắt buộc password; không đổi email cũ. Giữ các vai trò phụ khi vai trò chính không đổi; đổi vai trò chính thay danh sách bằng vai trò đã chọn. Đổi vai trò/trạng thái/mật khẩu thu hồi phiên. Cần quản trị và ROLE_MANAGE.
+- `POST /management/account-editor`, `PUT /management/account-editor/{id}`: `{email,fullName,phone,role,active,password?}`. Vai trò dùng mã tiếng Việt. Tạo mới bắt buộc password; không đổi email cũ. Giữ các vai trò phụ khi vai trò chính không đổi; đổi vai trò chính thay danh sách bằng vai trò đã chọn. Đổi vai trò hoặc trạng thái thu hồi phiên. Mật khẩu chỉ dùng khi tạo mới; cập nhật mật khẩu tài khoản đã có bị từ chối (403). Cần quản trị và ROLE_MANAGE.
 - `POST /management/product-editor`, `PUT /management/product-editor/{id}`: `{fullName,brand,categoryId,volume,description,price,active,packageId?,packaging}`; packaging LON/CHAI/HOP. Lưu sản phẩm/thương hiệu/giá trong một giao dịch; xem các trường ảnh và điều chỉnh tồn bổ sung bên dưới. Tạo mới có một quy cách hệ số 1. Cập nhật packageId thuộc sản phẩm để sửa giá quy cách đó; bỏ trống tạo quy cách lẻ. Cần quản trị và PRODUCT_MANAGE.
 - Đăng ký nhận thêm phone tùy chọn. Hủy đơn nhận body `{note}` tùy chọn để ghi lịch sử.
 - Quote/checkout chỉ dùng packageIds thuộc giỏ đăng nhập, không nhận giá frontend. Checkout chỉ xóa dòng đã chọn.
@@ -211,7 +211,7 @@ Không tính lại giá của hàng hiện có tại thời điểm migration; �
 Các đơn bán trước đó giữ đơn giá và giá vốn đã chụp. Không có chi phí mua hàng bổ sung trong công thức này.
 
 Giá bán được làm tròn lên bội 500đ, vốn vẫn giữ 2 chữ số thập phân. Migration `20261107_round_selling_prices_500` làm tròn các giá đã theo công thức tự động, không sửa giá vốn hay đơn hàng cũ. Ví dụ: 14.583,34 → 15.000; 72.916,66 → 73.000; 12.500 giữ nguyên.
-# Khôi phục mật khẩu khách hàng bằng OTP email
+# Khôi phục mật khẩu khách hàng, nhân viên và quản trị bằng OTP email
 
 Các endpoint công khai (POST):
 
@@ -221,7 +221,7 @@ Các endpoint công khai (POST):
 | `/api/v1/auth/password-reset/verify` | `{ "challengeId": "UUID", "code": "123456" }` | `resetToken`, `expiresInSeconds` |
 | `/api/v1/auth/password-reset/complete` | `{ "challengeId": "UUID", "resetToken": "...", "newPassword": "..." }` | Thông báo đổi thành công; thu hồi phiên đăng nhập cũ |
 
-OTP và quyền đặt mật khẩu hết hạn sau 5 phút, dùng một lần. OTP tối đa 5 lần sai, gửi lại sau 60 giây; có giới hạn theo email/IP. Không trả OTP trong API hoặc ghi mã vào log. Tài khoản nhân viên/quản trị không dùng luồng khách hàng này. Xem [cấu hình Gmail và quy tắc](GMAIL_OTP.md). Khi SMTP chưa cấu hình, endpoint yêu cầu OTP trả 503.
+OTP và quyền đặt mật khẩu hết hạn sau 5 phút, dùng một lần. OTP tối đa 5 lần sai, gửi lại sau 60 giây; có giới hạn theo email/IP. Không trả OTP trong API hoặc ghi mã vào log. Khách hàng, nhân viên và quản trị dùng chung API này; tài khoản bị vô hiệu hóa hoặc bị khóa thủ công không được khôi phục. Xem [cấu hình Gmail và quy tắc](GMAIL_OTP.md). Khi SMTP chưa cấu hình, endpoint yêu cầu OTP trả 503.
 
 
 ## Người xác nhận đơn hàng
@@ -246,3 +246,29 @@ Trang quản lý đơn hàng tìm theo mã đơn, người nhận, tên/mã nhâ
 ### Xóa loại sản phẩm và giữ lịch sử
 
 `DELETE /api/v1/management/categories/{id}` đánh dấu `deleted_at`, đặt `hien_thi=false` và trả `204`, kể cả khi có sản phẩm hoặc phạm vi khuyến mãi tham chiếu. Không xóa các liên kết này. Loại đã xóa không xuất hiện trong danh sách quản lý, danh sách công khai và lựa chọn mới; không thể chỉnh sửa hoặc mở lại (`404`). Sản phẩm thuộc loại này bị ẩn khỏi cửa hàng đến khi được chuyển sang loại khác. API chặn gán loại đã xóa cho sản phẩm hoặc phạm vi khuyến mãi mới với thông báo cụ thể (`400`); sản phẩm/khuyến mãi hiện tại có thể giữ nguyên liên kết cũ khi sửa thông tin khác. Xóa lại trả `404`.
+
+## Nhập sản phẩm từ Excel
+
+Trang `/admin/products` có lựa chọn **Thêm sản phẩm → Nhập Excel** cho quản trị viên: tải mẫu `.xlsx`, điền sheet đầu tiên, xem trước lỗi theo dòng rồi xác nhận. Tối đa 200 sản phẩm/file, 5 MB. Cột bắt buộc: Tên sản phẩm, Thương hiệu, Loại sản phẩm (tên hoặc ID có sẵn), Quy cách, Bao bì (Lon/Chai/Hộp). Cột tùy chọn: Mô tả, Đang kinh doanh (Có/Không, trống là Có). Không nhận giá, tồn kho hoặc ảnh trong Excel; dùng phiếu nhập hàng và chỉnh sửa ảnh sau.
+
+`POST /api/v1/management/product-import`: JSON `{ "products": [{ "rowNumber": 2, "product": { "fullName": "Nước cam", "brand": "Cam Việt", "categoryId": 1, "volume": "Lon 330ml", "packaging": "LON", "description": "", "active": true } }] }`. Trả `{ "createdCount": 1 }`. Cần quản trị và quyền PRODUCT_MANAGE. Tất cả sản phẩm được lưu trong một giao dịch; lỗi bất kỳ dòng nào sẽ hoàn tác toàn bộ. Chặn dòng trùng và sản phẩm đã có cùng tên, thương hiệu, loại và quy cách. Sản phẩm mới tự tạo SKU, quy cách lẻ, tồn kho/giá bán ban đầu bằng 0.
+
+## Tự đổi email qua OTP email hiện tại và email mới
+
+Khách hàng, nhân viên và quản trị viên đang đăng nhập chọn Thay đổi email. Hệ thống lấy email hiện tại từ tài khoản (giao diện hiển thị che một phần), gửi OTP tới email này và chỉ cho nhập email mới sau khi xác minh thành công. Email mới cũng phải được xác minh bằng OTP riêng trước khi cập nhật. Dùng MAIL_* hiện có, gửi từ waterbus102@gmail.com.
+
+Các endpoint POST dưới /api/v1/auth/email-change yêu cầu Bearer token:
+- /request-current: body rỗng. Tạo challenge và gửi OTP tới email hiện tại của chính tài khoản đăng nhập.
+- /verify-current: challengeId, code. Xác minh OTP cũ, cho phép bước email mới trong 10 phút.
+- /request-new: email, challengeId bắt buộc và đã xác minh email hiện tại.
+- /verify-new: challengeId, code. Kiểm tra OTP mới rồi cập nhật email.
+- /resend: challengeId. Gửi lại OTP của bước hiện tại, mã trước mất hiệu lực.
+- /cancel: challengeId. Hủy yêu cầu của tài khoản và phiên hiện tại.
+
+OTP 6 số, tối đa 5 phút, 5 lần nhập sai; gửi lại sau 60 giây. OTP email mới bị giới hạn bởi thời hạn xác minh email hiện tại. Không thể bỏ qua bước xác minh cũ kể cả qua API hoặc yêu cầu tạo theo quy trình cũ. Yêu cầu gắn với tài khoản, phiên đăng nhập và email hiện tại. Email mới phải khác email hiện tại và chưa được sử dụng, kiểm tra lại khi hoàn tất. Chỉ lưu hash OTP. Đổi thành công thu hồi phiên khác và yêu cầu quên mật khẩu cũ, giữ phiên hiện tại. Có giới hạn theo tài khoản/email/IP; không ghi mã hoặc mật khẩu SMTP vào log. Dùng bảng email_change_challenge hiện có.
+
+## Quyền đổi mật khẩu
+
+Mọi vai trò tự đổi mật khẩu trong Thông tin cá nhân qua PUT /api/v1/auth/password, body oldPassword và newPassword. Luôn xác định tài khoản từ Bearer token; không nhận ID tài khoản đích. Cần mật khẩu hiện tại đúng, mật khẩu mới khác mật khẩu cũ, tối thiểu 8 ký tự và tối đa 72 byte UTF-8. Sau thành công thu hồi mọi phiên, hủy các yêu cầu quên mật khẩu/đổi email đang chờ và yêu cầu đăng nhập lại.
+
+Quản trị không đổi mật khẩu của bất kỳ tài khoản hiện có nào qua quản lý tài khoản: PUT /management/accounts/{id}/password trả 403; PUT /management/account-editor/{id} có password không trống cũng trả 403, kể cả khi đổi vai trò. Tạo tài khoản mới vẫn cần mật khẩu ban đầu.

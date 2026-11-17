@@ -1,3 +1,6 @@
+import ChangePasswordForm from '@/components/common/ChangePasswordForm';
+import { useState } from 'react';
+import EmailChangeDialog from '@/components/common/EmailChangeDialog';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { UserRound, ShoppingBag, LogOut, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { profileSchema, managementProfileSchema } from '@/schemas';
 import { authService } from '@/services';
 import { useAction } from '@/hooks/useData';
-import { roleLabels } from '@/utils/format';
+import { roleLabels, maskEmail } from '@/utils/format';
 export default function AccountLayout() {
   const { user, logout } = useAuth();
   return (
@@ -54,6 +57,7 @@ export default function AccountLayout() {
 }
 export function ProfilePage({ management = false }) {
   const { user, setUser } = useAuth();
+  const [changingEmail, setChangingEmail] = useState(false);
   const {
     register,
     handleSubmit,
@@ -85,7 +89,14 @@ export function ProfilePage({ management = false }) {
           <input autoComplete="name" {...register('name')} />
         </Field>
         <Field label="Email">
-          <input value={user.email} disabled />
+          <div className="profile-email-row">
+            <output data-field-control className="profile-email-value">
+              {maskEmail(user.email)}
+            </output>
+            <Button type="button" variant="outline" onClick={() => setChangingEmail(true)}>
+              Thay đổi email
+            </Button>
+          </div>
         </Field>
         <Field label="Số điện thoại" error={errors.phone}>
           <input type="tel" inputMode="numeric" autoComplete="tel" {...register('phone')} />
@@ -137,6 +148,16 @@ export function ProfilePage({ management = false }) {
           {action.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
         </Button>
       </form>
+      <ChangePasswordForm management={management} />
+      {changingEmail && (
+        <EmailChangeDialog
+          onClose={() => setChangingEmail(false)}
+          onChanged={(email) => {
+            setUser((previous) => ({ ...previous, email }));
+            setValue('email', email);
+          }}
+        />
+      )}
     </div>
   );
 }

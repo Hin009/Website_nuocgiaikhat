@@ -28,3 +28,12 @@ export const paymentMethodLabels = {
   MOMO: 'Ví điện tử MoMo (Sandbox)',
   BANK_TRANSFER: 'Chuyển khoản ngân hàng',
 };
+
+export function maskEmail(email) {
+  const value = String(email || '').trim();
+  const at = value.lastIndexOf('@');
+  if (at < 1 || at === value.length - 1) return '—';
+  const local = Array.from(value.slice(0, at));
+  const visible = Math.min(2, Math.max(0, local.length - 1));
+  return local.slice(0, visible).join('') + '*'.repeat(local.length - visible) + value.slice(at);
+}

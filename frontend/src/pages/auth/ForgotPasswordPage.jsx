@@ -8,8 +8,9 @@ import { Field } from '@/components/common/Shared';
 import { passwordResetService } from '@/services/api';
 
 const emailSchema = z.string().trim().email('Nhập email hợp lệ.').max(255);
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage({ management = false }) {
   const navigate = useNavigate();
+  const loginPath = management ? '/admin' : '/login';
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -91,7 +92,7 @@ export default function ForgotPasswordPage() {
       setPassword('');
       setConfirm('');
       toast.success('Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới.');
-      navigate('/login', { replace: true });
+      navigate(loginPath, { replace: true });
     });
   };
   const stage = ['email', 'otp', 'password'].indexOf(step);
@@ -107,10 +108,14 @@ export default function ForgotPasswordPage() {
       </h1>
       <p className="auth-subtitle">
         {step === 'email'
-          ? 'Nhập email đã đăng ký tài khoản khách hàng để nhận mã OTP.'
+          ? management
+            ? 'Nhập email tài khoản quản lý hoặc nhân viên để nhận mã OTP.'
+            : 'Nhập email đã đăng ký tài khoản khách hàng để nhận mã OTP.'
           : step === 'otp'
             ? `Nhập mã 6 chữ số gửi tới ${email}. Mã có hiệu lực trong 5 phút.`
-            : 'Chọn mật khẩu mới để tiếp tục mua sắm cùng WaterBus.'}
+            : management
+              ? 'Chọn mật khẩu mới để đăng nhập lại khu vực quản lý WaterBus.'
+              : 'Chọn mật khẩu mới để tiếp tục mua sắm cùng WaterBus.'}
       </p>
       <ol className="password-reset-steps" aria-label="Các bước khôi phục">
         {[
@@ -241,7 +246,7 @@ export default function ForgotPasswordPage() {
         )}
       </form>
       <p className="auth-switch">
-        <Link to="/login">
+        <Link to={loginPath}>
           <ArrowLeft size={15} /> Quay lại đăng nhập
         </Link>
       </p>

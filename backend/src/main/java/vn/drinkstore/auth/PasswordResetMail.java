@@ -33,6 +33,13 @@ public class PasswordResetMail {
         message.setText("Mã OTP của bạn là: "+code+"\n\nMã có hiệu lực trong 5 phút và chỉ được dùng một lần. Không chia sẻ mã này với bất kỳ ai.\n\nNếu bạn không yêu cầu đổi mật khẩu, hãy bỏ qua email này.\nWaterBus");
         sender.send(message);
     }
+    public void sendEmailChange(String recipient,String code,boolean newEmail) {
+        var message=new SimpleMailMessage();
+        message.setFrom(from); message.setTo(recipient);
+        message.setSubject("WaterBus - Mã OTP xác minh "+(newEmail?"email mới":"email hiện tại"));
+        message.setText("Bạn đang yêu cầu thay đổi email tài khoản WaterBus.\n\nMã OTP xác minh "+(newEmail?"email mới":"email hiện tại")+" của bạn là: "+code+"\n\nMã có hiệu lực tối đa 5 phút và chỉ dùng một lần. Không chia sẻ mã với bất kỳ ai.\n\nNếu bạn không yêu cầu thay đổi email, không cung cấp mã này và liên hệ cửa hàng.\nWaterBus");
+        sender.send(message);
+    }
     @Configuration
     public static class DeliveryConfiguration {
         @Bean(name="passwordResetMailExecutor") public ThreadPoolTaskExecutor executor() {

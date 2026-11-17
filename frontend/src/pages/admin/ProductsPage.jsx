@@ -1,9 +1,10 @@
 import { isLowStock } from '@/utils/inventory';
 import ProductInventoryDetails from './ProductInventoryDetails';
+import ProductImportDialog from './ProductImportDialog';
 import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Archive, Trash2, Package, ChevronDown } from 'lucide-react';
+import { Plus, Search, Pencil, Lock, Unlock, Trash2, Package, ChevronDown } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '@/schemas';
@@ -227,10 +228,7 @@ function ProductForm({ item, categories, onClose }) {
             <input type="color" {...register('color')} />
           </Field>
         )}
-        <label className="checkbox-row span-two">
-          <input type="checkbox" {...register('active')} />
-          Đang kinh doanh
-        </label>
+
         <Field className="span-two" label="Mô tả" error={errors.description}>
           <textarea {...register('description')} rows={3} />
         </Field>
@@ -341,14 +339,15 @@ export default function ProductsPage() {
   const [state, setState] = useState('all');
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState(undefined);
+  const [importing, setImporting] = useState(false);
   const [remove, setRemove] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const deleteAction = useAction((id) => adminService.deleteProduct(id), 'Đã xóa sản phẩm');
   const [expanded, setExpanded] = useState(null);
   const toggleInventory = (id) => setExpanded((previous) => (previous === id ? null : id));
   const action = useAction(
-    (id) => adminService.remove('products', id),
-    'Đã ngừng kinh doanh sản phẩm',
+    (product) => adminService.setActive('products', product.id, !product.active),
+    'Đã cập nhật trạng thái sản phẩm',
   );
   const data = (query.data || []).filter(
     (p) =>
@@ -498,14 +497,14 @@ export default function ProductsPage() {
                                 </button>
                                 <button
                                   className="icon-button"
-                                  aria-label={'Ngừng bán ' + p.name}
-                                  title={
-                                    p.active ? 'Ngừng kinh doanh sản phẩm' : 'Đã ngừng kinh doanh'
+                                  aria-label={
+                                    (p.active ? 'Khóa sản phẩm ' : 'Mở khóa sản phẩm ') + p.name
                                   }
-                                  disabled={!p.active || action.isPending || deleteAction.isPending}
+                                  title={p.active ? 'Khóa sản phẩm' : 'Mở khóa sản phẩm'}
+                                  disabled={action.isPending || deleteAction.isPending}
                                   onClick={() => setRemove(p)}
                                 >
-                                  <Archive size={16} />
+                                  {p.active ? <Lock size={16} /> : <Unlock size={16} />}
                                 </button>
                                 {(isMock ? p.active === false : p.discontinued) && (
                                   <button
@@ -564,11 +563,36 @@ export default function ProductsPage() {
           )}
         </QueryState>
       </div>
+      {editable && importing && (
+        <ProductImportDialog
+          categories={categories.data || []}
+          products={query.data || []}
+          onClose={() => setImporting(false)}
+        />
+      )}
       <Dialog open={editable && edit !== undefined} onOpenChange={(v) => !v && setEdit(undefined)}>
         <DialogContent
           title={edit ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm'}
           description="Nhập thông tin sản phẩm và kiểm tra trước khi lưu."
         >
+          {edit === null && (
+            <div className="product-import-option">
+              <div>
+                <strong>Thêm nhiều sản phẩm cùng lúc</strong>
+                <p className="muted-note">Tải file mẫu và nhập danh sách sản phẩm từ Excel.</p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={!query.isSuccess}
+                onClick={() => {
+                  setEdit(undefined);
+                  setImporting(true);
+                }}
+              >
+                Nhập Excel
+              </Button>
+            </div>
+          )}
           <ProductForm
             key={edit?.id || 'new'}
             item={edit}
@@ -596,15 +620,17 @@ export default function ProductsPage() {
       <ConfirmDialog
         open={editable && !!remove}
         onOpenChange={(v) => !v && !action.isPending && setRemove(null)}
-        title="Ngừng kinh doanh sản phẩm?"
+        title={remove?.active ? 'Khóa sản phẩm?' : 'Mở khóa sản phẩm?'}
         description={
           remove?.name +
-          ' sẽ ngừng bán tại cửa hàng và vẫn được giữ trong danh sách quản lý để chỉnh sửa hoặc kinh doanh lại. Dữ liệu các đơn cũ được giữ lại.'
+          (remove?.active
+            ? ' sẽ ngừng kinh doanh và được ẩn khỏi cửa hàng. Lịch sử đơn hàng được giữ lại.'
+            : ' sẽ được mở khóa và kinh doanh trở lại.')
         }
         pending={action.isPending}
         onConfirm={async () => {
           try {
-            await action.mutateAsync(remove.id);
+            await action.mutateAsync(remove);
             setRemove(null);
           } catch {
             /* toast */

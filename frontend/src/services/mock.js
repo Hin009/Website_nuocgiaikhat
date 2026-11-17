@@ -58,6 +58,29 @@ export const catalogService = {
     run(() => readDb().categories.filter((c) => !c.deletedAt && c.active !== false)),
 };
 export const authService = {
+  changePassword: (values) =>
+    run(async () => {
+      const id = sessionStorage.getItem('waterbus.mock.session');
+      const db = readDb();
+      const user = db.users.find((u) => u.id === id && u.active);
+      if (!user) throw new Error('Vui lòng đăng nhập lại.');
+      const previous = db.registered.find((a) => a.email === user.email.toLowerCase());
+      const valid = previous
+        ? previous.digest === (await digest(values.oldPassword))
+        : ['u1', 'u2', 'u3'].includes(id) && values.oldPassword === 'Demo@123';
+      if (!valid) throw new Error('Mật khẩu cũ không đúng.');
+      if (values.newPassword.length < 8 || new TextEncoder().encode(values.newPassword).length > 72)
+        throw new Error('Mật khẩu cần ít nhất 8 ký tự và tối đa 72 byte UTF-8.');
+      if (values.oldPassword === values.newPassword)
+        throw new Error('Mật khẩu mới phải khác mật khẩu hiện tại.');
+      const passwordDigest = await digest(values.newPassword);
+      updateDb((current) => {
+        const account = current.registered.find((a) => a.email === user.email.toLowerCase());
+        if (account) account.digest = passwordDigest;
+        else current.registered.push({ email: user.email.toLowerCase(), digest: passwordDigest });
+      });
+      sessionStorage.removeItem('waterbus.mock.session');
+    }),
   me: () =>
     run(() => {
       try {
@@ -237,6 +260,48 @@ export const orderService = {
     ),
 };
 export const adminService = {
+  setActive: (key, id, active) =>
+    run(() =>
+      updateDb((db) => {
+        requireProductManager(db);
+        if (!['users', 'products'].includes(key))
+          throw new Error('Không hỗ trợ thay đổi trạng thái này.');
+        if (key === 'users' && id === sessionStorage.getItem('waterbus.mock.session'))
+          throw new Error('Không thể khóa tài khoản đang sử dụng.');
+        const item = db[key].find((item) => item.id === id && !item.deletedAt);
+        if (!item) throw new Error('Dữ liệu không còn tồn tại.');
+        item.active = active;
+        return item;
+      }),
+    ),
+  importProducts: (rows) =>
+    run(() =>
+      updateDb((db) => {
+        requireProductManager(db);
+        const products = rows.map(({ product: p }) => {
+          if (!db.categories.some((c) => c.id === p.categoryId && !c.deletedAt))
+            throw new Error('Loại sản phẩm không còn tồn tại.');
+          return {
+            id: uid('products'),
+            name: p.fullName,
+            brand: p.brand,
+            categoryId: p.categoryId,
+            volume: p.volume,
+            art: p.packaging === 'LON' ? 'can' : p.packaging === 'HOP' ? 'carton' : 'bottle',
+            description: p.description,
+            active: p.active,
+            price: 0,
+            stock: 0,
+            color: '#61846b',
+            accent: '#edf2df',
+            label: p.brand,
+            imageUrl: '',
+          };
+        });
+        db.products.push(...products);
+        return { createdCount: products.length };
+      }),
+    ),
   deleteProduct: (id) =>
     run(() =>
       updateDb((db) => {
@@ -256,6 +321,11 @@ export const adminService = {
   save: (key, values) =>
     run(() =>
       updateDb((db) => {
+        if (key === 'users') {
+          requireProductManager(db);
+          if (values.id && values.password?.trim())
+            throw new Error('Chỉ chủ tài khoản được tự đổi mật khẩu trong thông tin cá nhân.');
+        }
         if (key === 'products') {
           requireProductManager(db);
           values = { ...values, ...productSchema.parse(values) };

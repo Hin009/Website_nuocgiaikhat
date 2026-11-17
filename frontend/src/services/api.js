@@ -19,10 +19,21 @@ export const transitions = {
   REJECTED: [],
 };
 const numeric = (id) => Number(id);
+export const emailChangeService = {
+  requestCurrent: () => post('/auth/email-change/request-current', {}),
+  verifyCurrent: (challengeId, code) =>
+    post('/auth/email-change/verify-current', { challengeId, code }),
+  requestNew: (email, challengeId) =>
+    post('/auth/email-change/request-new', { email, ...(challengeId ? { challengeId } : {}) }),
+  verifyNew: (challengeId, code) => post('/auth/email-change/verify-new', { challengeId, code }),
+  resend: (challengeId) => post('/auth/email-change/resend', { challengeId }),
+  cancel: (challengeId) => post('/auth/email-change/cancel', { challengeId }),
+};
 export const passwordResetService = {
   request: (email) => post('/auth/password-reset/request', { email }),
   verify: (challengeId, code) => post('/auth/password-reset/verify', { challengeId, code }),
-  complete: (challengeId, resetToken, newPassword) => post('/auth/password-reset/complete', { challengeId, resetToken, newPassword }),
+  complete: (challengeId, resetToken, newPassword) =>
+    post('/auth/password-reset/complete', { challengeId, resetToken, newPassword }),
 };
 export const catalogService = {
   checkoutOptions: () => get('/catalog/checkout-options'),
@@ -88,6 +99,13 @@ async function profile(payload) {
   };
 }
 export const authService = {
+  async changePassword(values) {
+    await put('/auth/password', {
+      oldPassword: values.oldPassword,
+      newPassword: values.newPassword,
+    });
+    saveSession(null);
+  },
   async me() {
     if (!accessToken()) return null;
     try {
@@ -283,6 +301,25 @@ export const purchasingService = {
   confirm: (id) => post(`/receipts/${id}/confirm`),
 };
 export const adminService = {
+  setActive: (key, id, active) => {
+    if (key === 'users')
+      return patch('/management/accounts/' + id + '/status', {
+        status: active ? 'ACTIVE' : 'LOCKED',
+      });
+    if (key === 'products')
+      return patch('/management/products/' + id, {
+        trang_thai: active ? 'DANG_BAN' : 'NGUNG_KINH_DOANH',
+        hien_thi: active,
+      });
+    throw new Error('Không hỗ trợ thay đổi trạng thái này.');
+  },
+  importProducts: (products) =>
+    post('/management/product-import', {
+      products: products.map((r) => ({
+        ...r,
+        product: { ...r.product, categoryId: Number(r.product.categoryId) },
+      })),
+    }),
   deleteProduct: (id) => del(`/management/products/${id}`),
   inventoryDetails: (id) => get(`/staff/products/${id}/inventory-details`),
   adjustStock: (product, values) => patch(`/management/products/${product.id}/stock`, values),
@@ -392,7 +429,7 @@ export const adminService = {
         phone: v.phone,
         role: roleCodes[v.role],
         active: v.active,
-        password: v.password || null,
+        ...(!v.id ? { password: v.password || null } : {}),
       };
       const result = v.id
         ? await put(`/management/account-editor/${v.id}`, body)

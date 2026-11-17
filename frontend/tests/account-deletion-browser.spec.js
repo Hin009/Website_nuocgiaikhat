@@ -44,8 +44,8 @@ test('account deletion appears only after deactivation, confirms and handles sta
     else if (path === '/staff/profile') data = { id: 1, ho_ten: 'Admin' };
     else if (path === '/management/accounts') data = { items: accounts, total: accounts.length };
     else if (path === '/staff/orders') data = { items: [], total: 0 };
-    else if (path === '/management/account-editor/2' && request.method() === 'PUT') {
-      accounts[0].trang_thai = request.postDataJSON().active ? 'ACTIVE' : 'LOCKED';
+    else if (path === '/management/accounts/2/status' && request.method() === 'PATCH') {
+      accounts[0].trang_thai = request.postDataJSON().status;
       data = accounts[0];
     } else if (path === '/management/accounts/2' && request.method() === 'DELETE') {
       deleted++;
@@ -68,13 +68,32 @@ test('account deletion appears only after deactivation, confirms and handles sta
   await expect(page.getByRole('button', { name: 'Xóa Nhân viên thử', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Sửa Khách thử', exact: true }).click();
   const editor = page.getByRole('dialog');
-  await editor.getByLabel('Đang hoạt động').uncheck();
-  await editor.getByRole('button', { name: 'Lưu tài khoản', exact: true }).click();
+  await expect(editor.getByLabel('Đang hoạt động')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Hủy', exact: true }).click();
+  const lock = page.getByRole('button', { name: 'Khóa tài khoản Khách thử', exact: true });
+  await expect(lock.locator('xpath=preceding-sibling::button[1]')).toHaveAttribute(
+    'aria-label',
+    'Sửa Khách thử',
+  );
+  await lock.click();
   await page
     .getByRole('alertdialog')
     .getByRole('button', { name: 'Xác nhận', exact: true })
     .click();
-  await expect(editor).toHaveCount(0);
+  const unlock = page.getByRole('button', { name: 'Mở khóa tài khoản Khách thử', exact: true });
+  await expect(unlock).toBeVisible();
+  await unlock.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Xác nhận', exact: true })
+    .click();
+  await expect(lock).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Xóa Khách thử', exact: true })).toHaveCount(0);
+  await lock.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Xác nhận', exact: true })
+    .click();
   const remove = page.getByRole('button', { name: 'Xóa Khách thử', exact: true });
   await expect(remove).toBeVisible();
   const row = remove.locator('xpath=ancestor::tr');
@@ -93,7 +112,9 @@ test('account deletion appears only after deactivation, confirms and handles sta
   await confirmation.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect.poll(() => deleted).toBe(1);
   await expect(confirmation).toBeVisible();
-  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toContainText('Hãy ngừng hoạt động');
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toContainText(
+    'Hãy ngừng hoạt động',
+  );
   rejectDelete = false;
   await confirmation.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect(confirmation).toHaveCount(0);

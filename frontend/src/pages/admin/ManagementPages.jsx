@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { Plus, Search, Pencil, Trash2, Eye, UsersRound, Truck, Shapes } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  Plus,
+  Search,
+  Pencil,
+  Lock,
+  Unlock,
+  Trash2,
+  Eye,
+  UsersRound,
+  Truck,
+  Shapes,
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -421,6 +433,12 @@ function MockReceiptsPage() {
   );
 }
 export function UsersPage({ customers = false }) {
+  const { user } = useAuth();
+  const [statusTarget, setStatusTarget] = useState(null);
+  const statusAction = useAction(
+    (account) => adminService.setActive('users', account.id, !account.active),
+    'Đã cập nhật trạng thái tài khoản',
+  );
   const query = useAdmin('users');
   const orders = useAdmin('orders');
   const [q, setQ] = useState('');
@@ -545,6 +563,29 @@ export function UsersPage({ customers = false }) {
                                 <Pencil size={16} />
                               </button>
                             )}
+                            {!customers && (
+                              <button
+                                className="icon-button"
+                                aria-label={
+                                  (u.active ? 'Khóa tài khoản ' : 'Mở khóa tài khoản ') + u.name
+                                }
+                                title={
+                                  u.id === user.id
+                                    ? 'Không thể khóa tài khoản đang sử dụng'
+                                    : u.active
+                                      ? 'Khóa tài khoản'
+                                      : 'Mở khóa tài khoản'
+                                }
+                                disabled={
+                                  u.id === user.id ||
+                                  statusAction.isPending ||
+                                  deleteAction.isPending
+                                }
+                                onClick={() => setStatusTarget(u)}
+                              >
+                                {u.active ? <Lock size={16} /> : <Unlock size={16} />}
+                              </button>
+                            )}
                             {!customers && u.active === false && (
                               <button
                                 className="icon-button"
@@ -574,6 +615,28 @@ export function UsersPage({ customers = false }) {
           )}
         </QueryState>
       </div>
+      <ConfirmDialog
+        open={!!statusTarget}
+        onOpenChange={(open) => !open && !statusAction.isPending && setStatusTarget(null)}
+        title={statusTarget?.active ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?'}
+        description={
+          statusTarget
+            ? statusTarget.name +
+              (statusTarget.active
+                ? ' sẽ không thể đăng nhập và các phiên đăng nhập hiện có sẽ bị thu hồi.'
+                : ' sẽ được đăng nhập trở lại.')
+            : ''
+        }
+        pending={statusAction.isPending}
+        onConfirm={async () => {
+          try {
+            await statusAction.mutateAsync(statusTarget);
+            setStatusTarget(null);
+          } catch {
+            /* Keep confirmation for retry. */
+          }
+        }}
+      />
       <ConfirmDialog
         open={!!remove}
         onOpenChange={(open) => !open && !deleteAction.isPending && setRemove(null)}

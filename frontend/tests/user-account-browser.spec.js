@@ -96,7 +96,7 @@ test('admin expands orders inline and retains order processing controls', async 
   expect(errors).toEqual([]);
 });
 
-test('customer editor omits password while staff editor retains it', async ({ page }) => {
+test('management editors omit password for all existing accounts', async ({ page }) => {
   const user = {
     account: { id: 1, email: 'admin@test.invalid', trang_thai: 'ACTIVE' },
     roles: ['QUAN_TRI_VIEN'],
@@ -159,19 +159,17 @@ test('customer editor omits password while staff editor retains it', async ({ pa
     .getByRole('button', { name: 'Xác nhận', exact: true })
     .click();
   await expect.poll(() => writes.length).toBe(1);
-  expect(writes[0].password).toBeNull();
+  expect(writes[0]).not.toHaveProperty('password');
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button', { name: 'Sửa Nhân viên thử', exact: true }).click();
-  await expect(
-    dialog.getByLabel('Mật khẩu mới (để trống nếu giữ nguyên)', { exact: true }),
-  ).toBeVisible();
-  await dialog.getByLabel('Mật khẩu mới (để trống nếu giữ nguyên)', { exact: true }).fill('short');
+  await expect(dialog.locator('input[type="password"]')).toHaveCount(0);
   await dialog.getByLabel('Vai trò', { exact: true }).selectOption('CUSTOMER');
   await expect(dialog.locator('input[type="password"]')).toHaveCount(0);
-  await dialog.getByLabel('Vai trò', { exact: true }).selectOption('STAFF');
-  await expect(
-    dialog.getByLabel('Mật khẩu mới (để trống nếu giữ nguyên)', { exact: true }),
-  ).toHaveValue('');
+  await dialog.getByLabel('Vai trò', { exact: true }).selectOption('ADMIN');
+  await expect(dialog.locator('input[type="password"]')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await page.getByRole('button', { name: 'Thêm tài khoản', exact: true }).click();
+  await expect(dialog.getByLabel('Mật khẩu', { exact: true })).toBeVisible();
   expect(unexpected).toEqual([]);
   expect(errors).toEqual([]);
 });

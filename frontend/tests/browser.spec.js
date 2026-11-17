@@ -206,13 +206,11 @@ test('Tạo nhân viên với xác nhận, đăng nhập tài khoản mới và 
   await login(page, 'Quản trị');
   await page.goto('/admin/users');
   await page.getByRole('button', { name: 'Sửa Lê Ngọc An', exact: true }).click();
-  await page.getByLabel('Đang hoạt động').uncheck();
-  await page.getByRole('button', { name: 'Lưu tài khoản' }).click();
-  await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
-  await expect(
-    page.getByText('Không thể khóa hoặc hạ quyền tài khoản đang sử dụng.', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel('Đang hoạt động')).toHaveCount(0);
   await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Khóa tài khoản Lê Ngọc An', exact: true }),
+  ).toBeDisabled();
   await page.getByRole('button', { name: 'Thêm tài khoản' }).click();
   await page.getByLabel('Họ tên', { exact: true }).fill('Nhân Viên Mới');
   await page.getByLabel('Email', { exact: true }).fill('staffmoi@waterbus.demo');
@@ -628,23 +626,24 @@ test('Admin can edit stock and retains discontinued products for later reactivat
   await setCocaStock(page, 20);
   const row = page.getByRole('row').filter({ hasText: 'Coca-Cola nguyên bản' });
   await expect(row).toContainText('Sắp hết hàng');
-  await row.getByRole('button', { name: 'Ngừng bán Coca-Cola nguyên bản', exact: true }).click();
+  await row
+    .getByRole('button', { name: 'Khóa sản phẩm Coca-Cola nguyên bản', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect(row).toBeVisible();
   await expect(row).toContainText('Ngừng bán');
   await row.getByRole('button', { name: 'Sửa Coca-Cola nguyên bản', exact: true }).click();
-  await expect(page.getByLabel('Đang kinh doanh', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('Đang kinh doanh', { exact: true })).toHaveCount(0);
   await page.getByLabel('Số lượng tồn kho', { exact: true }).fill('45');
   await page.getByRole('button', { name: 'Lưu sản phẩm', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(row).toContainText('Ngừng bán');
-  await expect(row.getByRole('cell').nth(3)).toHaveText('45');
+  await expect(row.getByLabel('Tồn kho Coca-Cola nguyên bản', { exact: true })).toHaveValue('45');
   const customerPage = await page.context().newPage();
   await customerPage.goto('/products?q=Coca-Cola');
   await expect(customerPage.locator('.product-card')).toHaveCount(0);
-  await row.getByRole('button', { name: 'Sửa Coca-Cola nguyên bản', exact: true }).click();
-  await page.getByLabel('Đang kinh doanh', { exact: true }).check();
-  await page.getByRole('button', { name: 'Lưu sản phẩm', exact: true }).click();
+  await row.getByRole('button', { name: 'Mở khóa sản phẩm Coca-Cola nguyên bản', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(row).toContainText('Đang bán');
   await expect(customerPage.locator('.product-card')).toHaveCount(1);

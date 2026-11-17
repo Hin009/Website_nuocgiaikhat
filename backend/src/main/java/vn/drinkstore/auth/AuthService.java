@@ -62,8 +62,11 @@ public class AuthService {
         if(!Passwords.fitsBcrypt(oldPassword)) throw ApiException.bad("Mật khẩu cũ không đúng");
         var a=db.one("select * from tai_khoan where id=? for update",id);
         if(!encoder.matches(oldPassword,a.get("mat_khau_hash").toString())) throw ApiException.bad("Mật khẩu cũ không đúng");
+        if(oldPassword.equals(password)) throw ApiException.bad("Mật khẩu mới phải khác mật khẩu hiện tại.");
         db.jdbc().update("update tai_khoan set mat_khau_hash=? where id=?",encoder.encode(password),id);
         db.jdbc().update("update password_reset_challenge set da_dung=true,otp_hash=null,reset_token_hash=null,reset_het_han=null where tai_khoan_id=?",id);
         db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
+        db.jdbc().update("update email_change_challenge set stage='CANCELLED',otp_hash=null where tai_khoan_id=? and stage not in ('COMPLETED','CANCELLED')",id);
+        db.audit(id,"PASSWORD_CHANGE","tai_khoan",id);
     }
 }

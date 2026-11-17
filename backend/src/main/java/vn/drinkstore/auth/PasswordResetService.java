@@ -19,7 +19,7 @@ import vn.drinkstore.security.*;
 public class PasswordResetService {
     private static final SecureRandom RANDOM=new SecureRandom();
     private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(PasswordResetService.class);
-    private static final String GENERIC="Nếu email thuộc tài khoản khách hàng được phép khôi phục, mã OTP sẽ được gửi. Vui lòng kiểm tra hộp thư và thư rác.";
+    private static final String GENERIC="Nếu email thuộc tài khoản được phép khôi phục, mã OTP sẽ được gửi. Vui lòng kiểm tra hộp thư và thư rác.";
     private final Db db; private final PasswordEncoder encoder; private final PasswordResetMail mail;
     private final TaskExecutor delivery; private final Clock clock;
     @Autowired public PasswordResetService(Db db,PasswordEncoder encoder,PasswordResetMail mail,
@@ -31,8 +31,7 @@ public class PasswordResetService {
         return db.number("""
             select count(*) from tai_khoan a where a.id=?
               and (a.trang_thai='ACTIVE' or (a.trang_thai='LOCKED' and a.so_lan_dang_nhap_sai>=5))
-              and exists(select 1 from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=a.id and r.ma_vai_tro='KHACH_HANG')
-              and not exists(select 1 from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=a.id and r.ma_vai_tro in ('NHAN_VIEN','QUAN_TRI_VIEN'))
+              and exists(select 1 from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=a.id and r.ma_vai_tro in ('KHACH_HANG','NHAN_VIEN','QUAN_TRI_VIEN'))
             """,account)>0;
     }
     private Map<String,Object> accepted(UUID challenge) {

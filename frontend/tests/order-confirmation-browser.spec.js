@@ -166,3 +166,91 @@ test('orders show confirmation identity, search staff, filter calendar periods, 
   await expect(page.getByLabel('Lọc theo', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('customer orders filter by Vietnamese calendar day and month', async ({ page }) => {
+  const rows = [
+    {
+      id: 51,
+      ngay_dat: '2026-10-31T17:00:00Z',
+      trang_thai: 'CHO_XAC_NHAN',
+      ten_nguoi_nhan: 'Nguyễn An',
+    },
+    {
+      id: 52,
+      ngay_dat: '2026-10-31T16:59:59.999Z',
+      trang_thai: 'DA_GIAO',
+      ten_nguoi_nhan: 'Nguyễn An',
+    },
+    { id: 53, ngay_dat: '2026-11-01T16:59:59.999Z', trang_thai: 'DA_GIAO', ten_nguoi_nhan: 'Bình' },
+    {
+      id: 54,
+      ngay_dat: '2026-11-01T17:00:00Z',
+      trang_thai: 'DA_GIAO',
+      ten_nguoi_nhan: 'Nguyễn An',
+    },
+  ].map((row) => ({
+    ...row,
+    tong_tien: 10000,
+    giam_gia: 0,
+    phi_van_chuyen: 0,
+    items: [],
+    history: [],
+    payments: [],
+  }));
+  await page.addInitScript(() =>
+    sessionStorage.setItem(
+      'waterbus.api.session',
+      JSON.stringify({ token: 'customer-test', portal: 'customer' }),
+    ),
+  );
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
+    let data = { items: [], total: 0, page: 0, size: 100 };
+    if (path === '/auth/me')
+      data = {
+        account: { id: 2, email: 'customer@test.invalid', trang_thai: 'ACTIVE' },
+        roles: ['KHACH_HANG'],
+        permissions: [],
+      };
+    else if (path === '/me/profile')
+      data = { id: 2, ho_ten: 'Nguyễn An', dien_thoai: '0901234567' };
+    else if (path === '/me/addresses') data = [];
+    else if (path === '/orders') data = { items: rows, total: 4, page: 0, size: 100 };
+    else if (/^\/orders\/\d+$/.test(path))
+      data = rows.find((row) => row.id === Number(path.split('/')[2]));
+    return route.fulfill({ json: data });
+  });
+  await page.goto('/account/orders');
+  const filter = page.getByRole('group', { name: 'Lọc thời gian đơn hàng' });
+  const type = filter.getByLabel('Lọc theo', { exact: true });
+  const ids = () => page.locator('button.order-id').allTextContents();
+  await expect.poll(ids).toEqual(['#51', '#52', '#53', '#54']);
+  await expect(type.locator('option')).toHaveText(['Toàn bộ', 'Ngày', 'Tháng']);
+  await type.selectOption('day');
+  await filter.getByLabel('Ngày', { exact: true }).fill('2026-11-01');
+  await expect.poll(ids).toEqual(['#51', '#53']);
+  await page.getByLabel('Lọc trạng thái', { exact: true }).selectOption('COMPLETED');
+  await expect.poll(ids).toEqual(['#53']);
+  await page.getByLabel('Tìm đơn hàng', { exact: true }).fill('nguyen an');
+  await expect(page.getByText('Chưa có đơn hàng phù hợp')).toBeVisible();
+  await page.getByLabel('Tìm đơn hàng', { exact: true }).fill('');
+  await page.getByLabel('Lọc trạng thái', { exact: true }).selectOption('');
+  await type.selectOption('month');
+  await filter.getByLabel('Tháng', { exact: true }).fill('11/2026');
+  await expect.poll(ids).toEqual(['#51', '#53', '#54']);
+  await filter.getByLabel('Tháng', { exact: true }).fill('10/2026');
+  await expect.poll(ids).toEqual(['#52']);
+  await filter.getByLabel('Tháng', { exact: true }).fill('13/2026');
+  await expect(page.getByRole('alert')).toContainText('Chọn ngày hoặc tháng hợp lệ');
+  await expect.poll(ids).toEqual([]);
+  await type.selectOption('all');
+  await expect.poll(ids).toEqual(['#51', '#52', '#53', '#54']);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await type.selectOption('month');
+  await filter.getByLabel('Tháng', { exact: true }).fill('11/2026');
+  await expect.poll(ids).toEqual(['#51', '#53', '#54']);
+  await expect(filter).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+});

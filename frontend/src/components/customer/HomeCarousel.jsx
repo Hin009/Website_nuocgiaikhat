@@ -49,31 +49,45 @@ export default function HomeCarousel() {
       aria-label="Bộ sưu tập WaterBus"
       aria-roledescription="băng chuyền"
     >
-      <div className="hero-copy" aria-live="polite" aria-atomic="true">
-        <span className="hero-eyebrow">
-          <span />
-          {slide.eyebrow}
-        </span>
-        <h1>
-          {slide.title}
-          <br />
-          <em>{slide.emphasis}</em>
-        </h1>
-        <p>{slide.description}</p>
-        <Button asChild size="lg">
-          <Link to={slide.to}>
-            {slide.action}
-            <ArrowUpRight size={19} />
-          </Link>
-        </Button>
-      </div>
-      {slide.image ? (
-        <div className="carousel-poster">
-          <img key={slide.image} src={slide.image} alt={slide.alt} width="640" height="560" />
+      {slides.map((item, position) => (
+        <div
+          key={item.theme}
+          className="carousel-slide"
+          aria-hidden={index !== position}
+          inert={index !== position ? '' : undefined}
+          style={{ visibility: index === position ? 'visible' : 'hidden' }}
+        >
+          <div
+            className="hero-copy"
+            aria-live={index === position ? 'polite' : 'off'}
+            aria-atomic="true"
+          >
+            <span className="hero-eyebrow">
+              <span />
+              {item.eyebrow}
+            </span>
+            <h1>
+              {item.title}
+              <br />
+              <em>{item.emphasis}</em>
+            </h1>
+            <p>{item.description}</p>
+            <Button asChild size="lg">
+              <Link to={item.to}>
+                {item.action}
+                <ArrowUpRight size={19} />
+              </Link>
+            </Button>
+          </div>
+          {item.image ? (
+            <div className="carousel-poster">
+              <img key={item.image} src={item.image} alt={item.alt} width="640" height="560" />
+            </div>
+          ) : (
+            <HeroArtwork />
+          )}
         </div>
-      ) : (
-        <HeroArtwork />
-      )}
+      ))}
       <div className="carousel-controls">
         <button
           type="button"

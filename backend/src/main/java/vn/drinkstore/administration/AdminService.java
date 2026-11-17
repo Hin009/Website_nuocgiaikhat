@@ -1,18 +1,16 @@
 package vn.drinkstore.administration;
 
 import java.util.*;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.drinkstore.auth.AuthService;
 import vn.drinkstore.common.*;
 import vn.drinkstore.security.Access;
-import vn.drinkstore.security.Passwords;
 
 @Service
 public class AdminService {
-    private final Db db; private final Access access; private final AuthService auth; private final PasswordEncoder passwords;
-    public AdminService(Db db,Access access,AuthService auth,PasswordEncoder passwords) { this.db=db; this.access=access; this.auth=auth; this.passwords=passwords; }
+    private final Db db; private final Access access; private final AuthService auth;
+    public AdminService(Db db,Access access,AuthService auth) { this.db=db; this.access=access; this.auth=auth; }
     @Transactional public Object createStaff(AdminController.NewStaff r) {
         PhoneNumbers.validate(r.phone(),false);
         long account=auth.createAccount(r.email(),r.password(),"NHAN_VIEN");
@@ -54,16 +52,7 @@ public class AdminService {
         db.audit(access.account(),"ACCOUNT_"+status,"tai_khoan",id); return Map.of("id",id,"status",status);
     }
     @Transactional public void reset(long id,String password) {
-        Passwords.validate(password);
-        db.one("select id from tai_khoan where id=? and deleted_at is null for update",id);
-        rejectCustomerPasswordChange(id);
-        db.jdbc().update("update tai_khoan set mat_khau_hash=? where id=?",passwords.encode(password),id);
-        db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
-        db.audit(access.account(),"PASSWORD_RESET","tai_khoan",id);
-    }
-    private void rejectCustomerPasswordChange(long id) {
-        if(db.number("select count(*) from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=? and r.ma_vai_tro='KHACH_HANG'",id)>0)
-            throw ApiException.bad("Không đặt mật khẩu mới cho khách hàng trong quản lý tài khoản.");
+        throw new org.springframework.security.access.AccessDeniedException("Chỉ chủ tài khoản được tự đổi mật khẩu trong thông tin cá nhân.");
     }
     @Transactional public Object role(Long id,AdminController.Role r) {
         if(id==null) throw ApiException.bad("Schema defines three fixed role codes; update an existing role");
@@ -96,15 +85,14 @@ public class AdminService {
         throw ApiException.bad("Cannot delete one of the three system roles");
     }
     @Transactional public Object accountEditor(Long id,AdminController.AccountEditor r) {
+        if(id!=null && r.password()!=null && !r.password().isBlank())
+            throw new org.springframework.security.access.AccessDeniedException("Không đổi mật khẩu qua quản lý tài khoản. Chủ tài khoản phải tự đổi trong thông tin cá nhân.");
         PhoneNumbers.validate(r.phone(),false);
         long role=db.id("select id from vai_tro where ma_vai_tro=?",r.role());
         boolean created=id==null;
         if(created) { if(r.password()==null || r.password().isBlank()) throw ApiException.bad("Cần mật khẩu cho tài khoản mới"); id=auth.createAccount(r.email(),r.password(),r.role()); }
         var account=db.one("select * from tai_khoan where id=? and deleted_at is null for update",id);
-        if(!created && r.password()!=null && !r.password().isBlank()) {
-            if("KHACH_HANG".equals(r.role())) throw ApiException.bad("Không đặt mật khẩu mới cho khách hàng trong quản lý tài khoản.");
-            rejectCustomerPasswordChange(id);
-        }
+
         if(!account.get("email").toString().equalsIgnoreCase(r.email())) throw ApiException.bad("Không đổi email của tài khoản đã tạo");
         var roles=db.jdbc().queryForList("select r.ma_vai_tro from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=?",String.class,id);
         String primary=roles.contains("QUAN_TRI_VIEN")?"QUAN_TRI_VIEN":roles.contains("NHAN_VIEN")?"NHAN_VIEN":"KHACH_HANG";
@@ -123,9 +111,7 @@ public class AdminService {
         String state=r.active()?"ACTIVE":"LOCKED";
         boolean statusChanged=!state.equals(account.get("trang_thai"));
         db.jdbc().update("update tai_khoan set trang_thai=?,so_lan_dang_nhap_sai=case when ? then 0 else so_lan_dang_nhap_sai end where id=?",state,statusChanged,id);
-        boolean passwordChanged=!created && r.password()!=null && !r.password().isBlank();
-        if(passwordChanged) { Passwords.validate(r.password()); db.jdbc().update("update tai_khoan set mat_khau_hash=? where id=?",passwords.encode(r.password()),id); }
-        if(roleChanged || statusChanged || passwordChanged) db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
+        if(roleChanged || statusChanged) db.jdbc().update("update phien_xac_thuc set da_thu_hoi=true where tai_khoan_id=?",id);
         db.audit(access.account(),created?"ACCOUNT_CREATE":"ACCOUNT_EDIT","tai_khoan",id);
         return db.one("select a.id,a.email,a.trang_thai,coalesce(n.ho_ten,k.ho_ten) as ho_ten,coalesce(n.dien_thoai,k.dien_thoai) as dien_thoai,n.id as nhan_vien_id,k.id as khach_hang_id,array(select r.ma_vai_tro from tai_khoan_vai_tro ar join vai_tro r on r.id=ar.vai_tro_id where ar.tai_khoan_id=a.id) as roles from tai_khoan a left join nhan_vien n on n.tai_khoan_id=a.id left join khach_hang k on k.tai_khoan_id=a.id where a.id=?",id);
     }

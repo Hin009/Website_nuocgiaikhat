@@ -127,6 +127,7 @@ export default function ProductProfitPanel({ from, to, period, onPeriodChange, v
             {[
               ['Tổng tiền nhập', 'import_amount'],
               ['Doanh thu', 'net_sales'],
+              ['Giảm giá', 'discount'],
               ['Giá vốn', 'cost_of_goods'],
               ['Lãi gộp', 'gross_profit'],
             ].map(([label, key]) => (

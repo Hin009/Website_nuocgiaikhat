@@ -44,22 +44,34 @@ function MonthFilter({ value, onChange }) {
   );
 }
 
-export default function ReportPeriodFilter({ value, onChange, label = 'Lọc thời gian báo cáo' }) {
+export default function ReportPeriodFilter({
+  value,
+  onChange,
+  label = 'Lọc thời gian báo cáo',
+  types = ['all', 'day', 'month', 'quarter', 'year'],
+}) {
   const update = (key, next) => onChange({ ...value, [key]: next });
   return (
     <div className="report-period-filter" role="group" aria-label={label}>
       <label>
-        Lọc theo
         <select
           aria-label="Lọc theo"
           value={value.type}
           onChange={(e) => update('type', e.target.value)}
         >
-          <option value="all">Toàn bộ</option>
-          <option value="day">Ngày</option>
-          <option value="month">Tháng</option>
-          <option value="quarter">Quý</option>
-          <option value="year">Năm</option>
+          {Object.entries({
+            all: 'Toàn bộ',
+            day: 'Ngày',
+            month: 'Tháng',
+            quarter: 'Quý',
+            year: 'Năm',
+          })
+            .filter(([type]) => types.includes(type))
+            .map(([type, name]) => (
+              <option key={type} value={type}>
+                {name}
+              </option>
+            ))}
         </select>
       </label>
       {value.type === 'day' && (

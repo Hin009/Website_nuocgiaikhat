@@ -111,6 +111,12 @@ export default function App() {
             <Route path="register" element={<AuthPage key="register" registerMode />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
           </Route>
+          <Route element={<AuthLayout management />}>
+            <Route
+              path="admin/forgot-password"
+              element={<ForgotPasswordPage key="management-reset" management />}
+            />
+          </Route>
           <Route element={<ManagementRoute />}>
             <Route element={<RoleGuard roles={['STAFF']} />}>
               <Route path="admin" element={<AdminLayout />}>

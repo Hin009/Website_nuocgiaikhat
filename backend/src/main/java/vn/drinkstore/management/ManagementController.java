@@ -18,6 +18,10 @@ public class ManagementController {
     public Object editor(@Valid @RequestBody ProductEditor r) { return service.productEditor(null,r); }
     @PutMapping("/product-editor/{id}") @PreAuthorize("@access.admin() and @access.has('PRODUCT_MANAGE')")
     public Object editor(@PathVariable long id,@Valid @RequestBody ProductEditor r) { return service.productEditor(id,r); }
+    public record ProductImportRow(@Min(2) int rowNumber,@NotNull @Valid ProductEditor product) {}
+    public record ProductImport(@NotNull @Size(min=1,max=200) java.util.List<@NotNull @Valid ProductImportRow> products) {}
+    @PostMapping("/product-import") @PreAuthorize("@access.admin() and @access.has('PRODUCT_MANAGE')")
+    public Object importProducts(@Valid @RequestBody ProductImport r) { return service.importProducts(r.products()); }
     public record StockUpdate(@NotNull @Min(0) @Max(1000000000) Long stock,@NotNull @Min(0) Long expectedStock,@NotBlank @Size(max=1000) String reason) {}
     @PatchMapping("/products/{id}/stock") @PreAuthorize("@access.admin() and @access.has('PRODUCT_MANAGE')")
     public Object stock(@PathVariable long id,@Valid @RequestBody StockUpdate r) { return service.updateStock(id,r); }

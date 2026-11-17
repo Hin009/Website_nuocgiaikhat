@@ -13,6 +13,8 @@ export default defineConfig({
     'user-account-browser.spec.js',
     'storefront-browser.spec.js',
     'password-reset-browser.spec.js',
+    'password-change-browser.spec.js',
+    'email-change-browser.spec.js',
     'checkout-browser.spec.js',
   ],
   workers: 1,

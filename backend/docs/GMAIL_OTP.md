@@ -2,6 +2,8 @@
 
 Trang khách hàng: `/login` → **Quên mật khẩu?** → nhập email đã đăng ký → nhập OTP → đặt và xác nhận mật khẩu mới.
 
+Trang quản lý và nhân viên: `/admin` → **Quên mật khẩu?** → `/admin/forgot-password`. Sau khi xác minh OTP và đổi mật khẩu, người dùng quay về `/admin` để đăng nhập.
+
 ## Cấu hình gửi email thật
 
 1. Chọn một Gmail của cửa hàng để gửi email. Bật xác minh hai bước và tạo **Mật khẩu ứng dụng** theo [hướng dẫn Google](https://support.google.com/mail/answer/185833?hl=en).
@@ -19,7 +21,7 @@ MAIL_STARTTLS=true
 ```
 
 3. Từ thư mục `backend`, chạy `docker compose up -d --build api`. Khi chỉ đổi cấu hình email sau khi đã build chức năng này, chạy `docker compose up -d api`.
-4. Dùng email của tài khoản **khách hàng** đã đăng ký để thử. Kiểm tra cả thư rác. Nếu Google không cho tạo mật khẩu ứng dụng, cần dùng SMTP khác hoặc cấu hình tài khoản Google phù hợp.
+4. Dùng email của tài khoản **khách hàng, nhân viên hoặc quản trị** đã đăng ký để thử. Kiểm tra cả thư rác. Nếu Google không cho tạo mật khẩu ứng dụng, cần dùng SMTP khác hoặc cấu hình tài khoản Google phù hợp.
 
 File `.env` đã được Git bỏ qua. Không đưa mật khẩu ứng dụng vào mã nguồn, SQL hoặc cuộc trò chuyện. Khi chưa cấu hình, ứng dụng vẫn hoạt động; yêu cầu gửi OTP trả thông báo chức năng chưa được cấu hình.
 
@@ -27,7 +29,7 @@ File `.env` đã được Git bỏ qua. Không đưa mật khẩu ứng dụng v
 
 ## Quy tắc
 
-- Chỉ tài khoản khách hàng đang hoạt động, hoặc bị khóa vì nhập sai mật khẩu quá nhiều, mới được khôi phục. Tài khoản nhân viên/quản trị hoặc bị vô hiệu hóa không dùng luồng này.
+- Tài khoản khách hàng, nhân viên và quản trị đang hoạt động, hoặc bị khóa vì nhập sai mật khẩu quá nhiều, được khôi phục. Tài khoản bị vô hiệu hóa hoặc bị khóa thủ công không được khôi phục.
 - OTP sáu chữ số có hiệu lực năm phút, tối đa năm lần nhập sai. Gửi lại sau ít nhất 60 giây; mã cũ hết hiệu lực khi cấp mã mới.
 - Email tồn tại và không tồn tại nhận cùng thông báo để tránh lộ danh sách tài khoản. Chỉ email phù hợp mới nhận thư.
 - Xác minh thành công mới cấp quyền đặt mật khẩu trong năm phút. OTP và quyền đặt mật khẩu chỉ dùng một lần; cơ sở dữ liệu chỉ lưu bản băm.
