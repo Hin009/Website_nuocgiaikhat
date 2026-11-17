@@ -38,6 +38,18 @@ Sản phẩm tồn bằng 0 không thể mua. Muốn tăng tồn, thực hiện 
 
 ## Kiểm tra
 
+Ảnh mới trong form thêm/sửa sản phẩm của admin (tệp JPG/PNG/WebP hoặc URL mới) tự động
+tách nền bằng `@imgly/background-removal`, cắt khoảng trống và tải lên API dưới dạng PNG
+trong suốt. Admin xem trước kết quả và chỉ lưu khi xử lý thành công. Ảnh cũ không tự xử
+lý hàng loạt; chọn lại tệp để thay thế. Ảnh nhiều vật thể/nền phức tạp cần kiểm tra kết quả.
+
+Xử lý chạy trong trình duyệt. Lần đầu cần Internet tải mô hình/WASM từ `staticimgly.com`
+(mô hình mặc định khoảng 80 MB), sau đó được cache. URL bên ngoài phải cho phép CORS;
+nếu bị chặn, tải ảnh về rồi chọn tệp. Không cần thêm API key vào `backend/.env`.
+Khi triển khai có thể tự host tài nguyên và cấu hình `publicPath` trong
+`src/utils/productImage.js`. Thư viện IMG.LY dùng giấy phép AGPL-3.0; xem
+[tài liệu và giấy phép](https://github.com/imgly/background-removal-js).
+
 ```powershell
 npm.cmd run lint
 npm.cmd test
