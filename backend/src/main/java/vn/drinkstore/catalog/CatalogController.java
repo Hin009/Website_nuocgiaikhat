@@ -7,7 +7,6 @@ import vn.drinkstore.common.*;
 @RestController
 @RequestMapping("/api/v1/catalog")
 public class CatalogController {
-    @org.springframework.beans.factory.annotation.Autowired private vn.drinkstore.billing.MomoProperties momo;
     private final Db db;
     private final java.math.BigDecimal shipping;
     private final Map<String,String> bankTransfer;
@@ -22,8 +21,8 @@ public class CatalogController {
     @GetMapping("/checkout-options") public Object checkoutOptions() {
         var methods=new ArrayList<Map<String,Object>>();
         methods.add(Map.of("code","COD","label","Thanh toán khi nhận hàng (COD)","description","Thanh toán khi đơn hàng được giao."));
-        methods.add(Map.of("code","MOMO","label","Ví điện tử MoMo (Sandbox)","enabled",momo.ready(),"description",momo.ready()?"Quét QR bằng ứng dụng MoMo Test. Không phát sinh tiền thật.":"MoMo Sandbox chưa sẵn sàng. Cửa hàng cần hoàn tất cấu hình trước khi nhận thanh toán."));
-        return Map.of("shippingFee",shipping,"bankTransfer",bankTransfer,"paymentMethods",methods,"momoEnabled",momo.ready());
+        methods.add(Map.of("code","BANK_TRANSFER","label","Chuyển khoản ngân hàng (QR)","enabled",!bankTransfer.get("bankId").isBlank() && !bankTransfer.get("accountNumber").isBlank() && !bankTransfer.get("accountName").isBlank(),"description","Đặt hàng để nhận mã QR. Sau khi chuyển khoản, bấm Xác nhận thanh toán để admin kiểm tra và xác nhận đơn."));
+        return Map.of("shippingFee",shipping,"bankTransfer",bankTransfer,"paymentMethods",methods);
     }
 
     private static final String VISIBLE=" s.trang_thai in ('DANG_BAN','HET_HANG') and s.hien_thi and exists(select 1 from loai_san_pham c where c.id=s.loai_san_pham_id and c.hien_thi) and exists(select 1 from thuong_hieu b where b.id=s.thuong_hieu_id and b.hien_thi) ";

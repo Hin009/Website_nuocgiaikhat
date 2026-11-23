@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
-@DependsOn("momoSchema")
+@DependsOn("checkoutSchema")
 public class OrderConfirmationSchema {
     public static final String VERSION="20261111_order_confirmation";
     private final JdbcTemplate jdbc;

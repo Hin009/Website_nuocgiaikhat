@@ -267,6 +267,10 @@ Các endpoint POST dưới /api/v1/auth/email-change yêu cầu Bearer token:
 
 OTP 6 số, tối đa 5 phút, 5 lần nhập sai; gửi lại sau 60 giây. OTP email mới bị giới hạn bởi thời hạn xác minh email hiện tại. Không thể bỏ qua bước xác minh cũ kể cả qua API hoặc yêu cầu tạo theo quy trình cũ. Yêu cầu gắn với tài khoản, phiên đăng nhập và email hiện tại. Email mới phải khác email hiện tại và chưa được sử dụng, kiểm tra lại khi hoàn tất. Chỉ lưu hash OTP. Đổi thành công thu hồi phiên khác và yêu cầu quên mật khẩu cũ, giữ phiên hiện tại. Có giới hạn theo tài khoản/email/IP; không ghi mã hoặc mật khẩu SMTP vào log. Dùng bảng email_change_challenge hiện có.
 
+## Thanh toán chuyển khoản QR
+
+Checkout dùng `BANK_TRANSFER` để nhận mã QR sau khi tạo đơn. Khách sở hữu đơn đọc thông tin bằng `GET /api/v1/orders/{id}/bank-transfer` và báo đã chuyển khoản bằng `POST /api/v1/orders/{id}/bank-transfer/confirm`. Backend lưu `customer_confirmed_at` và giữ thanh toán `PENDING`. Admin kiểm tra tiền rồi xác nhận đơn qua `PATCH /api/v1/staff/orders/{id}/status` với `DANG_CHUAN_BI`; backend chặn nếu khách chưa xác nhận, không phải admin hoặc số tiền không khớp. Xác nhận đơn hợp lệ đồng thời ghi thanh toán `SUCCESS`. Xem [hướng dẫn QR](BANK_TRANSFER.md).
+
 ## Quyền đổi mật khẩu
 
 Mọi vai trò tự đổi mật khẩu trong Thông tin cá nhân qua PUT /api/v1/auth/password, body oldPassword và newPassword. Luôn xác định tài khoản từ Bearer token; không nhận ID tài khoản đích. Cần mật khẩu hiện tại đúng, mật khẩu mới khác mật khẩu cũ, tối thiểu 8 ký tự và tối đa 72 byte UTF-8. Sau thành công thu hồi mọi phiên, hủy các yêu cầu quên mật khẩu/đổi email đang chờ và yêu cầu đăng nhập lại.

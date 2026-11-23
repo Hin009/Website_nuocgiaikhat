@@ -16,6 +16,7 @@ export default defineConfig({
     'password-change-browser.spec.js',
     'email-change-browser.spec.js',
     'checkout-browser.spec.js',
+    'bank-transfer-browser.spec.js',
   ],
   workers: 1,
   timeout: 120000,

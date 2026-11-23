@@ -28,6 +28,10 @@ public class BillingService {
         if("COD".equals(p.get("phuong_thuc")) && !"DA_GIAO".equals(order.get("trang_thai"))) throw ApiException.bad("Chỉ thu COD khi đơn đã giao");
         if(!Set.of("COD","BANK_TRANSFER").contains(p.get("phuong_thuc"))) throw ApiException.bad("Giao dịch cổng thanh toán cần callback được xác thực");
         if("BANK_TRANSFER".equals(p.get("phuong_thuc")) && (reference==null || reference.isBlank())) throw ApiException.bad("Cần mã đối soát chuyển khoản");
+        if("BANK_TRANSFER".equals(p.get("phuong_thuc"))) {
+            if(!access.admin()) throw new org.springframework.security.access.AccessDeniedException("Chỉ admin được xác nhận chuyển khoản");
+            if(p.get("customer_confirmed_at")==null) throw ApiException.bad("Khách hàng chưa xác nhận thanh toán");
+        }
         db.jdbc().update("update thanh_toan set trang_thai='SUCCESS',ma_giao_dich=? where id=?",reference,payment);
         db.audit(access.account(),"PAYMENT_RECEIVED","thanh_toan",payment); return db.one("select * from thanh_toan where id=?",payment);
     }

@@ -6259,13 +6259,6 @@ td small {
   }
 }
 
-.momo-page { padding-block: 40px; }
-.momo-card { max-width: 560px; margin: auto; text-align: center; }
-.momo-brand { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
-.momo-logo { background: #a50064; color: white; border-radius: 12px; padding: 10px; font-weight: 800; line-height: .85; font-size: 24px; }
-.momo-sandbox { color: #a50064; font-weight: 600; }
-.momo-qr { display: inline-block; background: white; padding: 8px; border-radius: 16px; border: 1px solid #ead2e2; margin: 16px 0; max-width: 100%; }
-.momo-qr svg { max-width: 100%; height: auto; }
 
 /* Report controls stay next to product search and wrap on narrow screens. */
 .profit-toolbar {
@@ -6429,3 +6422,5 @@ input::file-selector-button {
 .profile-password-section .password-input button:hover { color: #204c3b; background: #f0f5ec; }
 .profile-password-section .password-input button:focus-visible { outline: 2px solid #56876c; outline-offset: 1px; }
 .profile-password-section .password-input button:disabled { opacity: .5; cursor: not-allowed; }
+.bank-payment-page { padding-block: 40px; }
+.bank-payment-card { max-width: 640px; margin: auto; text-align: center; }

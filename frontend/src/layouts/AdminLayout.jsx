@@ -27,6 +27,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PermissionGuard } from '@/routes/Guards';
 import { isMock } from '@/services';
 import { roleLabels } from '@/utils/format';
+import { usePaymentNotifications } from '@/hooks/usePaymentNotifications';
 const navigationItems = [
   { to: '/admin', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/admin/products', label: 'Sản phẩm', icon: Package },
@@ -62,6 +63,7 @@ export default function AdminLayout() {
   const [notifications, setNotifications] = useState(false);
   const location = useLocation();
   const orders = useOrders(user);
+  const payments = usePaymentNotifications(!isMock, user.id);
   const pending = orders.data?.filter((o) => o.status === 'PENDING') || [];
   const title =
     items.find((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)))
@@ -166,7 +168,7 @@ export default function AdminLayout() {
               onClick={() => setNotifications(true)}
             >
               <Bell size={20} />
-              {pending.length > 0 && <i />}
+              {(pending.length > 0 || payments.data?.length > 0) && <i />}
             </button>
             <Link className="header-avatar" to="/admin/profile" aria-label="Thông tin cá nhân">
               {user.name.charAt(0)}
@@ -180,6 +182,21 @@ export default function AdminLayout() {
       </div>
       <Dialog open={notifications} onOpenChange={setNotifications}>
         <DialogContent title="Thông báo đơn hàng" description="Các đơn hàng đang chờ xử lý.">
+          {payments.data?.length > 0 && (
+            <div className="notification-list" aria-label="Thông báo thanh toán">
+              {payments.data.map((n) => (
+                <Link
+                  to={`/admin/orders/${n.order_id}`}
+                  key={n.id}
+                  onClick={() => setNotifications(false)}
+                >
+                  <Bell size={19} />
+                  <span>{n.message}</span>
+                  <ArrowUpRight size={17} />
+                </Link>
+              ))}
+            </div>
+          )}
           {pending.length ? (
             <div className="notification-list">
               {pending.map((o) => (

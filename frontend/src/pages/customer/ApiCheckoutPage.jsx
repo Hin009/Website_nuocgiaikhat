@@ -17,7 +17,7 @@ import { money, paymentMethodLabels } from '@/utils/format';
 import ApiCheckoutVouchers from '@/components/customer/ApiCheckoutVouchers';
 import { provinces } from '@/utils/address';
 const schema = z.object({
-  paymentMethod: z.enum(['COD', 'MOMO']),
+  paymentMethod: z.enum(['COD', 'BANK_TRANSFER']),
   receiver: z.string().trim().min(1, 'Nhập tên người nhận.').max(150),
   phone: phoneSchema,
   address: z.string().trim().min(1, 'Nhập địa chỉ.').max(1000),
@@ -110,7 +110,8 @@ export default function ApiCheckoutPage() {
       setOrder(created);
       setConfirmation(null);
       await cart.removePurchased(selected);
-      if (created.paymentMethod === 'MOMO') navigate(`/payments/momo/${created.id}`);
+      if (created.paymentMethod === 'BANK_TRANSFER')
+        navigate(`/payments/bank-transfer/${created.id}`);
     } catch {
       setConfirmation(null);
     }
@@ -217,7 +218,7 @@ export default function ApiCheckoutPage() {
                 <Field label="Chọn phương thức thanh toán" error={errors.paymentMethod}>
                   <select {...register('paymentMethod')}>
                     {options.data.paymentMethods
-                      .filter((method) => ['COD', 'MOMO'].includes(method.code))
+                      .filter((method) => ['COD', 'BANK_TRANSFER'].includes(method.code))
                       .map((method) => (
                         <option
                           key={method.code}
@@ -235,12 +236,6 @@ export default function ApiCheckoutPage() {
                       ?.description
                   }
                 </p>
-                {options.data.momoEnabled === false && (
-                  <p role="status">
-                    MoMo Sandbox chưa sẵn sàng. Cửa hàng cần hoàn tất cấu hình trước khi nhận thanh
-                    toán.
-                  </p>
-                )}
               </>
             )}
           </section>

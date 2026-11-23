@@ -1,6 +1,4 @@
 import { Fragment, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { get } from '@/services/http';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search, ShoppingBag, ArrowLeft, PackageCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,12 +14,6 @@ import { createReportPeriod, reportPeriodBounds, isWithinReportPeriod } from '@/
 export function OrdersPage({ admin = false }) {
   const { user } = useAuth();
   const query = useOrders(user);
-  const notifications = useQuery({
-    queryKey: ['payment-notifications', user?.id],
-    queryFn: () => get('/staff/payment-notifications'),
-    enabled: admin && !isMock,
-    refetchInterval: 10000,
-  });
   const [q, setQ] = useState('');
   const [period, setPeriod] = useState(createReportPeriod);
   const periodBounds = reportPeriodBounds(period);
@@ -49,16 +41,6 @@ export function OrdersPage({ admin = false }) {
         title={admin ? 'Quản lý đơn hàng' : 'Đơn hàng của tôi'}
         description="Theo dõi và xem chi tiết các đơn hàng."
       />
-      {admin && notifications.data?.items?.length > 0 && (
-        <section className="form-card" aria-label="Thông báo thanh toán">
-          <h2>Thông báo thanh toán MoMo</h2>
-          {notifications.data.items.map((n) => (
-            <p key={n.id}>
-              <Link to={`/admin/orders/${n.order_id}`}>{n.message}</Link> · {date(n.created_at)}
-            </p>
-          ))}
-        </section>
-      )}
       <div className="data-panel">
         <div className="data-toolbar orders-toolbar">
           <div className="inline-search">
@@ -160,6 +142,18 @@ export function OrdersPage({ admin = false }) {
                           <td>{date(o.createdAt)}</td>
                           <td>
                             <strong>{money(o.total)}</strong>
+                            {!isMock &&
+                              o.payments?.map((p) => (
+                                <small key={p.id}>
+                                  {paymentMethodLabels[p.phuong_thuc] || p.phuong_thuc} ·{' '}
+                                  {{
+                                    SUCCESS: 'Đã thanh toán',
+                                    PENDING: 'Chờ thanh toán',
+                                    FAILED: 'Thất bại',
+                                    REFUNDED: 'Đã hoàn tiền',
+                                  }[p.trang_thai] || p.trang_thai}
+                                </small>
+                              ))}
                           </td>
                           <td>
                             <StatusBadge status={o.status} />
@@ -231,6 +225,8 @@ function OrderDetails({ id, admin = false, inline = false }) {
     'Đã cập nhật trạng thái đơn',
   );
   const order = query.data?.find((o) => o.id === id);
+  const transfer = order?.payments?.find((payment) => payment.phuong_thuc === 'BANK_TRANSFER');
+  const transferBlocked = !!transfer && (!transfer.customer_confirmed_at || user.role !== 'ADMIN');
   const allowed = order
     ? admin
       ? order.channel === 'TAI_QUAY'
@@ -384,26 +380,46 @@ function OrderDetails({ id, admin = false, inline = false }) {
                       </p>
                       {payment.environment && <p>Môi trường: {payment.environment}</p>}
                       {payment.ma_giao_dich && <p>Mã giao dịch: {payment.ma_giao_dich}</p>}
+                      {payment.phuong_thuc === 'BANK_TRANSFER' &&
+                        payment.trang_thai === 'PENDING' && (
+                          <p>
+                            {payment.customer_confirmed_at
+                              ? 'Khách đã xác nhận thanh toán · Chờ admin kiểm tra tiền'
+                              : 'Khách chưa xác nhận thanh toán'}
+                          </p>
+                        )}
                       {payment.paid_at && (
                         <p>Thanh toán lúc: {new Date(payment.paid_at).toLocaleString('vi-VN')}</p>
                       )}
                     </div>
                   ))}
-                {!admin &&
-                  order.paymentMethod === 'MOMO' &&
-                  !['CANCELLED', 'REJECTED'].includes(order.status) && (
-                    <Link to={`/payments/momo/${order.id}`}>Xem thanh toán MoMo</Link>
-                  )}
                 {isMock && <small>Không phản ánh thanh toán thực tế.</small>}
+                {!admin && order.paymentMethod === 'BANK_TRANSFER' && (
+                  <p>
+                    <Link to={`/payments/bank-transfer/${order.id}`}>
+                      Xem mã QR và xác nhận thanh toán
+                    </Link>
+                  </p>
+                )}
               </div>
               {allowed.length > 0 && (
                 <div className="form-card">
                   <h3>{admin ? 'Xử lý đơn hàng' : 'Thao tác'}</h3>
+                  {admin && order.status === 'PENDING' && transfer && (
+                    <p role="status">
+                      {!transfer.customer_confirmed_at
+                        ? 'Chưa thể xác nhận đơn: khách hàng chưa xác nhận thanh toán.'
+                        : user.role !== 'ADMIN'
+                          ? 'Chỉ admin được xác nhận đơn chuyển khoản.'
+                          : 'Khách đã xác nhận thanh toán. Kiểm tra tiền trong tài khoản trước khi xác nhận đơn.'}
+                    </p>
+                  )}
                   <div className="form-stack">
                     {allowed.map((status) => (
                       <Button
                         key={status}
                         variant={status === 'CANCELLED' ? 'outline' : 'default'}
+                        disabled={action.isPending || (status === 'CONFIRMED' && transferBlocked)}
                         onClick={() => {
                           setNext(status);
                           setReasonError(false);
@@ -431,7 +447,9 @@ function OrderDetails({ id, admin = false, inline = false }) {
             description={
               isMock
                 ? 'Tồn kho đã được giữ khi đặt đơn. Hủy đơn sẽ hoàn lại số lượng đã giữ.'
-                : 'Xác nhận đơn sẽ giữ số lượng hàng. Hủy đơn đã xác nhận sẽ hoàn lại số lượng. Vui lòng kiểm tra trước khi tiếp tục.'
+                : next === 'CONFIRMED' && transfer
+                  ? 'Xác nhận bạn đã kiểm tra và nhận đủ tiền chuyển khoản. Thao tác này xác nhận thanh toán và đơn hàng.'
+                  : 'Xác nhận đơn sẽ giữ số lượng hàng. Hủy đơn đã xác nhận sẽ hoàn lại số lượng. Vui lòng kiểm tra trước khi tiếp tục.'
             }
             pending={action.isPending}
             onConfirm={confirm}

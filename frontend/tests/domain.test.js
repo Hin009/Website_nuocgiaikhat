@@ -56,7 +56,7 @@ describe('Biểu mẫu', () => {
     expect(phoneSchema.safeParse('abc').success).toBe(false);
   });
   it('Chặn phương thức thanh toán chưa hỗ trợ và tồn kho âm', () => {
-    expect(checkoutSchema.safeParse({ ...values, paymentMethod: 'VNPAY' }).success).toBe(false);
+    expect(checkoutSchema.safeParse({ ...values, paymentMethod: 'CARD' }).success).toBe(false);
     expect(
       productSchema.safeParse({
         name: 'Nước mẫu',

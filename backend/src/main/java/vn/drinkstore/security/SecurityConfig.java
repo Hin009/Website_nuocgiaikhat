@@ -21,8 +21,8 @@ public class SecurityConfig {
         return http.csrf(c->c.disable()).cors(c->{})
             .sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a->a
+                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS,"/**").permitAll()
-                .requestMatchers(HttpMethod.POST,"/api/v1/payments/momo/ipn").permitAll()
                 .requestMatchers("/api/v1/auth/login","/api/v1/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST,"/api/v1/auth/password-reset/request","/api/v1/auth/password-reset/verify","/api/v1/auth/password-reset/complete").permitAll()
                 .requestMatchers(HttpMethod.GET,"/api/v1/catalog/**","/api/v1/media/products/*","/api/v1/health").permitAll()

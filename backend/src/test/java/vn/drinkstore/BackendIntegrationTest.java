@@ -32,9 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.datasource.url=${BACKEND_TEST_DB_URL}","spring.datasource.username=${BACKEND_TEST_DB_USER:backend_test}",
     "spring.datasource.password=${BACKEND_TEST_DB_PASSWORD:}","spring.sql.init.mode=never",
     "app.bootstrap.password=","app.upload-dir=.tools/test-uploads",
-    "app.momo.enabled=true","app.momo.environment=sandbox","app.momo.partner-code=TEST_PARTNER",
-    "app.momo.access-key=fixture-access","app.momo.secret-key=fixture-secret",
-    "app.momo.ipn-url=https://example.invalid/api/v1/payments/momo/ipn","app.momo.redirect-url=http://localhost:5173/payments/momo/return"
+    "app.bank-transfer.bank-id=970436","app.bank-transfer.bank-name=Test Bank",
+    "app.bank-transfer.account-number=0123456789","app.bank-transfer.account-name=TEST STORE"
 })
 @AutoConfigureMockMvc
 @Transactional
@@ -57,10 +56,8 @@ class BackendIntegrationTest {
     @Autowired org.springframework.transaction.PlatformTransactionManager testTransactions;
     @Autowired Db db; @Autowired AuthService auth; @Autowired CartService carts; @Autowired OrderService orders;
     @Autowired PurchaseService purchases; @Autowired BillingService billing; @Autowired MockMvc mvc;
+    @Autowired vn.drinkstore.billing.BankTransferService bankTransfers;
     @Autowired SupplierReturnService supplierReturns;
-    @Autowired vn.drinkstore.billing.MomoService momo;
-    @Autowired vn.drinkstore.billing.MomoProperties momoConfig;
-    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean vn.drinkstore.billing.MomoClient momoGateway;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Autowired vn.drinkstore.reporting.ProductFinanceController productFinance;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean vn.drinkstore.auth.PasswordResetMail emailChangeMail;
@@ -565,9 +562,10 @@ class BackendIntegrationTest {
         mvc.perform(get("/api/v1/catalog/checkout-options")).andExpect(status().isOk())
             .andExpect(jsonPath("$.shippingFee").value(0))
             .andExpect(jsonPath("$.paymentMethods[0].code").value("COD"))
-            .andExpect(jsonPath("$.paymentMethods[1].code").value("MOMO"));
+            .andExpect(jsonPath("$.paymentMethods[1].code").value("BANK_TRANSFER"))
+            .andExpect(jsonPath("$.paymentMethods[1].enabled").value(true));
         as(admin); receive(20); as(account);
-        for(String method:List.of("COD","MOMO")) {
+        for(String method:List.of("COD","BANK_TRANSFER")) {
             carts.put(customer,pack,2);
             var quote=orders.quote(customer,List.of(pack),null);
             assertEquals(0,((BigDecimal)quote.get("shippingFee")).signum());
@@ -580,87 +578,59 @@ class BackendIntegrationTest {
             assertEquals("PENDING",payment.get("trang_thai"));
         }
     }
-    Map<String,Object> momoFixture(int resultCode) {
-        receive(20); as(account); carts.put(customer,pack,2);
-        var order=(Map<?,?>)orders.checkout(customer,address,null,"MOMO",null,List.of(pack));
-        long id=((Number)order.get("id")).longValue();
-        var payment=db.one("select * from thanh_toan where don_hang_id=?",id);
-        String ref="WB-"+UUID.randomUUID(),request=UUID.randomUUID().toString();
-        db.jdbc().update("insert into momo_payment_attempt(payment_id,momo_order_id,request_id,amount,order_info,redirect_url,ipn_url,status) values (?,?,?,?,'WATERBUS fixture','http://localhost:5173/payments/momo/return','https://example.invalid/ipn','PENDING')",payment.get("id"),ref,request,payment.get("so_tien"));
-        var payload=vn.drinkstore.billing.MomoClientTest.notification(ref,request,Db.money(payment,"so_tien").longValueExact(),resultCode);
-        vn.drinkstore.billing.MomoClientTest.sign(momoConfig,payload);
-        payload.put("localOrderId",id); return payload;
+    long bankTransferFixture() {
+        as(admin); receive(20); as(account); carts.put(customer,pack,2);
+        return ((Number)((Map<?,?>)orders.checkout(customer,address,null,"BANK_TRANSFER",null,List.of(pack))).get("id")).longValue();
     }
-    void signMomo(Map<String,Object> payload) { vn.drinkstore.billing.MomoClientTest.sign(momoConfig,payload); }
-    @Test void paymentCreationPersistsOneAttemptAndReusesItAfterTimeout() {
-        receive(20); as(account); carts.put(customer,pack,2);
-        long id=((Number)((Map<?,?>)orders.checkout(customer,address,null,"MOMO",null,List.of(pack))).get("id")).longValue();
-        org.mockito.Mockito.doThrow(new IllegalStateException("fixture network timeout")).when(momoGateway).create(org.mockito.ArgumentMatchers.anyMap());
-        momo.start(id,customer);
-        var original=db.one("select * from momo_payment_attempt");
-        assertEquals("CREATED",original.get("status"));
-        org.mockito.Mockito.doAnswer(invocation->{
-            Map<String,Object> a=invocation.getArgument(0);
-            assertEquals(original.get("request_id"),a.get("request_id"));
-            assertEquals(original.get("momo_order_id"),a.get("momo_order_id"));
-            return Map.of("resultCode",0,"payUrl","https://test-payment.momo.vn/v2/gateway/pay?fixture=1","qrCodeUrl","fixture-qr-data","message","fixture accepted");
-        }).when(momoGateway).create(org.mockito.ArgumentMatchers.anyMap());
-        momo.start(id,customer); momo.start(id,customer);
-        assertEquals(1,db.number("select count(*) from momo_payment_attempt"));
-        assertEquals("PENDING",momo.status(id,customer).get("trang_thai"));
-        assertEquals(0,db.number("select count(*) from payment_notification"));
-        org.mockito.Mockito.verify(momoGateway,org.mockito.Mockito.times(2)).create(org.mockito.ArgumentMatchers.anyMap());
-    }
-    @Test void verifiedMomoIpnIsIdempotentAndDoesNotConfirmOrderOrIssueStock() throws Exception {
-        var p=momoFixture(0); long id=((Number)p.get("localOrderId")).longValue(); clear();
-        String body=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(p);
-        mvc.perform(post("/api/v1/payments/momo/ipn").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNoContent());
-        mvc.perform(post("/api/v1/payments/momo/ipn").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNoContent());
-        assertEquals("SUCCESS",momo.status(id,customer).get("trang_thai"));
-        assertEquals("CHO_XAC_NHAN",db.one("select trang_thai from don_hang where id=?",id).get("trang_thai"));
-        assertEquals(20,stock());
-        assertEquals(1,db.number("select count(*) from payment_notification where order_id=?",id));
-        assertEquals(2,db.number("select count(*) from momo_ipn_history"));
-        as(admin); orders.transition(id,"DANG_CHUAN_BI",null); assertEquals(18,stock());
-    }
-    @Test void rejectsTamperedMomoSignatureBeforeDatabaseWrites() {
-        var p=momoFixture(0); p.put("amount",1);
-        assertThrows(ApiException.class,()->momo.ipn(p));
-        assertEquals(0,db.number("select count(*) from momo_ipn_history"));
-    }
-    @Test void rejectsSignedWrongAmountRequestAndPartner() {
-        var p=momoFixture(0); Object amount=p.get("amount"),request=p.get("requestId");
-        p.put("amount",1); signMomo(p); assertThrows(ApiException.class,()->momo.ipn(p));
-        p.put("amount",amount); p.put("requestId","wrong-request"); signMomo(p); assertThrows(ApiException.class,()->momo.ipn(p));
-        p.put("requestId",request); p.put("partnerCode","WRONG"); signMomo(p); assertThrows(ApiException.class,()->momo.ipn(p));
-        assertEquals(0,db.number("select count(*) from payment_notification"));
-    }
-    @Test void failedAndAuthorizedMomoNotificationsDoNotMarkPaid() {
-        var p=momoFixture(9000); long id=((Number)p.get("localOrderId")).longValue();
-        momo.ipn(p); assertEquals("PENDING",momo.status(id,customer).get("trang_thai"));
-        p.put("resultCode",1006); signMomo(p); momo.ipn(p);
-        assertEquals("FAILED",momo.status(id,customer).get("trang_thai"));
-        assertEquals(0,db.number("select count(*) from payment_notification"));
-    }
-    @Test void momoOwnershipManualCollectionAndUnpaidConfirmationAreEnforced() throws Exception {
-        var p=momoFixture(0); long id=((Number)p.get("localOrderId")).longValue();
-        assertThrows(ApiException.class,()->momo.status(id,customer+99999));
-        as(admin); assertThrows(ApiException.class,()->orders.transition(id,"DANG_CHUAN_BI",null));
+    @Test void bankTransferRequiresCustomerConfirmationBeforeAdminCanConfirmOrder() {
+        long id=bankTransferFixture();
         long payment=db.id("select id from thanh_toan where don_hang_id=?",id);
-        assertThrows(ApiException.class,()->billing.received(payment,"forged"));
-        as(account); orders.transition(id,"DA_HUY",customer);
-        clear(); momo.ipn(p);
-        assertEquals("SUCCESS",momo.status(id,customer).get("trang_thai"));
-        assertEquals("DA_HUY",db.one("select trang_thai from don_hang where id=?",id).get("trang_thai"));
-        assertTrue(db.one("select message from payment_notification where order_id=?",id).get("message").toString().contains("đơn đã hủy"));
+        var details=(Map<?,?>)bankTransfers.details(id,customer);
+        assertEquals("WB"+id,details.get("reference"));
+        assertEquals(db.one("select so_tien from thanh_toan where id=?",payment).get("so_tien"),details.get("amount"));
+        as(admin);
+        assertThrows(ApiException.class,()->orders.transition(id,"DANG_CHUAN_BI",null));
+        assertThrows(ApiException.class,()->billing.received(payment,"REF"));
+        assertEquals(20,stock());
+        as(account); bankTransfers.confirm(id,customer);
+        Object confirmed=db.one("select customer_confirmed_at from thanh_toan where id=?",payment).get("customer_confirmed_at");
+        assertNotNull(confirmed);
+        assertEquals("PENDING",db.one("select trang_thai from thanh_toan where id=?",payment).get("trang_thai"));
+        assertEquals("CHO_XAC_NHAN",db.one("select trang_thai from don_hang where id=?",id).get("trang_thai"));
+        bankTransfers.confirm(id,customer);
+        assertEquals(confirmed,db.one("select customer_confirmed_at from thanh_toan where id=?",payment).get("customer_confirmed_at"));
+        assertEquals(1,db.number("select count(*) from payment_notification where order_id=?",id));
+        assertEquals(1,db.number("select count(*) from nhat_ky_hoat_dong where hanh_dong='CUSTOMER_TRANSFER_CONFIRMED' and doi_tuong_id=?",payment));
+        as(admin); orders.transition(id,"DANG_CHUAN_BI",null);
+        assertEquals("SUCCESS",db.one("select trang_thai from thanh_toan where id=?",payment).get("trang_thai"));
+        assertEquals("PAID",db.one("select trang_thai from hoa_don where don_hang_id=?",id).get("trang_thai"));
+        assertEquals(18,stock());
     }
-    @Test void checkoutRequestKeyPreventsDuplicateOrdersAndRejectsDifferentPayload() {
-        receive(20); as(account); carts.put(customer,pack,2); UUID key=UUID.randomUUID();
-        var first=(Map<?,?>)orders.checkoutOnce(customer,address,null,"COD",null,List.of(pack),key,"fixture-payload");
-        var again=(Map<?,?>)orders.checkoutOnce(customer,address,null,"COD",null,List.of(pack),key,"fixture-payload");
-        assertEquals(first.get("id"),again.get("id"));
-        assertEquals(1,db.number("select count(*) from checkout_request where customer_id=?",customer));
-        assertThrows(ApiException.class,()->orders.checkoutOnce(customer,address,null,"COD",null,List.of(pack),key,"other-payload"));
+    @Test void bankTransferOnlyOwnerCanConfirmAndCancelledOrdersAreRejected() throws Exception {
+        long id=bankTransferFixture();
+        assertThrows(ApiException.class,()->bankTransfers.details(id,customer+999999));
+        assertThrows(ApiException.class,()->bankTransfers.confirm(id,customer+999999));
+        clear();
+        mvc.perform(post("/api/v1/orders/"+id+"/bank-transfer/confirm")).andExpect(status().isUnauthorized());
+        String customerToken=auth.login("customer@test.invalid","TestPass123!").get("accessToken").toString();
+        mvc.perform(get("/api/v1/orders/"+id+"/bank-transfer").header("Authorization","Bearer "+customerToken))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.reference").value("WB"+id));
+        mvc.perform(post("/api/v1/orders/"+id+"/bank-transfer/confirm").header("Authorization","Bearer "+customerToken))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.customerConfirmedAt").isNotEmpty()).andExpect(jsonPath("$.status").value("PENDING"));
+        as(account); orders.transition(id,"DA_HUY",customer);
+        assertThrows(ApiException.class,()->bankTransfers.confirm(id,customer));
+        assertEquals(20,stock());
+    }
+    @Test void bankTransferStaffCannotConfirmAndAmountMismatchRollsBack() {
+        long id=bankTransferFixture(); as(account); bankTransfers.confirm(id,customer);
+        long staff=auth.createAccount("transfer-staff@test.invalid","TestPass123!","NHAN_VIEN");
+        db.id("insert into nhan_vien(tai_khoan_id,ma_nhan_vien,ho_ten) values (?,'NV-QR','QR Staff') returning id",staff);
+        as(staff);
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,()->orders.transition(id,"DANG_CHUAN_BI",null));
+        as(admin); db.jdbc().update("update thanh_toan set so_tien=1 where don_hang_id=?",id);
+        assertThrows(ApiException.class,()->orders.transition(id,"DANG_CHUAN_BI",null));
+        assertEquals("PENDING",db.one("select trang_thai from thanh_toan where don_hang_id=?",id).get("trang_thai"));
+        assertEquals(20,stock());
     }
     String promotionBody(String code,String scope,String ids) {
         return """
