@@ -1,4 +1,4 @@
--- Complete PostgreSQL schema and data exported from Docker on 20261111-123259 (Asia/Bangkok).
+-- Complete PostgreSQL schema and data exported from Docker on 20261123-121715 (Asia/Bangkok).
 -- PRIVATE SNAPSHOT: includes account hashes, customer data and authentication history.
 -- Restore into an EMPTY database only.
 -- Product image FILES live in the separate product_images Docker volume.
@@ -8,7 +8,7 @@ BEGIN;
 -- PostgreSQL database dump
 --
 
-\restrict GD98DboIinVDZFRtjwNNnETTTZQY35JG8vvfzAAPiWathxWRR5bm9MYlB6zPn3l
+\restrict XzXhAc0drKeNPvS9yVjOdgF5JiLoFGPcy4aEDZcvdLw3Y0uSfXkMb1MMoY8Vqeq
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -949,6 +949,10 @@ CREATE TABLE public.don_hang (
     da_tru_so_luong boolean DEFAULT false NOT NULL,
     ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
     khuyen_mai_id bigint,
+    nhan_vien_xac_nhan_id bigint,
+    ten_nhan_vien_xac_nhan text,
+    ma_nhan_vien_xac_nhan text,
+    thoi_gian_xac_nhan timestamp with time zone,
     CONSTRAINT don_hang_check CHECK (((((kenh_ban)::text = 'ONLINE'::text) AND (khach_hang_id IS NOT NULL) AND (dia_chi_nhan IS NOT NULL)) OR (((kenh_ban)::text = 'TAI_QUAY'::text) AND (nhan_vien_xu_ly_id IS NOT NULL)))),
     CONSTRAINT don_hang_check1 CHECK ((((kenh_ban)::text <> 'TAI_QUAY'::text) OR ((trang_thai)::text = ANY ((ARRAY['HOAN_TAT'::character varying, 'DA_HUY'::character varying])::text[])))),
     CONSTRAINT don_hang_giam_gia_check CHECK ((giam_gia >= (0)::numeric)),
@@ -970,6 +974,29 @@ ALTER TABLE public.don_hang ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: email_change_challenge; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_change_challenge (
+    id uuid NOT NULL,
+    tai_khoan_id bigint NOT NULL,
+    session_hash character varying(64) NOT NULL,
+    old_email character varying(255) NOT NULL,
+    new_email character varying(255),
+    stage character varying(24) NOT NULL,
+    otp_hash character varying(100),
+    expires_at timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    verified_until timestamp with time zone,
+    last_sent_at timestamp with time zone DEFAULT now() NOT NULL,
+    delivery_failed boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT email_change_challenge_attempts_check CHECK (((attempts >= 0) AND (attempts <= 5))),
+    CONSTRAINT email_change_challenge_stage_check CHECK (((stage)::text = ANY ((ARRAY['CURRENT_OTP'::character varying, 'CURRENT_VERIFIED'::character varying, 'NEW_OTP'::character varying, 'COMPLETED'::character varying, 'CANCELLED'::character varying])::text[])))
 );
 
 
@@ -1327,7 +1354,9 @@ CREATE TABLE public.loai_san_pham (
     ten character varying(150) NOT NULL,
     mo_ta text,
     hinh_anh text,
-    hien_thi boolean DEFAULT true NOT NULL
+    hien_thi boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT deleted_category_hidden CHECK (((deleted_at IS NULL) OR (NOT hien_thi)))
 );
 
 
@@ -1714,6 +1743,8 @@ CREATE TABLE public.san_pham (
     hien_thi boolean DEFAULT true NOT NULL,
     ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
     ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT deleted_product_discontinued CHECK (((deleted_at IS NULL) OR (((trang_thai)::text = 'NGUNG_KINH_DOANH'::text) AND (NOT hien_thi)))),
     CONSTRAINT san_pham_so_ngay_han_dung_check CHECK ((so_ngay_han_dung > 0)),
     CONSTRAINT san_pham_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['DANG_BAN'::character varying, 'HET_HANG'::character varying, 'NGUNG_KINH_DOANH'::character varying])::text[])))
 );
@@ -1826,6 +1857,8 @@ CREATE TABLE public.tai_khoan (
     khoa_den timestamp with time zone,
     ngay_tao timestamp with time zone DEFAULT now() NOT NULL,
     ngay_cap_nhat timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT deleted_account_disabled CHECK (((deleted_at IS NULL) OR ((trang_thai)::text = 'DISABLED'::text))),
     CONSTRAINT tai_khoan_so_lan_dang_nhap_sai_check CHECK ((so_lan_dang_nhap_sai >= 0)),
     CONSTRAINT tai_khoan_trang_thai_check CHECK (((trang_thai)::text = ANY ((ARRAY['ACTIVE'::character varying, 'LOCKED'::character varying, 'DISABLED'::character varying])::text[])))
 );
@@ -1872,6 +1905,7 @@ CREATE TABLE public.thanh_toan (
     transfer_reference character varying(40),
     sepay_mode character varying(4) DEFAULT 'live'::character varying NOT NULL,
     demo_banking boolean DEFAULT false NOT NULL,
+    customer_confirmed_at timestamp with time zone,
     CONSTRAINT thanh_toan_phuong_thuc_check CHECK (((phuong_thuc)::text = ANY ((ARRAY['COD'::character varying, 'CASH'::character varying, 'BANK_TRANSFER'::character varying, 'QR'::character varying, 'MOMO'::character varying, 'VNPAY'::character varying, 'ZALOPAY'::character varying, 'CARD'::character varying])::text[]))),
     CONSTRAINT thanh_toan_sepay_mode_check CHECK (((sepay_mode)::text = ANY ((ARRAY['test'::character varying, 'live'::character varying])::text[]))),
     CONSTRAINT thanh_toan_so_tien_check CHECK ((so_tien >= (0)::numeric)),
@@ -2079,6 +2113,76 @@ CREATE TABLE public.vai_tro_quyen (
 
 
 --
+-- Name: vnpay_ipn_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vnpay_ipn_history (
+    id bigint NOT NULL,
+    vnpay_payment_id bigint NOT NULL,
+    signature character varying(128) NOT NULL,
+    payload jsonb NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: vnpay_ipn_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.vnpay_ipn_history ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.vnpay_ipn_history_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: vnpay_payment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vnpay_payment (
+    id bigint NOT NULL,
+    payment_id bigint NOT NULL,
+    txn_ref character varying(100) NOT NULL,
+    tmn_code character varying(32) NOT NULL,
+    amount numeric(18,2) NOT NULL,
+    status character varying(10) DEFAULT 'PENDING'::character varying NOT NULL,
+    environment character varying(10) DEFAULT 'SANDBOX'::character varying NOT NULL,
+    payment_url text NOT NULL,
+    transaction_no character varying(50),
+    response_code character varying(2),
+    transaction_status character varying(2),
+    bank_code character varying(30),
+    bank_tran_no character varying(100),
+    card_type character varying(30),
+    gateway_pay_date character varying(14),
+    paid_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT vnpay_payment_amount_check CHECK ((amount > (0)::numeric)),
+    CONSTRAINT vnpay_payment_environment_check CHECK (((environment)::text = 'SANDBOX'::text)),
+    CONSTRAINT vnpay_payment_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'PAID'::character varying, 'FAILED'::character varying])::text[])))
+);
+
+
+--
+-- Name: vnpay_payment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.vnpay_payment ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.vnpay_payment_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Data for Name: backend_schema_migration; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -2094,7 +2198,15 @@ INSERT INTO public.backend_schema_migration VALUES
 	('20261109_sepay_payments', '2026-11-09 18:40:44.982536+07'),
 	('20261109_sepay_test_mode', '2026-11-09 19:50:49.306872+07'),
 	('20261110_demo_bank', '2026-11-10 12:06:15.100762+07'),
-	('20261110_momo_sandbox', '2026-11-10 13:10:05.999951+07');
+	('20261110_momo_sandbox', '2026-11-10 13:10:05.999951+07'),
+	('20261111_order_confirmation', '2026-11-17 10:47:48.419981+07'),
+	('20261114_account_deletion', '2026-11-17 10:47:49.436941+07'),
+	('20261114_category_deletion', '2026-11-17 10:47:51.081293+07'),
+	('20261114_product_deletion', '2026-11-17 10:47:51.302465+07'),
+	('20261117_email_change_otp', '2026-11-17 14:21:41.863289+07'),
+	('20261117_checkout_support', '2026-11-18 13:15:29.37409+07'),
+	('20261118_vnpay_sandbox', '2026-11-18 13:15:31.653584+07'),
+	('20261120_bank_transfer_confirmation', '2026-11-20 14:04:55.236616+07');
 
 
 --
@@ -2166,13 +2278,26 @@ INSERT INTO public.bien_dong_so_luong OVERRIDING SYSTEM VALUE VALUES
 	(89, 27, 'BAN_ONLINE', 40, -10, 240, 230, '2026-11-09 20:27:35.446926+07'),
 	(90, 20, 'BAN_ONLINE', 41, -10, 290, 280, '2026-11-10 12:00:52.017342+07'),
 	(91, 20, 'HUY_DON', 41, 10, 280, 290, '2026-11-10 12:01:16.156814+07'),
-	(92, 26, 'BAN_ONLINE', 44, -5, 360, 355, '2026-11-10 12:19:38.434618+07');
+	(92, 26, 'BAN_ONLINE', 44, -5, 360, 355, '2026-11-10 12:19:38.434618+07'),
+	(93, 20, 'BAN_ONLINE', 53, -5, 290, 285, '2026-11-20 13:31:12.993849+07'),
+	(94, 20, 'BAN_ONLINE', 55, -5, 285, 280, '2026-11-20 13:48:46.919293+07'),
+	(95, 20, 'BAN_ONLINE', 56, -5, 280, 275, '2026-11-20 14:07:42.686179+07');
 
 
 --
 -- Data for Name: checkout_request; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.checkout_request VALUES
+	(6, '8c9c3134-bfd1-4845-b865-e500955b9c4d', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=null, packageIds=[6, 9], requestKey=8c9c3134-bfd1-4845-b865-e500955b9c4d]', 48),
+	(6, '916552c2-0fbf-4c26-a75e-9a1dfc3c0865', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=null, packageIds=[21], requestKey=916552c2-0fbf-4c26-a75e-9a1dfc3c0865]', 49),
+	(6, 'bc3c4a68-29ad-4270-9f7e-64ab2be747be', 'Checkout[addressId=2, note=giao đúng ngày, paymentMethod=VNPAY, couponCode=null, packageIds=[8], requestKey=bc3c4a68-29ad-4270-9f7e-64ab2be747be]', 50),
+	(6, 'e478d451-8319-4b01-acf5-931a882de385', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=null, packageIds=[25], requestKey=e478d451-8319-4b01-acf5-931a882de385]', 51),
+	(6, '0ddb11be-dd09-417d-9be8-9d9cf2e16998', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=null, packageIds=[7], requestKey=0ddb11be-dd09-417d-9be8-9d9cf2e16998]', 52),
+	(6, '5dd3f66e-446a-434a-b5b4-851b6773fd75', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=null, packageIds=[6], requestKey=5dd3f66e-446a-434a-b5b4-851b6773fd75]', 53),
+	(6, '59a1727f-69ce-43cd-bd94-9bc66ea90eb9', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=WATERBUS10, packageIds=[14], requestKey=59a1727f-69ce-43cd-bd94-9bc66ea90eb9]', 54),
+	(6, '50624680-b797-4d57-8b63-5c6193eb1261', 'Checkout[addressId=2, note=, paymentMethod=VNPAY, couponCode=WATERBUS10, packageIds=[6], requestKey=50624680-b797-4d57-8b63-5c6193eb1261]', 55),
+	(6, '629826aa-4910-485c-9544-0d139251000b', 'Checkout[addressId=2, note=, paymentMethod=BANK_TRANSFER, couponCode=WATERBUS10, packageIds=[6], requestKey=629826aa-4910-485c-9544-0d139251000b]', 56);
 
 
 --
@@ -2194,7 +2319,17 @@ INSERT INTO public.chi_tiet_don_hang OVERRIDING SYSTEM VALUE VALUES
 	(44, 44, 8, 'TH true MILK sữa có đường 180ml', 'Hộp lẻ', 5, 1, 13500.00, 10555.56, DEFAULT),
 	(45, 45, 25, 'Revive 500ml', 'Chai lẻ', 10, 1, 13500.00, 10416.67, DEFAULT),
 	(46, 46, 15, 'Aquafina 500ml', 'Chai lẻ', 5, 1, 6500.00, 5000.00, DEFAULT),
-	(47, 47, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 6, 1, 12500.00, 10000.00, DEFAULT);
+	(47, 47, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 6, 1, 12500.00, 10000.00, DEFAULT),
+	(48, 48, 6, 'Red Bull 250ml', 'Lon lẻ', 1, 1, 19000.00, 15000.00, DEFAULT),
+	(49, 48, 9, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 1, 1, 12500.00, 10000.00, DEFAULT),
+	(50, 49, 21, 'Sprite chanh 330ml', 'Lon lẻ', 10, 1, 11500.00, 9166.67, DEFAULT),
+	(51, 50, 8, 'TH true MILK sữa có đường 180ml', 'Hộp lẻ', 6, 1, 13500.00, 10555.56, DEFAULT),
+	(52, 51, 25, 'Revive 500ml', 'Chai lẻ', 5, 1, 13500.00, 10416.67, DEFAULT),
+	(53, 52, 7, 'Milo ca cao 180ml', 'Hộp lẻ', 4, 1, 12500.00, 10000.00, DEFAULT),
+	(54, 53, 6, 'Red Bull 250ml', 'Lon lẻ', 5, 1, 19000.00, 15000.00, DEFAULT),
+	(55, 54, 14, 'C2 trà xanh hương chanh 455ml', 'Chai lẻ', 5, 1, 12500.00, 10000.00, DEFAULT),
+	(56, 55, 6, 'Red Bull 250ml', 'Lon lẻ', 5, 1, 19000.00, 15000.00, DEFAULT),
+	(57, 56, 6, 'Red Bull 250ml', 'Lon lẻ', 5, 1, 19000.00, 15000.00, DEFAULT);
 
 
 --
@@ -2249,8 +2384,6 @@ INSERT INTO public.chi_tiet_don_ncc OVERRIDING SYSTEM VALUE VALUES
 -- Data for Name: chi_tiet_gio_hang; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.chi_tiet_gio_hang OVERRIDING SYSTEM VALUE VALUES
-	(131, 141, 21, 10, 11500.00);
 
 
 --
@@ -2266,7 +2399,10 @@ INSERT INTO public.chi_tiet_hoa_don OVERRIDING SYSTEM VALUE VALUES
 	(38, 38, 38, 'Red Bull 250ml', 'Lon lẻ', 10, 19000.00, DEFAULT),
 	(39, 39, 40, 'Vinamilk sữa có đường 180ml', 'Hộp lẻ', 10, 12500.00, DEFAULT),
 	(40, 40, 41, 'Red Bull 250ml', 'Lon lẻ', 10, 19000.00, DEFAULT),
-	(41, 41, 44, 'TH true MILK sữa có đường 180ml', 'Hộp lẻ', 5, 13500.00, DEFAULT);
+	(41, 41, 44, 'TH true MILK sữa có đường 180ml', 'Hộp lẻ', 5, 13500.00, DEFAULT),
+	(42, 42, 54, 'Red Bull 250ml', 'Lon lẻ', 5, 19000.00, DEFAULT),
+	(43, 43, 56, 'Red Bull 250ml', 'Lon lẻ', 5, 19000.00, DEFAULT),
+	(44, 44, 57, 'Red Bull 250ml', 'Lon lẻ', 5, 19000.00, DEFAULT);
 
 
 --
@@ -2485,21 +2621,36 @@ INSERT INTO public.don_dat_hang_ncc OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.don_hang OVERRIDING SYSTEM VALUE VALUES
-	(38, 'DH-896c9bef-0633-44eb-ad0b-e8bd0eff06e9', 'ONLINE', 6, 2, '2026-11-09 19:18:25.537325+07', NULL, 'DA_GIAO', 0.00, 38000.00, 152000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-09 19:52:19.576164+07', 34),
-	(1, 'DH-6c1a7221-fc52-436f-8308-5ac6fbe4a865', 'ONLINE', 1, 2, '2026-11-03 16:37:52.820068+07', NULL, 'DA_GIAO', 0.00, 0.00, 80000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-03 16:38:29.510031+07', NULL),
-	(46, 'DH-50d901bf-f69e-4ce8-96e3-156619cc74e9', 'ONLINE', 1, 2, '2026-11-10 12:22:40.617089+07', NULL, 'DA_HUY', 0.00, 6500.00, 26000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:40:11.858402+07', 34),
-	(43, 'DH-35208fcf-4b1a-41d9-9948-352ab2e404d8', 'ONLINE', 6, 2, '2026-11-10 12:16:07.854049+07', NULL, 'DA_HUY', 0.00, 23000.00, 92000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:17:44.06558+07', 34),
-	(2, 'DH-0813adbd-aaa0-44dd-8317-57abbe8d3b7d', 'ONLINE', 1, 3, '2026-11-04 13:03:18.413361+07', NULL, 'DA_GIAO', 0.00, 0.00, 130000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-04 13:05:10.352992+07', NULL),
-	(39, 'DH-dacdbd65-5775-4bf5-a64c-30aa524c96ac', 'ONLINE', 6, 2, '2026-11-09 19:53:14.65845+07', NULL, 'DA_HUY', 0.00, 13500.00, 121500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-09 20:16:53.707903+07', 1),
-	(3, 'DH-ad03213a-3dfb-4d0f-bb40-d3c26a4b34dd', 'ONLINE', 1, 3, '2026-11-04 14:34:38.732069+07', NULL, 'DA_HUY', 0.00, 11200.00, 100800.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-04 14:37:04.762617+07', 1),
-	(47, 'DH-3a90eb4f-1294-4937-b82a-ee05fc78e136', 'ONLINE', 1, NULL, '2026-11-10 12:41:10.43514+07', NULL, 'CHO_XAC_NHAN', 0.00, 7500.00, 67500.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:41:10.43514+07', 1),
-	(36, 'DH-a4e572de-dfa9-4d7a-b4e0-ff37106904b5', 'ONLINE', 1, 2, '2026-11-07 20:23:40.626183+07', NULL, 'DA_GIAO', 0.00, 0.00, 155000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-07 20:24:03.891591+07', NULL),
-	(40, 'DH-f2f6334c-7f87-4aa4-be75-6344a5b99b3e', 'ONLINE', 6, 2, '2026-11-09 20:26:44.280559+07', NULL, 'DA_GIAO', 0.00, 12500.00, 112500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-09 20:27:39.102191+07', 1),
-	(44, 'DH-ef3f4a13-4b1f-4aa5-be32-51bd3618e101', 'ONLINE', 6, 2, '2026-11-10 12:18:31.190542+07', NULL, 'DA_GIAO', 0.00, 13500.00, 54000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-10 12:20:40.270878+07', 34),
-	(37, 'DH-952a4d25-3d9c-460c-b667-4745274d50dd', 'ONLINE', 6, 2, '2026-11-08 15:15:30.126268+07', NULL, 'DA_GIAO', 0.00, 18600.00, 74400.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-08 15:15:50.298675+07', 34),
-	(41, 'DH-95f0deaa-9c9d-400b-a585-7a063b2ebde7', 'ONLINE', 6, 3, '2026-11-10 11:59:34.077991+07', NULL, 'DA_HUY', 0.00, 0.00, 190000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:01:16.156814+07', NULL),
-	(42, 'DH-7eb42b17-20d6-481d-a235-c870a9c48545', 'ONLINE', 7, NULL, '2026-11-10 12:09:47.241694+07', NULL, 'CHO_XAC_NHAN', 0.00, 0.00, 12500.00, 'Đơn kiểm thử tự động Demo Bank — không có tiền thật.', 'Kiểm thử Demo Bank', '0901234567', 'Kiểm thử Demo Bank | 0901234567 | Địa chỉ thử nghiệm đồ án, Phường Ba Đình, , Thành phố Hà Nội', NULL, false, '2026-11-10 12:09:47.241694+07', NULL),
-	(45, 'DH-b0d5590a-d8b1-4227-88b3-f3205cd3c49c', 'ONLINE', 1, NULL, '2026-11-10 12:21:43.5778+07', NULL, 'DA_HUY', 0.00, 13500.00, 121500.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:22:01.20673+07', 1);
+	(48, 'DH-889d6da8-1115-4c77-9165-850c71398689', 'ONLINE', 6, NULL, '2026-11-18 13:28:43.692243+07', NULL, 'DA_HUY', 0.00, 0.00, 31500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-18 13:32:07.943823+07', NULL, NULL, NULL, NULL, NULL),
+	(46, 'DH-50d901bf-f69e-4ce8-96e3-156619cc74e9', 'ONLINE', 1, 2, '2026-11-10 12:22:40.617089+07', NULL, 'DA_HUY', 0.00, 6500.00, 26000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:40:11.858402+07', 34, NULL, NULL, NULL, NULL),
+	(43, 'DH-35208fcf-4b1a-41d9-9948-352ab2e404d8', 'ONLINE', 6, 2, '2026-11-10 12:16:07.854049+07', NULL, 'DA_HUY', 0.00, 23000.00, 92000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:17:44.06558+07', 34, NULL, NULL, NULL, NULL),
+	(39, 'DH-dacdbd65-5775-4bf5-a64c-30aa524c96ac', 'ONLINE', 6, 2, '2026-11-09 19:53:14.65845+07', NULL, 'DA_HUY', 0.00, 13500.00, 121500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-09 20:16:53.707903+07', 1, NULL, NULL, NULL, NULL),
+	(49, 'DH-1b2c2d9b-50cd-4f73-b9ce-a4e09c9f0d63', 'ONLINE', 6, NULL, '2026-11-18 13:37:29.186894+07', NULL, 'CHO_XAC_NHAN', 0.00, 0.00, 115000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-18 13:37:29.186894+07', NULL, NULL, NULL, NULL, NULL),
+	(47, 'DH-3a90eb4f-1294-4937-b82a-ee05fc78e136', 'ONLINE', 1, NULL, '2026-11-10 12:41:10.43514+07', NULL, 'CHO_XAC_NHAN', 0.00, 7500.00, 67500.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:41:10.43514+07', 1, NULL, NULL, NULL, NULL),
+	(50, 'DH-ac01f001-a993-44c6-a104-3e650936d33f', 'ONLINE', 6, NULL, '2026-11-20 11:48:11.995358+07', NULL, 'CHO_XAC_NHAN', 0.00, 0.00, 81000.00, 'giao đúng ngày', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-20 11:48:11.995358+07', NULL, NULL, NULL, NULL, NULL),
+	(38, 'DH-896c9bef-0633-44eb-ad0b-e8bd0eff06e9', 'ONLINE', 6, 2, '2026-11-09 19:18:25.537325+07', NULL, 'DA_GIAO', 0.00, 38000.00, 152000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-09 19:52:19.576164+07', 34, 2, 'Ocean', 'NV-2', '2026-11-09 19:19:35.210355+07'),
+	(53, 'DH-9a20c51f-3c8d-49d8-88c1-dbc7d6922125', 'ONLINE', 6, 2, '2026-11-20 13:25:00.563813+07', NULL, 'DA_GIAO', 0.00, 0.00, 95000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-20 13:35:27.256625+07', NULL, 2, 'Ocean', 'NV-2', '2026-11-20 13:31:12.993849+07'),
+	(51, 'DH-7d6f0ba4-f61d-4548-b015-5d62d425da72', 'ONLINE', 6, 2, '2026-11-20 12:44:40.045977+07', NULL, 'DA_HUY', 0.00, 0.00, 67500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-20 13:02:19.85268+07', NULL, NULL, NULL, NULL, NULL),
+	(1, 'DH-6c1a7221-fc52-436f-8308-5ac6fbe4a865', 'ONLINE', 1, 2, '2026-11-03 16:37:52.820068+07', NULL, 'DA_GIAO', 0.00, 0.00, 80000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-03 16:38:29.510031+07', NULL, 2, 'Ocean', 'NV-2', '2026-11-03 16:38:23.783332+07'),
+	(42, 'DH-7eb42b17-20d6-481d-a235-c870a9c48545', 'ONLINE', 7, NULL, '2026-11-10 12:09:47.241694+07', NULL, 'CHO_XAC_NHAN', 0.00, 0.00, 12500.00, 'Đơn kiểm thử tự động Demo Bank — không có tiền thật.', 'Kiểm thử Demo Bank', '0901234567', 'Kiểm thử Demo Bank | 0901234567 | Địa chỉ thử nghiệm đồ án, Phường Ba Đình, , Thành phố Hà Nội', NULL, false, '2026-11-10 12:09:47.241694+07', NULL, NULL, NULL, NULL, NULL),
+	(2, 'DH-0813adbd-aaa0-44dd-8317-57abbe8d3b7d', 'ONLINE', 1, 3, '2026-11-04 13:03:18.413361+07', NULL, 'DA_GIAO', 0.00, 0.00, 130000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-04 13:05:10.352992+07', NULL, 3, 'Skywind', 'NV-4', '2026-11-04 13:04:11.849425+07'),
+	(45, 'DH-b0d5590a-d8b1-4227-88b3-f3205cd3c49c', 'ONLINE', 1, NULL, '2026-11-10 12:21:43.5778+07', NULL, 'DA_HUY', 0.00, 13500.00, 121500.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:22:01.20673+07', 1, NULL, NULL, NULL, NULL),
+	(3, 'DH-ad03213a-3dfb-4d0f-bb40-d3c26a4b34dd', 'ONLINE', 1, 3, '2026-11-04 14:34:38.732069+07', NULL, 'DA_HUY', 0.00, 11200.00, 100800.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-04 14:37:04.762617+07', 1, 3, 'Skywind', 'NV-4', '2026-11-04 14:35:34.329885+07'),
+	(36, 'DH-a4e572de-dfa9-4d7a-b4e0-ff37106904b5', 'ONLINE', 1, 2, '2026-11-07 20:23:40.626183+07', NULL, 'DA_GIAO', 0.00, 0.00, 155000.00, '', 'SonY', '0123456789', 'SonY | 0123456789 | 24/1 Kha Vạn Cân, Phường Tam Thắng, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-07 20:24:03.891591+07', NULL, 2, 'Ocean', 'NV-2', '2026-11-07 20:23:57.794667+07'),
+	(40, 'DH-f2f6334c-7f87-4aa4-be75-6344a5b99b3e', 'ONLINE', 6, 2, '2026-11-09 20:26:44.280559+07', NULL, 'DA_GIAO', 0.00, 12500.00, 112500.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-09 20:27:39.102191+07', 1, 2, 'Ocean', 'NV-2', '2026-11-09 20:27:35.446926+07'),
+	(44, 'DH-ef3f4a13-4b1f-4aa5-be32-51bd3618e101', 'ONLINE', 6, 2, '2026-11-10 12:18:31.190542+07', NULL, 'DA_GIAO', 0.00, 13500.00, 54000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-10 12:20:40.270878+07', 34, 2, 'Ocean', 'NV-2', '2026-11-10 12:19:38.434618+07'),
+	(37, 'DH-952a4d25-3d9c-460c-b667-4745274d50dd', 'ONLINE', 6, 2, '2026-11-08 15:15:30.126268+07', NULL, 'DA_GIAO', 0.00, 18600.00, 74400.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-08 15:15:50.298675+07', 34, 2, 'Ocean', 'NV-2', '2026-11-08 15:15:46.004724+07'),
+	(41, 'DH-95f0deaa-9c9d-400b-a585-7a063b2ebde7', 'ONLINE', 6, 3, '2026-11-10 11:59:34.077991+07', NULL, 'DA_HUY', 0.00, 0.00, 190000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-10 12:01:16.156814+07', NULL, 3, 'Skywind', 'NV-4', '2026-11-10 12:00:52.017342+07'),
+	(52, 'DH-5c17757e-0490-4919-93cd-56e81d0388d9', 'ONLINE', 6, 2, '2026-11-20 13:02:34.214995+07', NULL, 'DA_HUY', 0.00, 0.00, 50000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-20 13:35:35.923787+07', NULL, NULL, NULL, NULL, NULL),
+	(54, 'DH-60d994d1-abaf-4cde-b68f-07d16ca279a2', 'ONLINE', 6, 2, '2026-11-20 13:39:57.178351+07', NULL, 'DA_HUY', 0.00, 12500.00, 50000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, false, '2026-11-20 13:45:25.457686+07', 34, NULL, NULL, NULL, NULL),
+	(55, 'DH-b9e04e22-02a4-46a9-9e0f-05a44e304296', 'ONLINE', 6, 2, '2026-11-20 13:46:57.556142+07', NULL, 'DA_GIAO', 0.00, 19000.00, 76000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-20 13:48:49.983488+07', 34, 2, 'Ocean', 'NV-2', '2026-11-20 13:48:46.919293+07'),
+	(56, 'DH-5f03db21-d960-4b4d-8ffe-592199530864', 'ONLINE', 6, 2, '2026-11-20 14:07:16.711465+07', NULL, 'DA_GIAO', 0.00, 19000.00, 76000.00, '', 'hưng Ngô', '0786566862', 'hưng Ngô | 0786566862 | 335 Hậu Giang, Phường Bình Tây, , Thành phố Hồ Chí Minh', NULL, true, '2026-11-20 14:07:49.059937+07', 34, 2, 'Ocean', 'NV-2', '2026-11-20 14:07:42.686179+07');
+
+
+--
+-- Data for Name: email_change_challenge; Type: TABLE DATA; Schema: public; Owner: -
+--
+
 
 
 --
@@ -2513,9 +2664,9 @@ INSERT INTO public.don_hang OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.gio_hang OVERRIDING SYSTEM VALUE VALUES
+	(141, 6, '2026-11-20 14:07:08.028765+07'),
 	(363, 7, '2026-11-10 12:09:46.99555+07'),
-	(1, 1, '2026-11-10 12:40:55.985103+07'),
-	(141, 6, '2026-11-10 13:06:08.292362+07');
+	(1, 1, '2026-11-10 12:40:55.985103+07');
 
 
 --
@@ -2524,7 +2675,6 @@ INSERT INTO public.gio_hang OVERRIDING SYSTEM VALUE VALUES
 
 INSERT INTO public.hinh_anh_san_pham OVERRIDING SYSTEM VALUE VALUES
 	(1, 11, '/api/v1/media/products/d58e11cc-83c7-3c8f-8c47-1d13f9369fd6.png', true, 0),
-	(2, 27, '/api/v1/media/products/dbb88be4-df1c-38cf-920e-aaa8d99fecd5.png', true, 0),
 	(3, 26, '/api/v1/media/products/98e4c4ed-3a47-33a0-9f56-80112e74bbda.png', true, 0),
 	(4, 25, '/api/v1/media/products/3120b46e-da11-3462-b837-4694cf74b846.png', true, 0),
 	(5, 24, '/api/v1/media/products/1693e24a-faf8-3a29-83c4-12793366bc59.png', true, 0),
@@ -2546,7 +2696,8 @@ INSERT INTO public.hinh_anh_san_pham OVERRIDING SYSTEM VALUE VALUES
 	(21, 7, '/api/v1/media/products/68760d16-abb5-3064-b90c-055867878622.png', true, 0),
 	(22, 6, '/api/v1/media/products/28db5f14-1ec4-3d0f-9662-40fa8c31cf2e.png', true, 0),
 	(23, 5, '/api/v1/media/products/d977c026-b676-3cc5-bfe5-747f6d23d744.png', true, 0),
-	(24, 4, '/api/v1/media/products/68760d16-abb5-3064-b90c-055867878622.png', true, 0);
+	(24, 4, '/api/v1/media/products/68760d16-abb5-3064-b90c-055867878622.png', true, 0),
+	(2, 27, '/api/v1/media/products/a6e66b2c-c8c3-43c8-a594-7501116d9553.png', true, 0);
 
 
 --
@@ -2562,7 +2713,10 @@ INSERT INTO public.hoa_don OVERRIDING SYSTEM VALUE VALUES
 	(38, 38, 2, 'HD-38', '2026-11-09 19:19:35.210355+07', 'ONLINE', 152000.00, 0.00, 38000.00, 'ISSUED'),
 	(39, 40, 2, 'HD-40', '2026-11-09 20:27:35.446926+07', 'ONLINE', 112500.00, 0.00, 12500.00, 'PAID'),
 	(40, 41, 3, 'HD-41', '2026-11-10 12:00:52.017342+07', 'ONLINE', 190000.00, 0.00, 0.00, 'CANCELLED'),
-	(41, 44, 2, 'HD-44', '2026-11-10 12:19:38.434618+07', 'ONLINE', 54000.00, 0.00, 13500.00, 'PAID');
+	(41, 44, 2, 'HD-44', '2026-11-10 12:19:38.434618+07', 'ONLINE', 54000.00, 0.00, 13500.00, 'PAID'),
+	(42, 53, 2, 'HD-53', '2026-11-20 13:31:12.993849+07', 'ONLINE', 95000.00, 0.00, 0.00, 'PAID'),
+	(43, 55, 2, 'HD-55', '2026-11-20 13:48:46.919293+07', 'ONLINE', 76000.00, 0.00, 19000.00, 'PAID'),
+	(44, 56, 2, 'HD-56', '2026-11-20 14:07:42.686179+07', 'ONLINE', 76000.00, 0.00, 19000.00, 'PAID');
 
 
 --
@@ -2586,8 +2740,8 @@ INSERT INTO public.khach_hang OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.khuyen_mai OVERRIDING SYSTEM VALUE VALUES
-	(34, 'WATERBUS10', 'Giảm giá mạnh', NULL, 'PERCENT', 20.00, 50000.00, 0.00, '2026-11-08 15:02:23+07', '2026-11-10 15:00:00+07', 100, 5, 'CATEGORY', 'ACTIVE'),
-	(1, 'EASPORT', 'Giảm giá mạnh', NULL, 'PERCENT', 10.00, 50000.00, 0.00, '2026-11-04 14:32:25+07', '2026-11-10 14:32:25+07', 2, 1, 'CATEGORY', 'ACTIVE');
+	(1, 'EASPORT', 'Giảm giá mạnh', NULL, 'PERCENT', 10.00, 50000.00, 0.00, '2026-11-04 14:32:25+07', '2026-11-10 14:32:25+07', 2, 1, 'CATEGORY', 'ACTIVE'),
+	(34, 'WATERBUS10', 'Giảm giá mạnh', NULL, 'PERCENT', 20.00, 50000.00, 0.00, '2026-11-08 15:02:23+07', '2026-11-22 15:00:00+07', 100, 5, 'CATEGORY', 'ACTIVE');
 
 
 --
@@ -2646,7 +2800,10 @@ INSERT INTO public.lich_su_hoa_don OVERRIDING SYSTEM VALUE VALUES
 	(1, 3, NULL, 'ISSUED', 'CANCELLED', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-04 14:37:04.762617+07'),
 	(34, 39, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-09 20:27:35.446926+07'),
 	(35, 40, NULL, 'ISSUED', 'CANCELLED', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-10 12:01:16.156814+07'),
-	(36, 41, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-10 12:19:38.434618+07');
+	(36, 41, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-10 12:19:38.434618+07'),
+	(37, 42, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-20 13:31:12.993849+07'),
+	(38, 43, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-20 13:48:46.919293+07'),
+	(39, 44, NULL, 'ISSUED', 'PAID', 'Cap nhat trang thai theo nghiep vu don hang', '2026-11-20 14:07:42.686179+07');
 
 
 --
@@ -2686,7 +2843,20 @@ INSERT INTO public.lich_su_trang_thai_don OVERRIDING SYSTEM VALUE VALUES
 	(58, 44, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-10 12:20:40.270878+07'),
 	(59, 45, 3, 'CHO_XAC_NHAN', 'DA_HUY', 'không mua nữa
 ', '2026-11-10 12:22:01.20673+07'),
-	(60, 46, 2, 'CHO_XAC_NHAN', 'DA_HUY', 'dcdsvdsv', '2026-11-10 12:40:11.858402+07');
+	(60, 46, 2, 'CHO_XAC_NHAN', 'DA_HUY', 'dcdsvdsv', '2026-11-10 12:40:11.858402+07'),
+	(61, 48, 5, 'CHO_XAC_NHAN', 'DA_HUY', 'ẻgg', '2026-11-18 13:32:07.943823+07'),
+	(62, 51, 2, 'CHO_XAC_NHAN', 'DA_HUY', 'đsad', '2026-11-20 13:02:19.85268+07'),
+	(63, 53, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-20 13:31:12.993849+07'),
+	(64, 53, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-20 13:35:25.299828+07'),
+	(65, 53, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-20 13:35:27.256625+07'),
+	(66, 52, 2, 'CHO_XAC_NHAN', 'DA_HUY', 'dsad', '2026-11-20 13:35:35.923787+07'),
+	(67, 54, 2, 'CHO_XAC_NHAN', 'DA_HUY', 'dsad', '2026-11-20 13:45:25.457686+07'),
+	(68, 55, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-20 13:48:46.919293+07'),
+	(69, 55, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-20 13:48:48.542376+07'),
+	(70, 55, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-20 13:48:49.983488+07'),
+	(71, 56, 2, 'CHO_XAC_NHAN', 'DANG_CHUAN_BI', '', '2026-11-20 14:07:42.686179+07'),
+	(72, 56, 2, 'DANG_CHUAN_BI', 'DANG_GIAO', '', '2026-11-20 14:07:47.190839+07'),
+	(73, 56, 2, 'DANG_GIAO', 'DA_GIAO', '', '2026-11-20 14:07:49.059937+07');
 
 
 --
@@ -2700,13 +2870,13 @@ INSERT INTO public.lich_su_trang_thai_don OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.loai_san_pham OVERRIDING SYSTEM VALUE VALUES
-	(1, 'Nước ngọt có ga', 'Nước giải khát có ga', NULL, true),
-	(2, 'Nước suối', 'Nước tinh khiết', NULL, true),
-	(3, 'Trà đóng chai', 'Trà pha sẵn', NULL, true),
-	(7, 'Nước tăng lực', 'Đồ uống tăng lực đóng lon hoặc chai.', NULL, true),
-	(8, 'Nước thể thao', 'Các loại đồ uống thể thao.', NULL, true),
-	(9, 'Nước trái cây', 'Đồ uống và nước ép trái cây đóng gói.', NULL, true),
-	(10, 'Sữa và ca cao', 'Sữa và đồ uống ca cao dùng sẵn.', NULL, true);
+	(1, 'Nước ngọt có ga', 'Nước giải khát có ga', NULL, true, NULL),
+	(2, 'Nước suối', 'Nước tinh khiết', NULL, true, NULL),
+	(3, 'Trà đóng chai', 'Trà pha sẵn', NULL, true, NULL),
+	(7, 'Nước tăng lực', 'Đồ uống tăng lực đóng lon hoặc chai.', NULL, true, NULL),
+	(8, 'Nước thể thao', 'Các loại đồ uống thể thao.', NULL, true, NULL),
+	(9, 'Nước trái cây', 'Đồ uống và nước ép trái cây đóng gói.', NULL, true, NULL),
+	(10, 'Sữa và ca cao', 'Sữa và đồ uống ca cao dùng sẵn.', NULL, true, NULL);
 
 
 --
@@ -3169,7 +3339,51 @@ INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
 	(416, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-11 11:55:32.783075+07'),
 	(417, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-11 11:59:26.006605+07'),
 	(418, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-11 12:01:12.099936+07'),
-	(419, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-11 12:01:36.379302+07');
+	(419, 1, 'LOGIN', 'tai_khoan', 1, NULL, '2026-11-11 12:01:36.379302+07'),
+	(420, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-11 13:45:10.415204+07'),
+	(421, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-13 16:08:35.091921+07'),
+	(422, 2, 'UPDATE', 'san_pham', 27, NULL, '2026-11-13 16:22:25.316185+07'),
+	(423, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-14 13:18:42.659758+07'),
+	(424, 2, 'ACCOUNT_EDIT', 'tai_khoan', 6, NULL, '2026-11-14 13:19:33.473254+07'),
+	(425, 2, 'UPDATE', 'san_pham', 24, NULL, '2026-11-14 14:15:44.858393+07'),
+	(426, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-17 11:03:59.687993+07'),
+	(427, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-17 11:04:00.835178+07'),
+	(428, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-17 11:18:27.975014+07'),
+	(429, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-17 12:59:28.113463+07'),
+	(430, 2, 'ACCOUNT_DELETE', 'tai_khoan', 6, NULL, '2026-11-17 13:00:01.857861+07');
+INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
+	(431, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-18 13:18:32.3266+07'),
+	(432, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-18 13:25:54.247641+07'),
+	(433, 2, 'ACCOUNT_LOCKED', 'tai_khoan', 1, NULL, '2026-11-18 13:28:14.533113+07'),
+	(434, 2, 'ACCOUNT_DELETE', 'tai_khoan', 1, NULL, '2026-11-18 13:28:17.112906+07'),
+	(435, 5, 'CHECKOUT', 'don_hang', 48, NULL, '2026-11-18 13:28:43.692243+07'),
+	(436, 5, 'ORDER_DA_HUY', 'don_hang', 48, NULL, '2026-11-18 13:32:07.943823+07'),
+	(437, 5, 'CHECKOUT', 'don_hang', 49, NULL, '2026-11-18 13:37:29.186894+07'),
+	(438, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-20 11:47:41.929704+07'),
+	(439, 5, 'CHECKOUT', 'don_hang', 50, NULL, '2026-11-20 11:48:11.995358+07'),
+	(440, 5, 'LOGIN', 'tai_khoan', 5, NULL, '2026-11-20 12:43:56.458916+07'),
+	(441, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-20 12:44:17.547162+07'),
+	(442, 5, 'CHECKOUT', 'don_hang', 51, NULL, '2026-11-20 12:44:40.045977+07'),
+	(443, 2, 'ORDER_DA_HUY', 'don_hang', 51, NULL, '2026-11-20 13:02:19.85268+07'),
+	(444, 5, 'CHECKOUT', 'don_hang', 52, NULL, '2026-11-20 13:02:34.214995+07'),
+	(445, 5, 'CHECKOUT', 'don_hang', 53, NULL, '2026-11-20 13:25:00.563813+07'),
+	(446, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 53, NULL, '2026-11-20 13:31:12.993849+07'),
+	(447, 2, 'ORDER_DANG_GIAO', 'don_hang', 53, NULL, '2026-11-20 13:35:25.299828+07'),
+	(448, 2, 'ORDER_DA_GIAO', 'don_hang', 53, NULL, '2026-11-20 13:35:27.256625+07'),
+	(449, 2, 'ORDER_DA_HUY', 'don_hang', 52, NULL, '2026-11-20 13:35:35.923787+07'),
+	(450, 2, 'LOGIN', 'tai_khoan', 2, NULL, '2026-11-20 13:38:46.255344+07'),
+	(451, 2, 'UPDATE', 'khuyen_mai', 34, NULL, '2026-11-20 13:39:39.434332+07'),
+	(452, 5, 'CHECKOUT', 'don_hang', 54, NULL, '2026-11-20 13:39:57.178351+07'),
+	(453, 2, 'ORDER_DA_HUY', 'don_hang', 54, NULL, '2026-11-20 13:45:25.457686+07'),
+	(454, 5, 'CHECKOUT', 'don_hang', 55, NULL, '2026-11-20 13:46:57.556142+07'),
+	(455, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 55, NULL, '2026-11-20 13:48:46.919293+07'),
+	(456, 2, 'ORDER_DANG_GIAO', 'don_hang', 55, NULL, '2026-11-20 13:48:48.542376+07'),
+	(457, 2, 'ORDER_DA_GIAO', 'don_hang', 55, NULL, '2026-11-20 13:48:49.983488+07'),
+	(458, 5, 'CHECKOUT', 'don_hang', 56, NULL, '2026-11-20 14:07:16.711465+07'),
+	(459, 5, 'CUSTOMER_TRANSFER_CONFIRMED', 'thanh_toan', 56, NULL, '2026-11-20 14:07:28.751722+07'),
+	(460, 2, 'ORDER_DANG_CHUAN_BI', 'don_hang', 56, NULL, '2026-11-20 14:07:42.686179+07'),
+	(461, 2, 'ORDER_DANG_GIAO', 'don_hang', 56, NULL, '2026-11-20 14:07:47.190839+07'),
+	(462, 2, 'ORDER_DA_GIAO', 'don_hang', 56, NULL, '2026-11-20 14:07:49.059937+07');
 
 
 --
@@ -3177,16 +3391,18 @@ INSERT INTO public.nhat_ky_hoat_dong OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.password_reset_challenge VALUES
-	('73e37192-2814-4ed8-9470-7112ddee92e4', 5, NULL, '2026-11-08 14:10:16.603355+07', 0, NULL, NULL, true, true, '2026-11-08 14:05:16.603355+07'),
-	('1952c34f-de94-42cc-bf7b-d2ec81c6a45e', 5, NULL, '2026-11-08 14:11:50.133957+07', 0, NULL, NULL, true, true, '2026-11-08 14:06:50.133957+07'),
-	('c976587b-5cc1-443b-bd3f-a5b122be2fe3', 5, NULL, '2026-11-08 14:18:00.724709+07', 0, NULL, NULL, true, true, '2026-11-08 14:13:00.724709+07'),
-	('09721f70-2c85-4d65-8ae6-3a9c40c8301a', 5, NULL, '2026-11-08 14:21:27.259834+07', 0, NULL, NULL, true, false, '2026-11-08 14:16:27.259834+07');
+	('140ed2bf-deb4-4b0c-b455-0cf5b43c1a37', 5, NULL, '2026-11-11 13:33:58.632984+07', 0, NULL, NULL, true, false, '2026-11-11 13:28:58.632984+07'),
+	('6e74ac5d-9da5-4108-96cd-d0c8d90d09e0', 5, NULL, '2026-11-11 13:45:36.865502+07', 1, 'ee2d423fe8c93f9352636fb9ca65b5646c6a92760c0e04f7c394d70080f464fb', '2026-11-11 13:46:29.994957+07', false, false, '2026-11-11 13:40:36.865502+07');
 
 
 --
 -- Data for Name: payment_notification; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.payment_notification OVERRIDING SYSTEM VALUE VALUES
+	(1, 53, 53, 'Đơn hàng DH-9a20c51f-3c8d-49d8-88c1-dbc7d6922125 đã thanh toán thành công 95.000đ qua VNPAY Sandbox', '2026-11-20 13:30:55.11731+07'),
+	(2, 55, 55, 'Đơn hàng DH-b9e04e22-02a4-46a9-9e0f-05a44e304296 đã thanh toán thành công 76.000đ qua VNPAY Sandbox', '2026-11-20 13:48:21.950796+07'),
+	(3, 56, 56, 'Khách hàng đã xác nhận chuyển khoản đơn DH-5f03db21-d960-4b4d-8ffe-592199530864. Vui lòng kiểm tra tiền trước khi xác nhận đơn.', '2026-11-20 14:07:28.751722+07');
 
 
 --
@@ -3194,16 +3410,16 @@ INSERT INTO public.password_reset_challenge VALUES
 --
 
 INSERT INTO public.pham_vi_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
-	(34, 34, NULL, 10, NULL),
-	(35, 34, NULL, 9, NULL),
-	(36, 34, NULL, 8, NULL),
-	(37, 34, NULL, 7, NULL),
-	(38, 34, NULL, 3, NULL),
-	(39, 34, NULL, 2, NULL),
-	(40, 34, NULL, 1, NULL),
 	(44, 1, NULL, 10, NULL),
 	(45, 1, NULL, 8, NULL),
-	(46, 1, NULL, 7, NULL);
+	(46, 1, NULL, 7, NULL),
+	(47, 34, NULL, 10, NULL),
+	(48, 34, NULL, 9, NULL),
+	(49, 34, NULL, 8, NULL),
+	(50, 34, NULL, 7, NULL),
+	(51, 34, NULL, 3, NULL),
+	(52, 34, NULL, 2, NULL),
+	(53, 34, NULL, 1, NULL);
 
 
 --
@@ -3212,7 +3428,6 @@ INSERT INTO public.pham_vi_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
 
 INSERT INTO public.phien_xac_thuc OVERRIDING SYSTEM VALUE VALUES
 	(1, 1, '6167d736b6d17cc669d1072b42f3c79d43b24677b650681445856b902e025309', '2026-11-03 21:15:59.011174+07', true, '2026-11-03 13:15:58.629248+07'),
-	(2, 1, '03ca8c2bf444b990dab5045e081e693f63e3056fe2dfa155aa59d78cfb8b78df', '2026-11-03 23:23:53.391026+07', true, '2026-11-03 15:23:53.063427+07'),
 	(26, 4, 'fa82d9bdc80a0c86a47d08319f47fa4765deab1f55abe88a2841f10bd493550d', '2026-11-04 22:19:52.575499+07', true, '2026-11-04 14:19:52.228479+07'),
 	(6, 4, 'c9fa5b4ae74f3b2da396f4f713b03f1905ef36a7c7653c0fccccd189fc9381f0', '2026-11-03 23:33:57.441364+07', true, '2026-11-03 15:33:57.120073+07'),
 	(5, 2, '942e12434a9146876045a6792edce58b9f5fe6023c4c00f19eebb7d5231d1bb8', '2026-11-03 23:29:55.312403+07', true, '2026-11-03 15:29:54.975792+07'),
@@ -3267,18 +3482,32 @@ INSERT INTO public.phien_xac_thuc OVERRIDING SYSTEM VALUE VALUES
 	(74, 2, 'd82bad100e287e77a8f4aa08761b7331ad4a0b06a7193c492219b5276f1587f3', '2026-11-10 03:52:05.313209+07', false, '2026-11-09 19:52:04.718092+07'),
 	(75, 4, '2009a8bdf62a5d55644cfc35e0cee6fbe2715aa7c3955ff12c841b9d9a549ec9', '2026-11-10 19:31:48.501675+07', true, '2026-11-10 11:31:47.940027+07'),
 	(76, 5, '3deef55b86037857d671be72432701ced1db64646fd17a1bc4969e2ba6980f26', '2026-11-10 19:32:09.867863+07', true, '2026-11-10 11:32:09.528041+07'),
-	(77, 6, '307fc4a2a87dbf4f2dcc3e808e61becfc42e4c050dd9b80ffc9f999c5c44c47f', '2026-11-10 20:09:46.806437+07', true, '2026-11-10 12:09:46.476284+07'),
 	(78, 2, '3bc2001401b67bd7d8a7a809094be6952c811fe3199c3aeda3f256161b81645b', '2026-11-10 20:11:54.531133+07', false, '2026-11-10 12:11:54.224981+07'),
 	(79, 3, '74ac6c5ef13713af5cf95f0a42a2b42e8ff37cee60629e4f505cdaa7d98b9eb2', '2026-11-10 20:21:16.969846+07', true, '2026-11-10 12:21:16.63318+07'),
+	(77, 6, '307fc4a2a87dbf4f2dcc3e808e61becfc42e4c050dd9b80ffc9f999c5c44c47f', '2026-11-10 20:09:46.806437+07', true, '2026-11-10 12:09:46.476284+07'),
 	(80, 3, 'e5991dbedd28ed0aa3665451e9e71019256248bbc62aeae24de9b3b8c2444a90', '2026-11-10 20:26:23.877459+07', true, '2026-11-10 12:26:23.480332+07'),
 	(81, 5, '85cd74589a13192b2f312452ab961c8caea1d68da48ab23e7c6c32c288725803', '2026-11-10 21:05:51.463649+07', false, '2026-11-10 13:05:50.960162+07'),
 	(82, 5, 'aaf7b60c65060a6d0446cacc5f917503f0dd4ba08595df117718c3c57d7aa2a4', '2026-11-11 19:52:48.550237+07', true, '2026-11-11 11:52:48.205134+07'),
 	(83, 5, '61c0325240e0525c054ab5a3e30e68ebbb8fa1f8179d41625fffc872b95baaef', '2026-11-11 19:53:00.389439+07', true, '2026-11-11 11:53:00.080848+07'),
-	(84, 5, '40d17a2c5b81b39eb7283cfb83fb4d022559903f8ef1df6376a3de8045c4fbd1', '2026-11-11 19:53:14.293222+07', false, '2026-11-11 11:53:13.949678+07'),
 	(85, 2, 'f4738871c421b434f81d767600144f673ef09fbdda47cc266daef5a430712f5b', '2026-11-11 19:55:33.18645+07', false, '2026-11-11 11:55:32.783075+07'),
-	(86, 1, 'a47fcf10fbb07e0d26983729dd84a195fa6387eb9216705a26386bd681cf0a38', '2026-11-11 19:59:26.787199+07', false, '2026-11-11 11:59:26.006605+07'),
-	(87, 1, '8f3a15a37412a8345f4e60b3ba2efa3e10e758c204afb7445f9c098c5ec53881', '2026-11-11 20:01:12.500924+07', false, '2026-11-11 12:01:12.099936+07'),
-	(88, 1, '0b7db651f7c4752d83d12f8ee1b44cee613a7ae1aee7938a6082f5b95f5e3925', '2026-11-11 20:01:36.721636+07', false, '2026-11-11 12:01:36.379302+07');
+	(84, 5, '40d17a2c5b81b39eb7283cfb83fb4d022559903f8ef1df6376a3de8045c4fbd1', '2026-11-11 19:53:14.293222+07', true, '2026-11-11 11:53:13.949678+07'),
+	(89, 5, '2eff191503fdedd708d3d6452a60cdce6c68ce4d5cd70fee56c53defc6fbc728', '2026-11-11 21:45:10.703986+07', false, '2026-11-11 13:45:10.415204+07'),
+	(90, 2, '33e2731f577de407c1d3f3e41b00081a30c51e1e15de0131c6cfeb7d87bff5cd', '2026-11-14 00:08:35.702136+07', false, '2026-11-13 16:08:35.091921+07'),
+	(91, 2, '34f7f5ef14cb9f6c3b033db18f4786e49b3600f78ee018e0df9a0f47adda999d', '2026-11-14 21:18:43.364871+07', false, '2026-11-14 13:18:42.659758+07'),
+	(92, 2, '13da0d2b79fd47a0291d09ce97a437de80fc0b246f61c48ae151612e46ffe3b4', '2026-11-17 19:04:01.108865+07', false, '2026-11-17 11:03:59.687993+07'),
+	(93, 2, '6eb4b1d24d47840b440c8c47d2132ae40d037682e6008547c7bddfa8745c5d4a', '2026-11-17 19:04:02.241632+07', false, '2026-11-17 11:04:00.835178+07'),
+	(94, 5, '603a39ef3f958445660b60dc03e66a053c45724c9d8ea33a85476b55d63055ef', '2026-11-17 19:18:28.339694+07', false, '2026-11-17 11:18:27.975014+07'),
+	(95, 2, '75b23d411266fe020b79e466e1b5f9405231312e2f5e4b1255f31b4ba3549d51', '2026-11-17 20:59:28.563777+07', false, '2026-11-17 12:59:28.113463+07'),
+	(96, 5, '5e9911984ab6a9e48def100d30604663ac2ca9a08137f71be9efe2cbbfcef784', '2026-11-18 21:18:32.802025+07', false, '2026-11-18 13:18:32.3266+07'),
+	(97, 2, 'fe20062c50ab7fd05854a79a5eb20dddd58d022846fc24d192ca16bb37ee3148', '2026-11-18 21:25:54.88915+07', false, '2026-11-18 13:25:54.247641+07'),
+	(2, 1, '03ca8c2bf444b990dab5045e081e693f63e3056fe2dfa155aa59d78cfb8b78df', '2026-11-03 23:23:53.391026+07', true, '2026-11-03 15:23:53.063427+07'),
+	(86, 1, 'a47fcf10fbb07e0d26983729dd84a195fa6387eb9216705a26386bd681cf0a38', '2026-11-11 19:59:26.787199+07', true, '2026-11-11 11:59:26.006605+07'),
+	(87, 1, '8f3a15a37412a8345f4e60b3ba2efa3e10e758c204afb7445f9c098c5ec53881', '2026-11-11 20:01:12.500924+07', true, '2026-11-11 12:01:12.099936+07'),
+	(88, 1, '0b7db651f7c4752d83d12f8ee1b44cee613a7ae1aee7938a6082f5b95f5e3925', '2026-11-11 20:01:36.721636+07', true, '2026-11-11 12:01:36.379302+07'),
+	(98, 5, '651167fb86906d38a9ae75dcf8489dad9f4e7ef96c648d6edf6affac846af44d', '2026-11-20 19:47:42.587735+07', false, '2026-11-20 11:47:41.929704+07'),
+	(99, 5, '0f887160e5b358de6ea44793367ba4f89862b491faba845f75ca6200a62923b8', '2026-11-20 20:43:58.283523+07', false, '2026-11-20 12:43:56.458916+07'),
+	(100, 2, 'd52bfa13f3276d6618dda4fa2432f988599ab017a3c37a676e6cd17da68cf5cd', '2026-11-20 20:44:18.516564+07', false, '2026-11-20 12:44:17.547162+07'),
+	(101, 2, '0408f4d00be66479d00e3a0a7167a25be86f1b331a9237e55e25e5c0b01a9884', '2026-11-20 21:38:46.619314+07', false, '2026-11-20 13:38:46.255344+07');
 
 
 --
@@ -3387,33 +3616,33 @@ INSERT INTO public.quyen OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.san_pham OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 1, 'SP001', 'Nước ngọt vị cam 330ml', NULL, NULL, NULL, NULL, '330ml', 'LON', NULL, NULL, NULL, 'NGUNG_KINH_DOANH', false, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
-	(27, 10, 22, 'CAT-VINAMILK-180', 'Vinamilk sữa có đường 180ml', 'Sữa Vinamilk có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(25, 10, 24, 'CAT-MILO-180', 'Milo ca cao 180ml', 'Đồ uống ca cao Milo đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Ca cao', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(20, 7, 11, 'CAT-REDBULL-250', 'Red Bull 250ml', 'Nước tăng lực Red Bull đóng lon.', NULL, NULL, NULL, '250ml', 'LON', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(11, 1, 3, 'CAT-COCA-330', 'Coca-Cola nguyên bản 330ml', 'Nước ngọt có ga vị cola, đóng lon. Dùng ngon hơn khi uống lạnh.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(8, 1, 5, 'CAT-SPRITE-330', 'Sprite chanh 330ml', 'Nước ngọt có ga Sprite hương chanh, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(21, 7, 10, 'CAT-STING-330', 'Sting dâu 330ml', 'Nước tăng lực Sting hương dâu, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Dâu', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(2, 2, 2, 'SP002', 'Nước suối 500ml', '', NULL, NULL, NULL, '500ml', 'CHAI', NULL, NULL, NULL, 'NGUNG_KINH_DOANH', false, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07'),
-	(3, 1, 9, 'CAT-SCHWEPPES-SODA-330', 'Schweppes Soda 330ml', 'Nước soda Schweppes đóng lon; có thể dùng trực tiếp hoặc pha đồ uống.', NULL, NULL, NULL, '330ml', 'LON', 'Soda', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'NGUNG_KINH_DOANH', false, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(26, 10, 23, 'CAT-TH-180', 'TH true MILK sữa có đường 180ml', 'Sữa TH true MILK có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(24, 9, 21, 'CAT-VFRESH-CAM-1000', 'Vfresh nước cam 1 lít', 'Đồ uống trái cây Vfresh vị cam, đóng hộp.', NULL, NULL, NULL, '1 lít', 'HOP', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(23, 8, 19, 'CAT-REVIVE-500', 'Revive 500ml', 'Nước uống thể thao Revive đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(22, 8, 20, 'CAT-POCARI-350', 'Pocari Sweat 500ml', 'Nước uống Pocari Sweat đóng chai.', NULL, NULL, NULL, '350ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(19, 7, 12, 'CAT-NUMBER1-330', 'Number 1 330ml', 'Nước tăng lực Number 1 đóng lon.', NULL, NULL, NULL, '330ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(18, 3, 16, 'CAT-C2-CHANH-455', 'C2 trà xanh hương chanh 455ml', 'Trà xanh C2 hương chanh, đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(17, 3, 17, 'CAT-TEAPLUS-455', 'TEA+ trà ô long 455ml', 'Trà ô long TEA+ đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Ô long', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(16, 3, 18, 'CAT-KHONGDO-500', 'Trà xanh Không Độ 500ml', 'Trà xanh Không Độ đóng chai dùng sẵn.', NULL, NULL, NULL, '500ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(15, 2, 13, 'CAT-AQUAFINA-500', 'Aquafina 500ml', 'Nước uống Aquafina đóng chai, tiện mang theo.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(14, 2, 14, 'CAT-DASANI-500', 'Dasani 500ml', 'Nước uống Dasani đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(13, 2, 15, 'CAT-LAVIE-500', 'La Vie 500ml', 'Nước uống La Vie đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(12, 1, 3, 'CAT-COCA-ZERO-330', 'Coca-Cola Zero Sugar 330ml', 'Nước ngọt có ga Coca-Cola Zero Sugar, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(10, 1, 4, 'CAT-PEPSI-ZERO-320', 'Pepsi không calo 320ml', 'Nước ngọt Pepsi không calo, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(9, 1, 4, 'CAT-PEPSI-320', 'Pepsi  320ml', 'Nước ngọt có ga Pepsi vị cola, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(7, 1, 6, 'CAT-FANTA-CAM-330', 'Fanta cam 330ml', 'Nước ngọt có ga Fanta hương cam, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(6, 1, 7, 'CAT-7UP-320', '7Up chanh 320ml', 'Nước ngọt có ga 7Up hương chanh, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(4, 1, 8, 'CAT-MIRINDA-CAM-320', 'Mirinda cam 320ml', 'Nước ngọt có ga Mirinda hương cam, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07'),
-	(5, 1, 8, 'CAT-MIRINDA-SODA-320', 'Mirinda soda kem 320ml', 'Nước ngọt có ga Mirinda hương soda kem, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Soda kem', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07');
+	(1, 1, 1, 'SP001', 'Nước ngọt vị cam 330ml', NULL, NULL, NULL, NULL, '330ml', 'LON', NULL, NULL, NULL, 'NGUNG_KINH_DOANH', false, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07', NULL),
+	(24, 9, 21, 'CAT-VFRESH-CAM-1000', 'Vfresh nước cam 1 lít', 'Đồ uống trái cây Vfresh vị cam, đóng hộp.', NULL, NULL, NULL, '1 lít', 'HOP', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'NGUNG_KINH_DOANH', false, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(25, 10, 24, 'CAT-MILO-180', 'Milo ca cao 180ml', 'Đồ uống ca cao Milo đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Ca cao', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(20, 7, 11, 'CAT-REDBULL-250', 'Red Bull 250ml', 'Nước tăng lực Red Bull đóng lon.', NULL, NULL, NULL, '250ml', 'LON', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(11, 1, 3, 'CAT-COCA-330', 'Coca-Cola nguyên bản 330ml', 'Nước ngọt có ga vị cola, đóng lon. Dùng ngon hơn khi uống lạnh.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(8, 1, 5, 'CAT-SPRITE-330', 'Sprite chanh 330ml', 'Nước ngọt có ga Sprite hương chanh, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(21, 7, 10, 'CAT-STING-330', 'Sting dâu 330ml', 'Nước tăng lực Sting hương dâu, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Dâu', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(2, 2, 2, 'SP002', 'Nước suối 500ml', '', NULL, NULL, NULL, '500ml', 'CHAI', NULL, NULL, NULL, 'NGUNG_KINH_DOANH', false, '2026-11-03 13:15:07.268189+07', '2026-11-03 13:15:07.268189+07', NULL),
+	(3, 1, 9, 'CAT-SCHWEPPES-SODA-330', 'Schweppes Soda 330ml', 'Nước soda Schweppes đóng lon; có thể dùng trực tiếp hoặc pha đồ uống.', NULL, NULL, NULL, '330ml', 'LON', 'Soda', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'NGUNG_KINH_DOANH', false, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(26, 10, 23, 'CAT-TH-180', 'TH true MILK sữa có đường 180ml', 'Sữa TH true MILK có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(23, 8, 19, 'CAT-REVIVE-500', 'Revive 500ml', 'Nước uống thể thao Revive đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(22, 8, 20, 'CAT-POCARI-350', 'Pocari Sweat 500ml', 'Nước uống Pocari Sweat đóng chai.', NULL, NULL, NULL, '350ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(19, 7, 12, 'CAT-NUMBER1-330', 'Number 1 330ml', 'Nước tăng lực Number 1 đóng lon.', NULL, NULL, NULL, '330ml', 'CHAI', 'Nguyên bản', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(18, 3, 16, 'CAT-C2-CHANH-455', 'C2 trà xanh hương chanh 455ml', 'Trà xanh C2 hương chanh, đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(17, 3, 17, 'CAT-TEAPLUS-455', 'TEA+ trà ô long 455ml', 'Trà ô long TEA+ đóng chai dùng sẵn.', NULL, NULL, NULL, '455ml', 'CHAI', 'Ô long', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(16, 3, 18, 'CAT-KHONGDO-500', 'Trà xanh Không Độ 500ml', 'Trà xanh Không Độ đóng chai dùng sẵn.', NULL, NULL, NULL, '500ml', 'CHAI', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(15, 2, 13, 'CAT-AQUAFINA-500', 'Aquafina 500ml', 'Nước uống Aquafina đóng chai, tiện mang theo.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(14, 2, 14, 'CAT-DASANI-500', 'Dasani 500ml', 'Nước uống Dasani đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(13, 2, 15, 'CAT-LAVIE-500', 'La Vie 500ml', 'Nước uống La Vie đóng chai.', NULL, NULL, NULL, '500ml', 'CHAI', 'Không vị', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(12, 1, 3, 'CAT-COCA-ZERO-330', 'Coca-Cola Zero Sugar 330ml', 'Nước ngọt có ga Coca-Cola Zero Sugar, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(10, 1, 4, 'CAT-PEPSI-ZERO-320', 'Pepsi không calo 320ml', 'Nước ngọt Pepsi không calo, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(9, 1, 4, 'CAT-PEPSI-320', 'Pepsi  320ml', 'Nước ngọt có ga Pepsi vị cola, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cola', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(7, 1, 6, 'CAT-FANTA-CAM-330', 'Fanta cam 330ml', 'Nước ngọt có ga Fanta hương cam, đóng lon.', NULL, NULL, NULL, '330ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(6, 1, 7, 'CAT-7UP-320', '7Up chanh 320ml', 'Nước ngọt có ga 7Up hương chanh, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Chanh', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(4, 1, 8, 'CAT-MIRINDA-CAM-320', 'Mirinda cam 320ml', 'Nước ngọt có ga Mirinda hương cam, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Cam', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(5, 1, 8, 'CAT-MIRINDA-SODA-320', 'Mirinda soda kem 320ml', 'Nước ngọt có ga Mirinda hương soda kem, đóng lon.', NULL, NULL, NULL, '320ml', 'LON', 'Soda kem', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL),
+	(27, 10, 22, 'CAT-VINAMILK-180', 'Vinamilk sữa có đường 180ml', 'Sữa Vinamilk có đường đóng hộp dùng sẵn.', NULL, NULL, NULL, '180ml', 'HOP', 'Có đường', NULL, 'Bảo quản theo hướng dẫn trên bao bì. Kiểm tra hạn sử dụng trước khi dùng.', 'DANG_BAN', true, '2026-11-03 16:15:08.356368+07', '2026-11-03 16:15:08.356368+07', NULL);
 
 
 --
@@ -3460,8 +3689,8 @@ INSERT INTO public.so_luong_san_pham VALUES
 	(17, 480, 10, '2026-11-09 18:13:55.19694+07'),
 	(16, 240, 10, '2026-11-09 18:13:57.400307+07'),
 	(27, 230, 10, '2026-11-09 20:27:35.446926+07'),
-	(20, 290, 10, '2026-11-10 12:01:16.156814+07'),
-	(26, 355, 10, '2026-11-10 12:19:38.434618+07');
+	(26, 355, 10, '2026-11-10 12:19:38.434618+07'),
+	(20, 275, 10, '2026-11-20 14:07:42.686179+07');
 
 
 --
@@ -3473,7 +3702,9 @@ INSERT INTO public.su_dung_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
 	(34, 34, 6, 37, 18600.00, 'APPLIED', '2026-11-08 15:15:46.004724+07'),
 	(35, 34, 6, 38, 38000.00, 'APPLIED', '2026-11-09 19:19:35.210355+07'),
 	(36, 1, 6, 40, 12500.00, 'APPLIED', '2026-11-09 20:27:35.446926+07'),
-	(37, 34, 6, 44, 13500.00, 'APPLIED', '2026-11-10 12:19:38.434618+07');
+	(37, 34, 6, 44, 13500.00, 'APPLIED', '2026-11-10 12:19:38.434618+07'),
+	(38, 34, 6, 55, 19000.00, 'APPLIED', '2026-11-20 13:48:46.919293+07'),
+	(39, 34, 6, 56, 19000.00, 'APPLIED', '2026-11-20 14:07:42.686179+07');
 
 
 --
@@ -3481,12 +3712,12 @@ INSERT INTO public.su_dung_khuyen_mai OVERRIDING SYSTEM VALUE VALUES
 --
 
 INSERT INTO public.tai_khoan OVERRIDING SYSTEM VALUE VALUES
-	(4, 'quanab@gmail.com', '$2a$12$lCmOhKd9shm64LhJ4Xhe5.qBZFKpwR4muYURmfwwcHpN2xBCcy1wC', 'ACTIVE', false, 0, NULL, '2026-11-03 15:33:33.131211+07', '2026-11-03 15:33:33.131211+07'),
-	(6, 'demo-bank-smoke-9ca5d8f3-7f6a-41b6-9756-bef6324c809b@test.invalid', '$2a$12$T0oUAJzVGC.UNRMxXpuaZOgVdxYaIMz9iBpvSMoPDVjCI1HbpdEGS', 'ACTIVE', false, 0, NULL, '2026-11-10 12:09:45.566399+07', '2026-11-10 12:09:45.566399+07'),
-	(3, 'khach@waterbus.demo', '$2a$12$2S9Y9IfCzQLO2j2aWseEEuzCzfaKV5jTQP3V72ziXlyReqybw9CFy', 'ACTIVE', false, 0, NULL, '2026-11-03 15:25:38.232189+07', '2026-11-03 15:25:38.232189+07'),
-	(5, 'ngogiahung.hcm@gmail.com', '$2a$12$GNzYebmY6Zdwm2pGaI/a8.ZcPbxmD1CBqghry6FrX18bHLEj4l1YS', 'ACTIVE', false, 0, NULL, '2026-11-08 13:36:04.528191+07', '2026-11-08 13:36:04.528191+07'),
-	(2, 'admin1@gmail.com', '$2a$12$fHKdnzX9UlbpNkVWQta84.ay2gcRG2yixliG7Tco62hPQvVD/kfNe', 'ACTIVE', false, 0, NULL, '2026-11-03 15:24:45.072766+07', '2026-11-03 15:24:45.072766+07'),
-	(1, 'admin@example.com', '$2a$12$MfubYvycFKC0ZqAel2pGE.iRndUT.0pzAoaASMGrF/GlCMYSfPr2e', 'ACTIVE', false, 0, NULL, '2026-11-03 13:15:31.236235+07', '2026-11-03 13:15:31.236235+07');
+	(6, 'demo-bank-smoke-9ca5d8f3-7f6a-41b6-9756-bef6324c809b@test.invalid', '$2a$12$T0oUAJzVGC.UNRMxXpuaZOgVdxYaIMz9iBpvSMoPDVjCI1HbpdEGS', 'DISABLED', false, 0, NULL, '2026-11-10 12:09:45.566399+07', '2026-11-10 12:09:45.566399+07', '2026-11-17 13:00:01.857861+07'),
+	(1, 'admin@example.com', '$2a$12$MfubYvycFKC0ZqAel2pGE.iRndUT.0pzAoaASMGrF/GlCMYSfPr2e', 'DISABLED', false, 0, NULL, '2026-11-03 13:15:31.236235+07', '2026-11-03 13:15:31.236235+07', '2026-11-18 13:28:17.112906+07'),
+	(5, 'ngogiahung.hcm@gmail.com', '$2a$12$GNzYebmY6Zdwm2pGaI/a8.ZcPbxmD1CBqghry6FrX18bHLEj4l1YS', 'ACTIVE', false, 0, NULL, '2026-11-08 13:36:04.528191+07', '2026-11-08 13:36:04.528191+07', NULL),
+	(2, 'admin1@gmail.com', '$2a$12$fHKdnzX9UlbpNkVWQta84.ay2gcRG2yixliG7Tco62hPQvVD/kfNe', 'ACTIVE', false, 0, NULL, '2026-11-03 15:24:45.072766+07', '2026-11-03 15:24:45.072766+07', NULL),
+	(4, 'quanab@gmail.com', '$2a$12$lCmOhKd9shm64LhJ4Xhe5.qBZFKpwR4muYURmfwwcHpN2xBCcy1wC', 'ACTIVE', false, 0, NULL, '2026-11-03 15:33:33.131211+07', '2026-11-03 15:33:33.131211+07', NULL),
+	(3, 'khach@waterbus.demo', '$2a$12$2S9Y9IfCzQLO2j2aWseEEuzCzfaKV5jTQP3V72ziXlyReqybw9CFy', 'ACTIVE', false, 0, NULL, '2026-11-03 15:25:38.232189+07', '2026-11-03 15:25:38.232189+07', NULL);
 
 
 --
@@ -3507,21 +3738,30 @@ INSERT INTO public.tai_khoan_vai_tro VALUES
 --
 
 INSERT INTO public.thanh_toan OVERRIDING SYSTEM VALUE VALUES
-	(1, 1, 'COD', NULL, NULL, 80000.00, 'PENDING', '2026-11-03 16:37:52.820068+07', NULL, NULL, 'live', false),
-	(2, 2, 'COD', NULL, NULL, 130000.00, 'PENDING', '2026-11-04 13:03:18.413361+07', NULL, NULL, 'live', false),
-	(3, 3, 'COD', NULL, NULL, 100800.00, 'PENDING', '2026-11-04 14:34:38.732069+07', NULL, NULL, 'live', false),
-	(36, 36, 'COD', NULL, NULL, 155000.00, 'PENDING', '2026-11-07 20:23:40.626183+07', NULL, NULL, 'live', false),
-	(37, 37, 'COD', NULL, NULL, 74400.00, 'PENDING', '2026-11-08 15:15:30.126268+07', NULL, NULL, 'live', false),
-	(38, 38, 'BANK_TRANSFER', NULL, NULL, 152000.00, 'PENDING', '2026-11-09 19:18:25.537325+07', NULL, 'WBD1E79EC91C644DD68CBB', 'live', false),
-	(39, 39, 'BANK_TRANSFER', NULL, NULL, 121500.00, 'PENDING', '2026-11-09 19:53:14.65845+07', NULL, 'WBAF390131D4C34DA78D03', 'test', false),
-	(40, 40, 'BANK_TRANSFER', 'LOCAL_DEMO:test:40', 'LOCAL_DEMO:test:40', 112500.00, 'SUCCESS', '2026-11-09 20:26:48.645068+07', '{"mode": "test", "provider": "LOCAL_DEMO", "realMoney": false}', 'WBF1143B20E34D49C993A9', 'test', false),
-	(41, 41, 'BANK_TRANSFER', NULL, NULL, 190000.00, 'PENDING', '2026-11-10 11:59:34.077991+07', NULL, 'WB526F5C5E18034599981E', 'live', false),
-	(42, 42, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:5101a529-77f2-4336-8eba-7728c50b60fe', 'INTERNAL_MOCK:test:5101a529-77f2-4336-8eba-7728c50b60fe', 12500.00, 'SUCCESS', '2026-11-10 12:09:53.216609+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "5101a529-77f2-4336-8eba-7728c50b60fe"}', 'WBBAEF0F6570824738A55D', 'test', true),
-	(43, 43, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:e79333e9-8227-4af3-832b-0b3f73c7064b', 'INTERNAL_MOCK:test:e79333e9-8227-4af3-832b-0b3f73c7064b', 92000.00, 'SUCCESS', '2026-11-10 12:17:06.918517+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "e79333e9-8227-4af3-832b-0b3f73c7064b"}', 'WB04E07159738D466292E9', 'test', true),
-	(44, 44, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:183c555e-c9db-40bb-8a0c-d9a9a9938bac', 'INTERNAL_MOCK:test:183c555e-c9db-40bb-8a0c-d9a9a9938bac', 54000.00, 'SUCCESS', '2026-11-10 12:19:24.33572+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "183c555e-c9db-40bb-8a0c-d9a9a9938bac"}', 'WB0782EF9DE71E4B22A407', 'test', true),
-	(45, 45, 'COD', NULL, NULL, 121500.00, 'PENDING', '2026-11-10 12:21:43.5778+07', NULL, NULL, 'live', false),
-	(46, 46, 'BANK_TRANSFER', NULL, NULL, 26000.00, 'PENDING', '2026-11-10 12:22:40.617089+07', NULL, 'WBD06FDC496CC14CC3B3F2', 'test', true),
-	(47, 47, 'BANK_TRANSFER', NULL, NULL, 67500.00, 'PENDING', '2026-11-10 12:41:10.43514+07', NULL, NULL, 'live', false);
+	(1, 1, 'COD', NULL, NULL, 80000.00, 'PENDING', '2026-11-03 16:37:52.820068+07', NULL, NULL, 'live', false, NULL),
+	(2, 2, 'COD', NULL, NULL, 130000.00, 'PENDING', '2026-11-04 13:03:18.413361+07', NULL, NULL, 'live', false, NULL),
+	(3, 3, 'COD', NULL, NULL, 100800.00, 'PENDING', '2026-11-04 14:34:38.732069+07', NULL, NULL, 'live', false, NULL),
+	(36, 36, 'COD', NULL, NULL, 155000.00, 'PENDING', '2026-11-07 20:23:40.626183+07', NULL, NULL, 'live', false, NULL),
+	(37, 37, 'COD', NULL, NULL, 74400.00, 'PENDING', '2026-11-08 15:15:30.126268+07', NULL, NULL, 'live', false, NULL),
+	(38, 38, 'BANK_TRANSFER', NULL, NULL, 152000.00, 'PENDING', '2026-11-09 19:18:25.537325+07', NULL, 'WBD1E79EC91C644DD68CBB', 'live', false, NULL),
+	(39, 39, 'BANK_TRANSFER', NULL, NULL, 121500.00, 'PENDING', '2026-11-09 19:53:14.65845+07', NULL, 'WBAF390131D4C34DA78D03', 'test', false, NULL),
+	(40, 40, 'BANK_TRANSFER', 'LOCAL_DEMO:test:40', 'LOCAL_DEMO:test:40', 112500.00, 'SUCCESS', '2026-11-09 20:26:48.645068+07', '{"mode": "test", "provider": "LOCAL_DEMO", "realMoney": false}', 'WBF1143B20E34D49C993A9', 'test', false, NULL),
+	(41, 41, 'BANK_TRANSFER', NULL, NULL, 190000.00, 'PENDING', '2026-11-10 11:59:34.077991+07', NULL, 'WB526F5C5E18034599981E', 'live', false, NULL),
+	(42, 42, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:5101a529-77f2-4336-8eba-7728c50b60fe', 'INTERNAL_MOCK:test:5101a529-77f2-4336-8eba-7728c50b60fe', 12500.00, 'SUCCESS', '2026-11-10 12:09:53.216609+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "5101a529-77f2-4336-8eba-7728c50b60fe"}', 'WBBAEF0F6570824738A55D', 'test', true, NULL),
+	(43, 43, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:e79333e9-8227-4af3-832b-0b3f73c7064b', 'INTERNAL_MOCK:test:e79333e9-8227-4af3-832b-0b3f73c7064b', 92000.00, 'SUCCESS', '2026-11-10 12:17:06.918517+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "e79333e9-8227-4af3-832b-0b3f73c7064b"}', 'WB04E07159738D466292E9', 'test', true, NULL),
+	(44, 44, 'BANK_TRANSFER', 'INTERNAL_MOCK:test:183c555e-c9db-40bb-8a0c-d9a9a9938bac', 'INTERNAL_MOCK:test:183c555e-c9db-40bb-8a0c-d9a9a9938bac', 54000.00, 'SUCCESS', '2026-11-10 12:19:24.33572+07', '{"mode": "test", "provider": "INTERNAL_MOCK", "realMoney": false, "transactionId": "183c555e-c9db-40bb-8a0c-d9a9a9938bac"}', 'WB0782EF9DE71E4B22A407', 'test', true, NULL),
+	(45, 45, 'COD', NULL, NULL, 121500.00, 'PENDING', '2026-11-10 12:21:43.5778+07', NULL, NULL, 'live', false, NULL),
+	(46, 46, 'BANK_TRANSFER', NULL, NULL, 26000.00, 'PENDING', '2026-11-10 12:22:40.617089+07', NULL, 'WBD06FDC496CC14CC3B3F2', 'test', true, NULL),
+	(47, 47, 'BANK_TRANSFER', NULL, NULL, 67500.00, 'PENDING', '2026-11-10 12:41:10.43514+07', NULL, NULL, 'live', false, NULL),
+	(48, 48, 'VNPAY', NULL, NULL, 31500.00, 'PENDING', '2026-11-18 13:28:43.692243+07', NULL, NULL, 'live', false, NULL),
+	(49, 49, 'VNPAY', NULL, NULL, 115000.00, 'PENDING', '2026-11-18 13:37:29.186894+07', NULL, NULL, 'live', false, NULL),
+	(50, 50, 'VNPAY', NULL, NULL, 81000.00, 'PENDING', '2026-11-20 11:48:11.995358+07', NULL, NULL, 'live', false, NULL),
+	(51, 51, 'VNPAY', NULL, NULL, 67500.00, 'PENDING', '2026-11-20 12:44:40.045977+07', NULL, NULL, 'live', false, NULL),
+	(52, 52, 'VNPAY', NULL, NULL, 50000.00, 'PENDING', '2026-11-20 13:02:34.214995+07', NULL, NULL, 'live', false, NULL),
+	(53, 53, 'VNPAY', '15743783', NULL, 95000.00, 'SUCCESS', '2026-11-20 13:25:27+07', NULL, NULL, 'live', false, NULL),
+	(54, 54, 'VNPAY', NULL, NULL, 50000.00, 'PENDING', '2026-11-20 13:39:57.178351+07', NULL, NULL, 'live', false, NULL),
+	(55, 55, 'VNPAY', '15743821', NULL, 76000.00, 'SUCCESS', '2026-11-20 13:48:17+07', NULL, NULL, 'live', false, NULL),
+	(56, 56, 'BANK_TRANSFER', 'WB56', NULL, 76000.00, 'SUCCESS', '2026-11-20 14:07:42.686179+07', NULL, NULL, 'live', false, '2026-11-20 14:07:28.751722+07');
 
 
 --
@@ -3632,17 +3872,41 @@ INSERT INTO public.vai_tro_quyen VALUES
 
 
 --
+-- Data for Name: vnpay_ipn_history; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.vnpay_ipn_history OVERRIDING SYSTEM VALUE VALUES
+	(1, 6, '0875ef13badbf3d9170f9e336275e5901f1e3dfd0721ce190efb1b38bc002d7a6621194219aec1d716062e5991f2fdd5aa695560409c769462557c1852253f07', '{"vnp_Amount": "9500000", "vnp_TxnRef": "WB53e4a56274526b416c8e8a2c68002bab67", "vnp_PayDate": "20261120132527", "vnp_TmnCode": "Y8OE8SFE", "vnp_BankCode": "NCB", "vnp_CardType": "ATM", "vnp_OrderInfo": "Thanh toan don hang DH-9a20c51f-3c8d-49d8-88c1-dbc7d6922125", "vnp_BankTranNo": "VNP15743783", "vnp_SecureHash": "0875ef13badbf3d9170f9e336275e5901f1e3dfd0721ce190efb1b38bc002d7a6621194219aec1d716062e5991f2fdd5aa695560409c769462557c1852253f07", "vnp_ResponseCode": "00", "vnp_TransactionNo": "15743783", "vnp_TransactionStatus": "00"}', '2026-11-20 13:30:55.11731+07'),
+	(2, 8, '49e610556ada218b01ae18ab6fe6a8655356aee72013f4112ae4b7588e8077dfc91bccc67626ed43460c94d861257ed8ad98f646e5c5e9be82c0b0ba833fd05d', '{"vnp_Amount": "7600000", "vnp_TxnRef": "WB558ff790fc6a154eaa918173bfef3019d4", "vnp_PayDate": "20261120134817", "vnp_TmnCode": "Y8OE8SFE", "vnp_BankCode": "NCB", "vnp_CardType": "ATM", "vnp_OrderInfo": "Thanh toan don hang DH-b9e04e22-02a4-46a9-9e0f-05a44e304296", "vnp_BankTranNo": "VNP15743821", "vnp_SecureHash": "49e610556ada218b01ae18ab6fe6a8655356aee72013f4112ae4b7588e8077dfc91bccc67626ed43460c94d861257ed8ad98f646e5c5e9be82c0b0ba833fd05d", "vnp_ResponseCode": "00", "vnp_TransactionNo": "15743821", "vnp_TransactionStatus": "00"}', '2026-11-20 13:48:21.950796+07');
+
+
+--
+-- Data for Name: vnpay_payment; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.vnpay_payment OVERRIDING SYSTEM VALUE VALUES
+	(1, 48, 'WB48eb75ae99899a443bb600cf6df9f814f3', 'Y8OE8SFE', 31500.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=3150000&vnp_Command=pay&vnp_CreateDate=20261118132844&vnp_CurrCode=VND&vnp_ExpireDate=20261118134344&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-889d6da8-1115-4c77-9165-850c71398689&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB48eb75ae99899a443bb600cf6df9f814f3&vnp_Version=2.1.0&vnp_SecureHash=05bdb0e83460b6172c2167f2bacd4385146b1b5c6c964ece4feea2c2aeac329b8f9cd586841d54532181286cbffa39be7b228da2611b30ee35d5bc8ccb34250f', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-18 13:28:44.104921+07', '2026-11-18 13:43:44.116119+07'),
+	(2, 49, 'WB4997b2e3d9e9b84c71bd488e1c128e1117', 'Y8OE8SFE', 115000.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=11500000&vnp_Command=pay&vnp_CreateDate=20261118133729&vnp_CurrCode=VND&vnp_ExpireDate=20261118135229&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-1b2c2d9b-50cd-4f73-b9ce-a4e09c9f0d63&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB4997b2e3d9e9b84c71bd488e1c128e1117&vnp_Version=2.1.0&vnp_SecureHash=778c496b9af0ba89f75102c587c33db726bb76ab7eca9a94d1df79c3e1a0caf089e75d0b4568bebd5f8970d3a084e9a2fe62031c9f90a1aab4e1065be0289553', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-18 13:37:29.676014+07', '2026-11-18 13:52:29.714711+07'),
+	(3, 50, 'WB50a4b439dadbab4ecfb064f3c7c287f437', 'Y8OE8SFE', 81000.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=8100000&vnp_Command=pay&vnp_CreateDate=20261120114813&vnp_CurrCode=VND&vnp_ExpireDate=20261120120313&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-ac01f001-a993-44c6-a104-3e650936d33f&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB50a4b439dadbab4ecfb064f3c7c287f437&vnp_Version=2.1.0&vnp_SecureHash=1fd5f00305b18a7a2f62a569b2a3640b2a3b2316c7924af47d9a68dc037b45a0949581fc6133e8f5aa67e6f5143cc35c6ce8ce595827bd1e5be0f99d6d1a6746', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-20 11:48:13.023509+07', '2026-11-20 12:03:13.037661+07'),
+	(4, 51, 'WB5155210620954343858454e25471d8f88e', 'Y8OE8SFE', 67500.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=6750000&vnp_Command=pay&vnp_CreateDate=20261120124440&vnp_CurrCode=VND&vnp_ExpireDate=20261120125940&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-7d6f0ba4-f61d-4548-b015-5d62d425da72&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB5155210620954343858454e25471d8f88e&vnp_Version=2.1.0&vnp_SecureHash=96b145d8d063530ea542d6bf98a1f78a3292446de40b0c12c9343196829bde574424d87d9764128a8d815d1fc2da726421bcb4fec4e10d1b4591bb0f10ec6203', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-20 12:44:40.463117+07', '2026-11-20 12:59:40.480184+07'),
+	(5, 52, 'WB524c6672df66cb423d814e28758f920b3a', 'Y8OE8SFE', 50000.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=5000000&vnp_Command=pay&vnp_CreateDate=20261120130234&vnp_CurrCode=VND&vnp_ExpireDate=20261120131734&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-5c17757e-0490-4919-93cd-56e81d0388d9&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB524c6672df66cb423d814e28758f920b3a&vnp_Version=2.1.0&vnp_SecureHash=4228ca7509b9c07bff122651c45fa9e8daa66d51c256f941f86abaa3d096caefc84e17a87f4c8be9e2832933aaedd09d83241ec3bc7eca09f242c1f92311edcf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-20 13:02:34.547378+07', '2026-11-20 13:17:34.553209+07'),
+	(6, 53, 'WB53e4a56274526b416c8e8a2c68002bab67', 'Y8OE8SFE', 95000.00, 'PAID', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=9500000&vnp_BankCode=VNBANK&vnp_Command=pay&vnp_CreateDate=20261120132501&vnp_CurrCode=VND&vnp_ExpireDate=20261120134001&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-9a20c51f-3c8d-49d8-88c1-dbc7d6922125&vnp_OrderType=other&vnp_ReturnUrl=https%3A%2F%2Fquery-outright-nylon.ngrok-free.dev%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB53e4a56274526b416c8e8a2c68002bab67&vnp_Version=2.1.0&vnp_SecureHash=5a85ab8bfbd4eda1b33e691f642b4fe530b73588b05ca13b4718d59ef487f23e43528c5a029a66e9eb06131f0aa6132988ad9724d027888195a1da6fd038ee59', '15743783', '00', '00', 'NCB', 'VNP15743783', 'ATM', '20261120132527', '2026-11-20 13:25:27+07', '2026-11-20 13:25:01.155242+07', '2026-11-20 13:40:01.164421+07'),
+	(7, 54, 'WB54d6eacb57091b4c9ea6b29eeb6e20f940', 'Y8OE8SFE', 50000.00, 'PENDING', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=5000000&vnp_BankCode=VNBANK&vnp_Command=pay&vnp_CreateDate=20261120133957&vnp_CurrCode=VND&vnp_ExpireDate=20261120135457&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-60d994d1-abaf-4cde-b68f-07d16ca279a2&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2F127.0.0.1%3A5173%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB54d6eacb57091b4c9ea6b29eeb6e20f940&vnp_Version=2.1.0&vnp_SecureHash=4ce3efe7e0e7142e64168f7377e6522368fe25aad6ae8cb3ce20c6ba54b0ed16e7cae1672eac4bdadcdbc30ddc8715c4c9f9fa4f4a4f5465f7e46e78d9399763', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-20 13:39:57.858526+07', '2026-11-20 13:54:57.8705+07'),
+	(8, 55, 'WB558ff790fc6a154eaa918173bfef3019d4', 'Y8OE8SFE', 76000.00, 'PAID', 'SANDBOX', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=7600000&vnp_BankCode=VNBANK&vnp_Command=pay&vnp_CreateDate=20261120134657&vnp_CurrCode=VND&vnp_ExpireDate=20261120140157&vnp_IpAddr=172.18.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+DH-b9e04e22-02a4-46a9-9e0f-05a44e304296&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2F127.0.0.1%3A5173%2Fapi%2Fpayments%2Fvnpay%2Freturn&vnp_TmnCode=Y8OE8SFE&vnp_TxnRef=WB558ff790fc6a154eaa918173bfef3019d4&vnp_Version=2.1.0&vnp_SecureHash=53b6859997ba7e478f6a39091bedb2c43248e719313c1e324335167d02270ef80d471fb184a75b49848dd6abf09afb001fec8016974b7c1b1a0941c838c16882', '15743821', '00', '00', 'NCB', 'VNP15743821', 'ATM', '20261120134817', '2026-11-20 13:48:17+07', '2026-11-20 13:46:57.914312+07', '2026-11-20 14:01:57.921761+07');
+
+
+--
 -- Name: bien_dong_so_luong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.bien_dong_so_luong_id_seq', 92, true);
+SELECT pg_catalog.setval('public.bien_dong_so_luong_id_seq', 127, true);
 
 
 --
 -- Name: chi_tiet_don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_don_hang_id_seq', 47, true);
+SELECT pg_catalog.setval('public.chi_tiet_don_hang_id_seq', 89, true);
 
 
 --
@@ -3656,14 +3920,14 @@ SELECT pg_catalog.setval('public.chi_tiet_don_ncc_id_seq', 69, true);
 -- Name: chi_tiet_gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_gio_hang_id_seq', 131, true);
+SELECT pg_catalog.setval('public.chi_tiet_gio_hang_id_seq', 197, true);
 
 
 --
 -- Name: chi_tiet_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chi_tiet_hoa_don_id_seq', 41, true);
+SELECT pg_catalog.setval('public.chi_tiet_hoa_don_id_seq', 76, true);
 
 
 --
@@ -3712,7 +3976,7 @@ SELECT pg_catalog.setval('public.don_dat_hang_ncc_id_seq', 69, true);
 -- Name: don_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.don_hang_id_seq', 47, true);
+SELECT pg_catalog.setval('public.don_hang_id_seq', 88, true);
 
 
 --
@@ -3726,7 +3990,7 @@ SELECT pg_catalog.setval('public.giay_to_ncc_id_seq', 1, false);
 -- Name: gio_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.gio_hang_id_seq', 518, true);
+SELECT pg_catalog.setval('public.gio_hang_id_seq', 722, true);
 
 
 --
@@ -3740,7 +4004,7 @@ SELECT pg_catalog.setval('public.hinh_anh_san_pham_id_seq', 24, true);
 -- Name: hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.hoa_don_id_seq', 41, true);
+SELECT pg_catalog.setval('public.hoa_don_id_seq', 76, true);
 
 
 --
@@ -3754,7 +4018,7 @@ SELECT pg_catalog.setval('public.hoan_tien_id_seq', 1, false);
 -- Name: khach_hang_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.khach_hang_id_seq', 7, true);
+SELECT pg_catalog.setval('public.khach_hang_id_seq', 8, true);
 
 
 --
@@ -3775,14 +4039,14 @@ SELECT pg_catalog.setval('public.lan_nhap_hang_id_seq', 71, true);
 -- Name: lich_su_hoa_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.lich_su_hoa_don_id_seq', 36, true);
+SELECT pg_catalog.setval('public.lich_su_hoa_don_id_seq', 71, true);
 
 
 --
 -- Name: lich_su_trang_thai_don_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.lich_su_trang_thai_don_id_seq', 60, true);
+SELECT pg_catalog.setval('public.lich_su_trang_thai_don_id_seq', 103, true);
 
 
 --
@@ -3831,28 +4095,28 @@ SELECT pg_catalog.setval('public.nhan_vien_id_seq', 4, true);
 -- Name: nhat_ky_hoat_dong_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.nhat_ky_hoat_dong_id_seq', 419, true);
+SELECT pg_catalog.setval('public.nhat_ky_hoat_dong_id_seq', 490, true);
 
 
 --
 -- Name: payment_notification_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.payment_notification_id_seq', 1, false);
+SELECT pg_catalog.setval('public.payment_notification_id_seq', 35, true);
 
 
 --
 -- Name: pham_vi_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.pham_vi_khuyen_mai_id_seq', 46, true);
+SELECT pg_catalog.setval('public.pham_vi_khuyen_mai_id_seq', 53, true);
 
 
 --
 -- Name: phien_xac_thuc_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.phien_xac_thuc_id_seq', 88, true);
+SELECT pg_catalog.setval('public.phien_xac_thuc_id_seq', 101, true);
 
 
 --
@@ -3880,7 +4144,7 @@ SELECT pg_catalog.setval('public.san_pham_id_seq', 27, true);
 -- Name: su_dung_khuyen_mai_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.su_dung_khuyen_mai_id_seq', 37, true);
+SELECT pg_catalog.setval('public.su_dung_khuyen_mai_id_seq', 71, true);
 
 
 --
@@ -3894,7 +4158,7 @@ SELECT pg_catalog.setval('public.tai_khoan_id_seq', 6, true);
 -- Name: thanh_toan_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.thanh_toan_id_seq', 47, true);
+SELECT pg_catalog.setval('public.thanh_toan_id_seq', 88, true);
 
 
 --
@@ -3923,6 +4187,20 @@ SELECT pg_catalog.setval('public.uu_dai_so_luong_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.vai_tro_id_seq', 3, true);
+
+
+--
+-- Name: vnpay_ipn_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.vnpay_ipn_history_id_seq', 2, true);
+
+
+--
+-- Name: vnpay_payment_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.vnpay_payment_id_seq', 8, true);
 
 
 --
@@ -4163,6 +4441,14 @@ ALTER TABLE ONLY public.don_hang
 
 ALTER TABLE ONLY public.don_hang
     ADD CONSTRAINT don_hang_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: email_change_challenge email_change_challenge_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_change_challenge
+    ADD CONSTRAINT email_change_challenge_pkey PRIMARY KEY (id);
 
 
 --
@@ -4670,6 +4956,54 @@ ALTER TABLE ONLY public.vai_tro_quyen
 
 
 --
+-- Name: vnpay_ipn_history vnpay_ipn_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_ipn_history
+    ADD CONSTRAINT vnpay_ipn_history_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vnpay_ipn_history vnpay_ipn_history_signature_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_ipn_history
+    ADD CONSTRAINT vnpay_ipn_history_signature_key UNIQUE (signature);
+
+
+--
+-- Name: vnpay_payment vnpay_payment_payment_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_payment
+    ADD CONSTRAINT vnpay_payment_payment_id_key UNIQUE (payment_id);
+
+
+--
+-- Name: vnpay_payment vnpay_payment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_payment
+    ADD CONSTRAINT vnpay_payment_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vnpay_payment vnpay_payment_transaction_no_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_payment
+    ADD CONSTRAINT vnpay_payment_transaction_no_key UNIQUE (transaction_no);
+
+
+--
+-- Name: vnpay_payment vnpay_payment_txn_ref_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_payment
+    ADD CONSTRAINT vnpay_payment_txn_ref_key UNIQUE (txn_ref);
+
+
+--
 -- Name: idx_don_hang_kenh_ngay; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4681,6 +5015,20 @@ CREATE INDEX idx_don_hang_kenh_ngay ON public.don_hang USING btree (kenh_ban, ng
 --
 
 CREATE INDEX idx_don_hang_khach ON public.don_hang USING btree (khach_hang_id, ngay_dat DESC);
+
+
+--
+-- Name: idx_email_change_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_change_account ON public.email_change_challenge USING btree (tai_khoan_id, created_at DESC);
+
+
+--
+-- Name: idx_order_confirmation_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_order_confirmation_employee ON public.don_hang USING btree (nhan_vien_xac_nhan_id);
 
 
 --
@@ -5112,11 +5460,27 @@ ALTER TABLE ONLY public.don_hang
 
 
 --
+-- Name: don_hang don_hang_nhan_vien_xac_nhan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.don_hang
+    ADD CONSTRAINT don_hang_nhan_vien_xac_nhan_id_fkey FOREIGN KEY (nhan_vien_xac_nhan_id) REFERENCES public.nhan_vien(id) ON DELETE SET NULL;
+
+
+--
 -- Name: don_hang don_hang_nhan_vien_xu_ly_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.don_hang
     ADD CONSTRAINT don_hang_nhan_vien_xu_ly_id_fkey FOREIGN KEY (nhan_vien_xu_ly_id) REFERENCES public.nhan_vien(id);
+
+
+--
+-- Name: email_change_challenge email_change_challenge_tai_khoan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_change_challenge
+    ADD CONSTRAINT email_change_challenge_tai_khoan_id_fkey FOREIGN KEY (tai_khoan_id) REFERENCES public.tai_khoan(id) ON DELETE CASCADE;
 
 
 --
@@ -5520,9 +5884,25 @@ ALTER TABLE ONLY public.vai_tro_quyen
 
 
 --
+-- Name: vnpay_ipn_history vnpay_ipn_history_vnpay_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_ipn_history
+    ADD CONSTRAINT vnpay_ipn_history_vnpay_payment_id_fkey FOREIGN KEY (vnpay_payment_id) REFERENCES public.vnpay_payment(id);
+
+
+--
+-- Name: vnpay_payment vnpay_payment_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vnpay_payment
+    ADD CONSTRAINT vnpay_payment_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.thanh_toan(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GD98DboIinVDZFRtjwNNnETTTZQY35JG8vvfzAAPiWathxWRR5bm9MYlB6zPn3l
+\unrestrict XzXhAc0drKeNPvS9yVjOdgF5JiLoFGPcy4aEDZcvdLw3Y0uSfXkMb1MMoY8Vqeq
 
 COMMIT;

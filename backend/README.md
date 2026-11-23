@@ -1,6 +1,6 @@
 # Backend cửa hàng nước giải khát
 
-Java 21 + Spring Boot 3.4.4 + PostgreSQL 16. Database hiện tại là bản `beverage_store_13UC_HOAN_CHINH.sql` do bạn cung cấp, gồm **44 bảng**: 43 bảng nghiệp vụ và bảng phiên xác thực. Code và 44 model JDBC đã chuyển sang cấu trúc này.
+Java 21 + Spring Boot 3.4.4 + PostgreSQL 16. Database hiện tại là bản `beverage_store_13UC_HOAN_CHINH.sql` xuất từ Docker, gồm **57 bảng**, bao gồm các bảng nghiệp vụ, xác thực, migration và lịch sử thanh toán.
 
 ## Chạy bằng Docker
 
@@ -18,15 +18,15 @@ API: `http://localhost:8080/api/v1`; kiểm tra `GET /health`. pgAdmin kết n�
 
 ## Một file SQL hoàn chỉnh
 
-`database/beverage_store_13UC_HOAN_CHINH.sql` là bản xuất đầy đủ từ PostgreSQL Docker, gồm cấu trúc, dữ liệu thực tế và bộ đếm ID. Bản đồng bộ ngày 11/11/2026 lúc 12:32:59 (UTC+7) có 54 bảng, 1.179 dòng dữ liệu và 42 bộ đếm ID, được xuất từ cùng một snapshot nhất quán. Đã khôi phục thử trong PostgreSQL 16 riêng biệt và đối chiếu cấu trúc, số dòng cùng dấu kiểm dữ liệu của từng bảng và toàn bộ bộ đếm ID. Đã bao gồm các migration backend mới nhất và đã bỏ ba bảng trả hàng sau nhập kho. Compose chỉ nạp file này, không chạy extensions hoặc seed riêng.
+`database/beverage_store_13UC_HOAN_CHINH.sql` là bản xuất đầy đủ từ PostgreSQL Docker, gồm cấu trúc, dữ liệu thực tế và bộ đếm ID. Bản đồng bộ ngày 23/11/2026 lúc 12:17:15 (UTC+7) có 57 bảng, 1.317 dòng dữ liệu và 44 bộ đếm ID, được xuất từ cùng một snapshot nhất quán. Đã khôi phục thử trong PostgreSQL 16 riêng biệt và đối chiếu cấu trúc, số dòng cùng dấu kiểm dữ liệu của từng bảng và toàn bộ bộ đếm ID. Đã bao gồm các migration backend hiện tại, kể cả xác nhận chuyển khoản ngày 20/11, và giữ các bảng lịch sử thanh toán từ Docker. Compose chỉ nạp file này, không chạy extensions hoặc seed riêng.
 
 Chỉ chạy SQL vào database trống. Script dùng một giao dịch, tạo bảng và nạp dữ liệu trước khi tạo trigger/ràng buộc liên quan để giữ nguyên số lượng và lịch sử đã lưu. Không chạy lên database đang sử dụng. Docker chỉ tự nạp khi volume trống; database/volume hiện tại được giữ nguyên.
 
 Đây là snapshot riêng có dữ liệu khách hàng, hash mật khẩu và phiên xác thực; không push snapshot lên GitHub công khai. Người quản trị sau khôi phục dùng tài khoản/mật khẩu của database nguồn; bootstrap không ghi đè admin đã có.
 
-Bản SQL trước khi thay, dump Docker gốc và báo cáo kiểm tra lần đồng bộ này nằm trong `.tools/sql-export-20261111-123259/` (Git bỏ qua); báo cáo là `verification.json`. Container PostgreSQL kiểm tra đã được dọn sau khi hoàn tất. Các bản SQL và ảnh sao lưu cũ vẫn nằm trong `.tools/sql-export-20261104/`.
+Bản SQL trước khi thay, dump Docker gốc và báo cáo kiểm tra lần đồng bộ này nằm trong `.tools/sql-export-20261123-121715/` (Git bỏ qua); báo cáo là `verification.json`. Thư mục này cũng giữ ảnh và manifest của project trước đồng bộ. Container PostgreSQL kiểm tra đã được dọn sau khi hoàn tất. Các bản sao lưu cũ vẫn được giữ trong `.tools/`.
 
-SQL không chứa file ảnh nhị phân. Bộ ảnh đi kèm nằm tại `product-images/`: 24 file, tổng 8.078.073 byte, đủ 23 ảnh nội bộ được database tham chiếu. File `database/product-images-manifest.json` ghi tên, dung lượng và SHA-256 của từng ảnh. Đưa cả thư mục ảnh và file manifest lên Git cùng Dockerfile để chuyển máy.
+SQL không chứa file ảnh nhị phân. Bộ ảnh đi kèm nằm tại `product-images/`: 25 file, tổng 8.152.706 byte, đủ 23 ảnh nội bộ được database tham chiếu. File `database/product-images-manifest.json` ghi tên, dung lượng và SHA-256 của từng ảnh. Đưa cả thư mục ảnh và file manifest lên Git cùng Dockerfile để chuyển máy.
 
 Dockerfile đóng gói ảnh vào `/app/uploads` và gán quyền sở hữu cho user `app`. Trên máy mới, chạy `docker compose up -d --build`; Docker tự sao chép ảnh vào volume `product_images` khi tạo volume trống lần đầu. Không cần tải file nén hay khôi phục ảnh thủ công.
 
@@ -85,6 +85,11 @@ Danh mục và dữ liệu tồn kho thực tế đã có trong file SQL hoàn c
 Ảnh JPG/PNG/WebP tối đa 5 MB được quản trị tải lên từ form sản phẩm. Docker lưu file tại `/app/uploads` trong volume `product_images`; Java chạy ngoài Docker dùng `UPLOAD_DIR` hoặc `./uploads`. Sao lưu volume ảnh cùng database để khôi phục đủ dữ liệu.
 
 Quản trị viên được đặt lại số lượng từ form thêm/sửa sản phẩm, theo đơn vị cơ bản và có lý do. Backend dùng bảng `dieu_chinh_so_luong` và trigger để ghi lịch sử và cập nhật tồn đúng một lần, không sửa thẳng bảng tồn. Phiên bản tồn cũ bị từ chối để tránh ghi đè giao dịch mới. Nhân viên không được điều chỉnh qua form này.
-# Thanh toán MoMo Sandbox
 
-Luồng checkout hỗ trợ COD và MoMo Sandbox. Xem [hướng dẫn tích hợp MoMo](docs/MOMO_SANDBOX.md) để cấu hình khóa merchant, tunnel HTTPS nhận IPN, chạy Docker và kiểm tra thanh toán từ khách hàng đến quản lý.
+## Thanh toán hiện tại
+
+Xem [quy trình QR, API và kiểm thử](docs/BANK_TRANSFER.md). Migration `20261120_bank_transfer_confirmation.sql` tự bổ sung dấu thời gian khách xác nhận chuyển khoản, giữ nguyên lịch sử thanh toán đã lưu.
+
+Checkout hỗ trợ COD và chuyển khoản QR sau khi đặt hàng. Khách cần xác nhận đã chuyển khoản trước khi admin xác nhận đơn; admin kiểm tra tiền trước khi tiếp tục. Cấu hình và các endpoint của cổng thanh toán cũ đã được gỡ; dữ liệu thanh toán lịch sử trong database đang sử dụng được giữ nguyên.
+
+Migration `20261117_checkout_support.sql` giữ các bảng dùng chung `checkout_request` và `payment_notification`, chạy an toàn khi chúng đã tồn tại. Bản SQL ngày 23/11 giữ nguyên các bảng của cổng thanh toán cũ để bảo toàn dữ liệu lịch sử trong Docker; ứng dụng hiện dùng COD và chuyển khoản QR. Không nạp lại SQL khởi tạo lên database đang sử dụng.

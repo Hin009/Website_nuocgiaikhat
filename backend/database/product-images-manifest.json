@@ -1,9 +1,9 @@
 {
-  "exported_at_utc": "20261111T062103954505Z",
-  "image_count": 24,
+  "exported_at_utc": "20261123T051809874682Z",
+  "image_count": 25,
   "local_database_images": 23,
   "external_database_images": 0,
-  "total_bytes": 8078073,
+  "total_bytes": 8152706,
   "files": [
     {
       "file": "1693e24a-faf8-3a29-83c4-12793366bc59.png",
@@ -69,6 +69,11 @@
       "file": "98e4c4ed-3a47-33a0-9f56-80112e74bbda.png",
       "bytes": 308362,
       "sha256": "20f6b707301aa2089d28789a64448aacf5706956a4ea1ff82fa3448c85bcd6ca"
+    },
+    {
+      "file": "a6e66b2c-c8c3-43c8-a594-7501116d9553.png",
+      "bytes": 74633,
+      "sha256": "4f87fc6bda547678444896bd68226b8dd7f73541ecc4c958fd649c2d71885978"
     },
     {
       "file": "b3951d43-aebc-3f4e-b967-8d927c545f26.png",

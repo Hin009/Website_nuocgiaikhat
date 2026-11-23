@@ -37,13 +37,15 @@ Vite chuyển tiếp `/api` đến backend tại `http://127.0.0.1:8080`. Fronte
 
 ## Database và ảnh
 
-Docker hiện chỉ nạp **một file** `backend/database/beverage_store_13UC_HOAN_CHINH.sql`. File đã đồng bộ từ PostgreSQL Docker ngày 11/11/2026 lúc 12:32:59 (UTC+7): 54 bảng, 1.179 dòng dữ liệu, 42 bộ đếm ID, cùng các hàm, trigger và khóa ngoại. Bản xuất đã được khôi phục thử trong PostgreSQL riêng; cấu trúc, số dòng, dấu kiểm dữ liệu từng bảng và bộ đếm ID đều khớp. Phần bổ sung backend và các migration mới nhất đã có trong bản xuất, không cần chạy thêm SQL khác.
+Bản SQL ngày 23/11 giữ nguyên các bảng lịch sử thanh toán từ Docker. Checkout hiện hỗ trợ COD và chuyển khoản QR.
+
+Docker hiện chỉ nạp **một file** `backend/database/beverage_store_13UC_HOAN_CHINH.sql`. File đã đồng bộ từ PostgreSQL Docker ngày 23/11/2026 lúc 12:17:15 (UTC+7): 57 bảng, 1.317 dòng dữ liệu, 44 bộ đếm ID, cùng các hàm, trigger và khóa ngoại. Bản xuất đã được khôi phục thử trong PostgreSQL riêng; cấu trúc, số dòng, dấu kiểm dữ liệu từng bảng và bộ đếm ID đều khớp. Phần bổ sung backend và các migration hiện tại, kể cả xác nhận chuyển khoản ngày 20/11, đã có trong bản xuất.
 
 Chỉ khôi phục vào database/volume **trống**. Docker chỉ tự nạp file khi tạo volume lần đầu. Không chạy file này lên database đang có dữ liệu và không xóa volume hiện tại chỉ để nạp lại SQL.
 
 Bản xuất chứa dữ liệu thật, bao gồm tài khoản, mật khẩu đã băm, khách hàng và phiên xác thực. Giữ riêng file SQL; không đưa bản snapshot này lên GitHub công khai. Tài khoản quản trị sau khôi phục dùng mật khẩu của database nguồn, không tự đổi theo BOOTSTRAP_ADMIN_PASSWORD nếu đã tồn tại.
 
-SQL lưu đường dẫn ảnh; 24 file ảnh đã được xuất vào `backend/product-images/` để lưu cùng mã nguồn trên GitHub. Khi clone sang máy mới và chạy `docker compose up -d --build`, Docker tự nạp ảnh vào volume `product_images` lúc tạo volume lần đầu. Bảng kê dung lượng và SHA-256 nằm tại `backend/database/product-images-manifest.json`. Xem cách bổ sung ảnh vào volume đã có và xuất lại ảnh trong [README backend](backend/README.md).
+SQL lưu đường dẫn ảnh; 25 file ảnh đã được xuất vào `backend/product-images/` để lưu cùng mã nguồn trên GitHub. Khi clone sang máy mới và chạy `docker compose up -d --build`, Docker tự nạp ảnh vào volume `product_images` lúc tạo volume lần đầu. Bảng kê dung lượng và SHA-256 nằm tại `backend/database/product-images-manifest.json`. Xem cách bổ sung ảnh vào volume đã có và xuất lại ảnh trong [README backend](backend/README.md).
 
 ## Các chức năng đã kết nối
 
@@ -72,3 +74,7 @@ git pull origin main
 Sau khi backend thay đổi, chạy lại `docker compose up -d --build` tại `backend/`. Giữ file `.env` và các volume hiện có.
 
 Xem [hướng dẫn backend](backend/README.md), [hợp đồng API](backend/docs/API.md) và [hướng dẫn frontend](frontend/README.md).
+
+## Thanh toán chuyển khoản QR
+
+Khách chọn chuyển khoản và đặt hàng để nhận QR theo số tiền của đơn. Sau khi chuyển khoản, khách bấm **Xác nhận thanh toán**; admin kiểm tra tiền và mới có thể xác nhận đơn. Chưa có xác nhận của khách thì backend và giao diện đều chặn xác nhận đơn QR. COD vẫn hoạt động theo quy trình hiện có. Xem [cấu hình và kiểm thử](backend/docs/BANK_TRANSFER.md).
